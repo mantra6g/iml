@@ -1,4 +1,12 @@
 ---
+
+- name: Ensure curl is installed
+  become: true
+  ansible.builtin.apt:
+    name: curl
+    state: present
+    update_cache: true
+
 - name: Cluster healthcheck
   ansible.builtin.shell: "curl http://localhost:10248/healthz"
   ignore_errors: true

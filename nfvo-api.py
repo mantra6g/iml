@@ -1,6 +1,7 @@
 import os
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import SingleQuotedScalarString,DoubleQuotedScalarString
+from ruamel.yaml.parser import ParserError
 import json
 import random
 from subprocess import run
@@ -289,7 +290,7 @@ def deploy_yaml():
       else:
         response = (f"Deployed: {yaml_data['lnsd']['ns']['name']} as id {deploy_id}", 200)
 
-    except yaml.parser.ParserError:
+    except ParserError:
       response = ("Failed to parse", 500)
 
   return jsonify({"response": response[0]}), response[1]

@@ -96,7 +96,7 @@
     selection: hold
   loop:
     - kubectl
-  when: inventory_hostname in groups['k8s_control']
+  when: inventory_hostname in groups['k8s_controls']
 
 - name: Enable and start the kubelet service
   become: true

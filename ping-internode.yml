@@ -39,5 +39,5 @@ lnsd:
             - member-connection-point-index: 1
               member-if-id-ref: "pkt-dst:1"
             - member-connection-point-index: 2
-              member-if-id-ref: "pkt-src:q"
+              member-if-id-ref: "pkt-src:1"
         e2e_delay_budget: "5ms"
