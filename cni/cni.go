@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"imlcni/logger"
 	"net"
 	"net/http"
 	"os"
@@ -17,337 +18,488 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-
 func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
-  cniConf := IMLCNIConfig{}
-  if err := json.Unmarshal(cniArgs.StdinData, &cniConf); err != nil {
-    return fmt.Errorf("failed to parse network config: %w", err)
-  }
+	logger.InfoLogger().Printf("ADD called for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
+	logger.DebugLogger().Printf("CNI Args: %+v\n", cniArgs)
+	cniConf := IMLCNIConfig{}
+	if err := json.Unmarshal(cniArgs.StdinData, &cniConf); err != nil {
+		logger.ErrorLogger().Printf("Failed to parse CNI configuration: %v\n", err)
+		return fmt.Errorf("failed to parse network config: %w", err)
+	}
 
-  var result types.Result
-  switch cniConf.AppType {
-    case "network_function":
-      // Deploy the network function using the configuration
-      result, err = deployNetworkFunction(cniArgs)
-    case "application_function":
-      hostname, err := os.Hostname()
-      if err != nil {
-        return fmt.Errorf("failed to get hostname: %w", err)
-      }
+	var result types.Result
+	switch cniConf.Args.CNI.AppType {
+	case "network_function":
+		logger.InfoLogger().Printf("Deploying network function for container %s\n", cniArgs.ContainerID)
 
-      configRequest := IMLConfigRequest{
-        ApplicationID: cniConf.AppId,
-        HostID: hostname,
-      }
+		// configRequest := NFConfigRequest{
+		// 	NFID: cniConf.NfId,
+		// }
 
-      // Use the AppId to request the network configuration from IML
-      netConfig, err := getConfigFromIML(configRequest)
-      if err != nil {
-        return fmt.Errorf("failed to get network config from IML: %w", err)
-      }
-      // Deploy the application function using the configuration
-      result, err = deployApplicationFunction(netConfig, cniArgs)
-    default:
-      return fmt.Errorf("unknown app type: %s", cniConf.AppType)
-  }
-  if err != nil {
-    return fmt.Errorf("failed to deploy network: %w", err)
-  }
+		// // Use the NFId to request the network configuration from IML
+		// netConfig, err := getNFConfigFromIML(configRequest)
+		// if err != nil {
+		// 	logger.ErrorLogger().Printf("Failed to get network config from IML: %v\n", err)
+		// 	return fmt.Errorf("failed to get network config from IML: %w", err)
+		// }
 
-  return types.PrintResult(result, cniConf.CNIVersion)
+		// Deploy the network function using the configuration
+		result, err = deployNetworkFunction(&cniConf, cniArgs)
+		if err != nil {
+			logger.ErrorLogger().Printf("Failed to deploy network function: %v\n", err)
+			return fmt.Errorf("failed to deploy network function: %w", err)
+		}
+	case "application_function":
+		logger.InfoLogger().Printf("Deploying application function for container %s\n", cniArgs.ContainerID)
+		hostname, err := os.Hostname()
+		if err != nil {
+			logger.ErrorLogger().Printf("Failed to get hostname: %v\n", err)
+			return fmt.Errorf("failed to get hostname: %w", err)
+		}
+
+		configRequest := AppConfigRequest{
+			ApplicationID: cniConf.Args.CNI.AppId,
+			HostID:        hostname,
+		}
+
+		// Use the AppId to request the network configuration from IML
+		netConfig, err := getAppConfigFromIML(configRequest)
+		if err != nil {
+			logger.ErrorLogger().Printf("Failed to get network config from IML: %v\n", err)
+			return fmt.Errorf("failed to get network config from IML: %w", err)
+		}
+		// Deploy the application function using the configuration
+		result, err = deployApplicationFunction(netConfig, cniArgs)
+		if err != nil {
+			logger.ErrorLogger().Printf("Failed to deploy application function: %v\n", err)
+			return fmt.Errorf("failed to deploy application function: %w", err)
+		}
+	default:
+		logger.ErrorLogger().Printf("Unknown app type: %s\n", cniConf.Args.CNI.AppType)
+		return fmt.Errorf("unknown app type: %s", cniConf.Args.CNI.AppType)
+	}
+
+	return types.PrintResult(result, cniConf.CNIVersion)
 }
 
-func deployApplicationFunction(netConfig *IMLConfigResponse, cniArgs *skel.CmdArgs) (types.Result, error) {
-  // Parse the IP address from the response
-  _, ipNet, err := net.ParseCIDR(netConfig.IP)
-  if err != nil {
-    return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.IP)
-  }
+func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdArgs) (types.Result, error) {
+	logger.DebugLogger().Printf("Deploying application function with config: %+v\n", netConfig)
 
-  // Parse the MAC address from the response
-  macAddr, err := net.ParseMAC(netConfig.MacAddress)
-  if err != nil {
-    return nil, fmt.Errorf("failed to parse MAC address: %s", netConfig.MacAddress)
-  }
+	// Parse the IP address from the response
+	_, ipNet, err := net.ParseCIDR(netConfig.IP)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.IP)
+	}
 
-  // Parse the destination network from the response
-  dstNet, err := netlink.ParseIPNet(netConfig.Route.Destination)
-  if err != nil {
-    return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.Route.Destination)
-  }
+	// Parse the MAC address from the response
+	macAddr, err := net.ParseMAC(netConfig.MacAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse MAC address: %s", netConfig.MacAddress)
+	}
 
-  // Parse the gateway IP from the response
-  gwIP := net.ParseIP(netConfig.Route.GatewayIP)
-  if gwIP == nil {
-    return nil, fmt.Errorf("failed to parse gateway IP: %s", netConfig.Route.GatewayIP)
-  }
+	// Parse the destination network from the response
+	dstNet, err := netlink.ParseIPNet(netConfig.Route.Destination)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.Route.Destination)
+	}
 
-  // Parse the gateway MAC address from the response
-  gwMac, err := net.ParseMAC(netConfig.Route.GatewayMac)
-  if err != nil {
-    return nil, fmt.Errorf("failed to parse gateway MAC: %s", netConfig.Route.GatewayMac)
-  }
+	// Parse the gateway IP from the response
+	gwIP := net.ParseIP(netConfig.Route.GatewayIP)
+	if gwIP == nil {
+		return nil, fmt.Errorf("failed to parse gateway IP: %s", netConfig.Route.GatewayIP)
+	}
 
-  // Open the container's network namespace
-  ns, err := netns.GetFromPath(cniArgs.Netns)
-  if err != nil {
-    return nil, fmt.Errorf("failed to open netns %s: %w", cniArgs.Netns, err)
-  }
+	// Parse the gateway MAC address from the response
+	gwMac, err := net.ParseMAC(netConfig.Route.GatewayMac)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse gateway MAC: %s", netConfig.Route.GatewayMac)
+	}
 
-  // Create a veth pair for the container
-  // The container interface is called "iml0"
-  // The host interface is called "veth-<containerID>"
-  // The host interface will be added to the "vfbridge" bridge
-  imlInterface := &netlink.Veth{
-    LinkAttrs: netlink.LinkAttrs{
-      Name: "veth-" + cniArgs.ContainerID[len(cniArgs.ContainerID)-6:],
-      MTU: 1500,
-      ParentDev: "vfbridge",
-    },
-    PeerName: "iml0",
-    PeerMTU: 1500,
-    PeerHardwareAddr: macAddr,
-    PeerNamespace: ns,
-  }
+	// Open the container's network namespace
+	ns, err := netns.GetFromPath(cniArgs.Netns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open netns %s: %w", cniArgs.Netns, err)
+	}
 
-  // Add the veth pair
-  if err := netlink.LinkAdd(imlInterface); err != nil {
-    ns.Close()
-    return nil, fmt.Errorf("failed to create veth pair: %w", err)
-  }
-  ns.Close()
+	// Create a veth pair for the container
+	// The container interface is called "iml0"
+	// The host interface is called "veth-<containerID>"
+	// The host interface will be added to the "vfbridge" bridge
+	imlInterface := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: netConfig.PeerName,
+			MTU:  1500,
+		},
+		PeerName:         "iml0",
+		PeerMTU:          1500,
+		PeerHardwareAddr: macAddr,
+		PeerNamespace:    ns,
+	}
 
-  // Create route to the destination network
-  routeLink := &netlink.Route{
-    Dst:       dstNet,
-    Gw:        gwIP,
-    Src:       ipNet.IP,
-  }
+	// Add the veth pair
+	if err := netlink.LinkAdd(imlInterface); err != nil {
+		ns.Close()
+		return nil, fmt.Errorf("failed to create veth pair: %w", err)
+	}
+	ns.Close()
 
-  // Create static ARP entry for the gateway MAC address
-  arpEntry := &netlink.Neigh{
-    IP:     gwIP,
-    HardwareAddr: gwMac,
-    State:  netlink.NUD_PERMANENT,
-  }
+	// Set both ends of the veth pair up
+	if err := netlink.LinkSetUp(imlInterface); err != nil {
+		return nil, fmt.Errorf("failed to set veth interface up: %w", err)
+	}
 
-  // Change to the container namespace
-  err = execInsideNs(cniArgs.Netns, func() error {
-    // Add the route inside the container's network namespace
-    if err := netlink.RouteAdd(routeLink); err != nil {
-      return fmt.Errorf("failed to add route: %w", err)
-    }
-    // Add the ARP entry inside the container's network namespace
-    if err := netlink.NeighAdd(arpEntry); err != nil {
-      return fmt.Errorf("failed to add ARP entry: %w", err)
-    }
-    // Get the peer interface of the veth pair
-    peerLink, err := netlink.LinkByName(imlInterface.PeerName)
-    if err != nil {
-      return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.PeerName, err)
-    }
-    // Set the peer interface's IP address
-    if err := netlink.AddrAdd(peerLink, &netlink.Addr{IPNet: ipNet}); err != nil {
-      return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.PeerName, err)
-    }
-    // Disable arp on the peer interface
-    if err := netlink.LinkSetARPOff(peerLink); err != nil {
-      return fmt.Errorf("failed to disable ARP on peer interface %s: %w", imlInterface.PeerName, err)
-    }
-    return nil
-  })
-  if err != nil {
-    return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
-  }
+	// Create route to the destination network
+	routeLink := &netlink.Route{
+		Dst: dstNet,
+		Gw:  gwIP,
+		Src: ipNet.IP,
+	}
 
-  // Set both ends of the veth pair up
-  if err := netlink.LinkSetUp(imlInterface); err != nil {
-    return nil, fmt.Errorf("failed to set veth interface up: %w", err)
-  }
+	// Create static ARP entry for the gateway MAC address
+	arpEntry := &netlink.Neigh{
+		IP:           gwIP,
+		HardwareAddr: gwMac,
+		State:        netlink.NUD_PERMANENT,
+	}
 
-  intfIndex := 0
-  result := &current.Result{
-    Interfaces: []*current.Interface{
-      {
-        Name:    imlInterface.PeerName,
-        Mac:     netConfig.MacAddress,
-        Sandbox: cniArgs.Netns,
-      },
-    },
-    IPs: []*current.IPConfig{
-      {
-        Interface: &intfIndex,
-        Address: *ipNet,
-      },
-    },
-    Routes: []*types.Route{
-      {
-        Dst: *dstNet,
-        GW:  gwIP,
-      },
-    },
-  }
+	// Change to the container namespace
+	err = execInsideNs(cniArgs.Netns, func() error {
+		// Get the peer interface of the veth pair
+		peerLink, err := netlink.LinkByName(imlInterface.PeerName)
+		if err != nil {
+			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.PeerName, err)
+		}
+		// Set the peer interface's IP address
+		if err := netlink.AddrAdd(peerLink, &netlink.Addr{IPNet: ipNet}); err != nil {
+			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.PeerName, err)
+		}
+		// Add the ARP entry inside the container's network namespace
+		if err := netlink.NeighAdd(arpEntry); err != nil {
+			return fmt.Errorf("failed to add ARP entry: %w", err)
+		}
+		// Disable arp on the peer interface
+		if err := netlink.LinkSetARPOff(peerLink); err != nil {
+			return fmt.Errorf("failed to disable ARP on peer interface %s: %w", imlInterface.PeerName, err)
+		}
+		// Add the route inside the container's network namespace
+		if err := netlink.RouteAdd(routeLink); err != nil {
+			return fmt.Errorf("failed to add route: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+	}
+
+	intfIndex := 0
+	result := &current.Result{
+		Interfaces: []*current.Interface{
+			{
+				Name:    imlInterface.PeerName,
+				Mac:     netConfig.MacAddress,
+				Sandbox: cniArgs.Netns,
+			},
+		},
+		IPs: []*current.IPConfig{
+			{
+				Interface: &intfIndex,
+				Address:   *ipNet,
+			},
+		},
+		Routes: []*types.Route{
+			{
+				Dst: *dstNet,
+				GW:  gwIP,
+			},
+		},
+	}
 
 	return result, nil
 }
 
-func deployNetworkFunction(cniArgs *skel.CmdArgs) (types.Result, error) {
+func deployNetworkFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) (types.Result, error) {
 
-  // Open the container's network namespace
-  ns, err := netns.GetFromPath(cniArgs.Netns)
-  if err != nil {
-    return nil, fmt.Errorf("failed to open netns %s: %w", cniArgs.Netns, err)
-  }
+	// Open the container's network namespace
+	ns, err := netns.GetFromPath(cniArgs.Netns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open netns %s: %w", cniArgs.Netns, err)
+	}
+	defer ns.Close()
 
-  // Create a veth pair for the container
-  // The container interface is called "iml0"
-  // The host interface is called "veth-<containerID>"
-  // The host interface will be added to the "vfbridge" bridge
-  imlInterface := &netlink.Veth{
-    LinkAttrs: netlink.LinkAttrs{
-      Name: "veth-" + cniArgs.ContainerID[len(cniArgs.ContainerID)-6:],
-      MTU: 1500,
-      ParentDev: "vfbridge",
-    },
-    PeerName: "iml0",
-    PeerMTU: 1500,
-    PeerNamespace: ns,
-  }
+	var interfaces []*current.Interface
+	for _, intf := range []string{netConfig.Args.CNI.SrcInterface, netConfig.Args.CNI.DstInterface} {
+		// Get the interface from the host namespace
+		hostIntf, err := netlink.LinkByName(intf)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host interface %s: %w", intf, err)
+		}
 
-  // Add the veth pair
-  if err := netlink.LinkAdd(imlInterface); err != nil {
-    ns.Close()
-    return nil, fmt.Errorf("failed to create veth pair: %w", err)
-  }
+		// Set the interface down before moving it to the namespace
+		if err := netlink.LinkSetDown(hostIntf); err != nil {
+			return nil, fmt.Errorf("failed to set interface %s down: %w", intf, err)
+		}
 
-  // Parse the MAC address of the input interface
-  macAddr, err := net.ParseMAC("00:11:22:33:44:55")
-  if err != nil {
-    ns.Close()
-    return nil, fmt.Errorf("failed to parse MAC address: %w", err)
-  }
+		// Move the interface to the container's namespace
+		if err := netlink.LinkSetNsFd(hostIntf, int(ns)); err != nil {
+			return nil, fmt.Errorf("failed to set interface %s to netns %s: %w", intf, cniArgs.Netns, err)
+		}
 
-  inputIntf := &netlink.Macvlan{
-    LinkAttrs: netlink.LinkAttrs{
-      Name: "in0",
-      MTU: 1500,
-      HardwareAddr: macAddr,
-      ParentDev: "iml0",
-      Namespace: ns,
-    },
-  }
-  outputIntf := &netlink.Macvlan{
-    LinkAttrs: netlink.LinkAttrs{
-      Name: "out0",
-      MTU: 1500,
-      ParentDev: "iml0",
-      Namespace: ns,
-    },
-  }
+		// Bring the interface up inside the container's namespace
+		err = execInsideNs(cniArgs.Netns, func() error {
+			// Get the interface by name inside the container's namespace
+			containerIntf, err := netlink.LinkByName(intf)
+			if err != nil {
+				return fmt.Errorf("failed to get interface %s in netns %s: %w", intf, cniArgs.Netns, err)
+			}
 
-  // Add the input interface
-  if err := netlink.LinkAdd(inputIntf); err != nil {
-    ns.Close()
-    return nil, fmt.Errorf("failed to create input interface: %w", err)
-  }
+			// Disable ARP on the interface
+			if err := netlink.LinkSetARPOff(containerIntf); err != nil {
+				return fmt.Errorf("failed to disable ARP on interface %s in netns %s: %w", intf, cniArgs.Netns, err)
+			}
 
-  // Add the output interface
-  if err := netlink.LinkAdd(outputIntf); err != nil {
-    ns.Close()
-    return nil, fmt.Errorf("failed to create output interface: %w", err)
-  }
-  ns.Close()
+			// // Parse the interface's MAC address
+			// macAddr, err := net.ParseMAC(intf.MacAddress)
+			// if err != nil {
+			// 	return fmt.Errorf("failed to parse MAC address %s for interface %s in netns %s: %w", intf.MacAddress, intf, cniArgs.Netns, err)
+			// }
 
-  result := &current.Result{
-    Interfaces: []*current.Interface{
-      {
-        Name:    imlInterface.PeerName,
-        Mac:     imlInterface.HardwareAddr.String(),
-        Sandbox: cniArgs.Netns,
-      },
-      {
-        Name:    inputIntf.Name,
-        Mac:     inputIntf.HardwareAddr.String(),
-        Sandbox: cniArgs.Netns,
-      },
-      {
-        Name:    outputIntf.Name,
-        Sandbox: cniArgs.Netns,
-      },
-    },
-  }
+			// // Set the interface's MAC address
+			// if err := netlink.LinkSetHardwareAddr(containerIntf, macAddr); err != nil {
+			// 	return fmt.Errorf("failed to set MAC address %s on interface %s in netns %s: %w", intf.MacAddress, intf, cniArgs.Netns, err)
+			// }
 
-	return result, nil
+			// Set the interface up
+			if err := netlink.LinkSetUp(containerIntf); err != nil {
+				return fmt.Errorf("failed to set interface %s up in netns %s: %w", intf, cniArgs.Netns, err)
+			}
+
+			interfaces = append(interfaces, &current.Interface{
+				Name:    intf,
+				Sandbox: cniArgs.Netns,
+			})
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+		}
+	}
+
+	return &current.Result{Interfaces: interfaces}, nil
 }
 
 // Execute function inside a namespace
 func execInsideNs(netnsPath string, function func() error) error {
-  runtime.LockOSThread()
+	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
 	stdNetns, err := netns.Get()
 	if err != nil {
-    return fmt.Errorf("failed to get current netns: %w", err)
-  }
-  defer stdNetns.Close()
+		return fmt.Errorf("failed to get current netns: %w", err)
+	}
+	defer stdNetns.Close()
 
-  containerNs, err := netns.GetFromPath(netnsPath)
-  if err != nil {
-    return fmt.Errorf("failed to open netns %s: %w", netnsPath, err)
-  }
-  defer netns.Set(stdNetns)
+	containerNs, err := netns.GetFromPath(netnsPath)
+	if err != nil {
+		return fmt.Errorf("failed to open netns %s: %w", netnsPath, err)
+	}
+	defer netns.Set(stdNetns)
 
-  err = netns.Set(containerNs)
-  if err != nil {
-    return fmt.Errorf("failed to set netns %s: %w", netnsPath, err)
-  }
-  return function()
+	err = netns.Set(containerNs)
+	if err != nil {
+		return fmt.Errorf("failed to set netns %s: %w", netnsPath, err)
+	}
+	return function()
 }
 
-func getConfigFromIML(payload IMLConfigRequest) (*IMLConfigResponse, error) {
-  data, err := json.Marshal(payload)
-  if err != nil {
-    return nil, fmt.Errorf("failed to marshal request payload: %w", err)
-  }
+func getAppConfigFromIML(payload AppConfigRequest) (*AppConfigResponse, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request payload: %w", err)
+	}
 
-  resp, err := http.Post(
-    "http://iml.desire6g-system.svc.cluster.local/iml/cni/register", 
-    "application/json", bytes.NewBuffer(data),
-  )
-  if err != nil {
-    return nil, fmt.Errorf("failed to make HTTP request: %w", err)
-  }
-  defer resp.Body.Close()
+	resp, err := http.Post(
+		"http://145.100.131.17:5000/iml/cni/register",
+		"application/json", bytes.NewBuffer(data),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
 
-  if resp.StatusCode != http.StatusOK {
-    return nil, fmt.Errorf("received non-200 response: %s", resp.Status)
-  }
-  var configResponse IMLConfigResponse
-  if err := json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
-    return nil, fmt.Errorf("failed to decode response: %w", err)
-  }
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("received non-200 response: %s", resp.Status)
+	}
+	var configResponse AppConfigResponse
+	if err := json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
 
-  return &configResponse, nil
+	return &configResponse, nil
+}
+
+// func getNFConfigFromIML(configRequest NFConfigRequest) (*NFConfigResponse, error) {
+// 	data, err := json.Marshal(configRequest)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to marshal request payload: %w", err)
+// 	}
+
+// 	resp, err := http.Post(
+// 		"http://145.100.131.17:5000/iml/nfrouter/register",
+// 		"application/json", bytes.NewBuffer(data),
+// 	)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
+// 	}
+// 	defer resp.Body.Close()
+
+// 	if resp.StatusCode != http.StatusOK {
+// 		return nil, fmt.Errorf("received non-200 response: %s", resp.Status)
+// 	}
+// 	var configResponse NFConfigResponse
+// 	if err := json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
+// 		return nil, fmt.Errorf("failed to decode response: %w", err)
+// 	}
+// 	return &configResponse, nil
+// }
+
+func tearDownNetworkFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) error {
+	logger.InfoLogger().Printf("Tearing down network function for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
+
+	// Change to the container namespace
+	err := execInsideNs(cniArgs.Netns, func() error {
+		for _, intfName := range []string{netConfig.Args.CNI.SrcInterface, netConfig.Args.CNI.DstInterface} {
+			// Get the interface by name inside the container's namespace
+			intf, err := netlink.LinkByName(intfName)
+			if err != nil {
+				return fmt.Errorf("failed to get interface %s in netns %s: %w", intfName, cniArgs.Netns, err)
+			}
+
+			// Set the interface down
+			if err := netlink.LinkSetDown(intf); err != nil {
+				return fmt.Errorf("failed to set interface %s down in netns %s: %w", intfName, cniArgs.Netns, err)
+			}
+
+			// Delete the interface
+			if err := netlink.LinkDel(intf); err != nil {
+				return fmt.Errorf("failed to delete interface %s in netns %s: %w", intfName, cniArgs.Netns, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to execute inside netns %s: %v\n", cniArgs.Netns, err)
+		return fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+	}
+
+	return nil
+}
+
+func tearDownApplicationFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) error {
+	logger.InfoLogger().Printf("Tearing down application function for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
+
+	// Notify IML of the application function teardown
+	configRequest := AppTeardownRequest{
+		ApplicationID: netConfig.Args.CNI.AppId,
+	}
+	err := notifyIMLOfTeardown(configRequest)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to notify IML of teardown: %v\n", err)
+		return fmt.Errorf("failed to notify IML of teardown: %w", err)
+	}
+
+	// Change to the container namespace
+	err = execInsideNs(cniArgs.Netns, func() error {
+		// Get the peer interface by name inside the container's namespace
+		intf, err := netlink.LinkByName("iml0")
+		if err != nil {
+			return fmt.Errorf("failed to get interface %s in netns %s: %w", "iml0", cniArgs.Netns, err)
+		}
+
+		// Set the interface down
+		if err := netlink.LinkSetDown(intf); err != nil {
+			return fmt.Errorf("failed to set interface %s down in netns %s: %w", netConfig.Args.CNI.SrcInterface, cniArgs.Netns, err)
+		}
+
+		// Delete the interface
+		if err := netlink.LinkDel(intf); err != nil {
+			return fmt.Errorf("failed to delete interface %s in netns %s: %w", netConfig.Args.CNI.SrcInterface, cniArgs.Netns, err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to execute inside netns %s: %v\n", cniArgs.Netns, err)
+		return fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+	}
+
+	return nil
+}
+
+func notifyIMLOfTeardown(request AppTeardownRequest) error {
+	data, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request payload: %w", err)
+	}
+
+	resp, err := http.Post(
+		"http://145.100.131.17:5000/iml/cni/teardown",
+		"application/json", bytes.NewBuffer(data),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to make HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("received non-200 response: %s", resp.Status)
+	}
+	logger.InfoLogger().Printf("Successfully notified IML of teardown for application %s\n", request.ApplicationID)
+	return nil
 }
 
 func cmdDel(args *skel.CmdArgs) error {
-  fmt.Fprintf(os.Stderr, "DEL called for container %s\n", args.ContainerID)
-  return nil
+	logger.InfoLogger().Printf("DEL called for container %s\n", args.ContainerID)
+	
+	cniConf := IMLCNIConfig{}
+	if err := json.Unmarshal(args.StdinData, &cniConf); err != nil {
+		logger.ErrorLogger().Printf("Failed to parse CNI configuration: %v\n", err)
+		return fmt.Errorf("failed to parse network config: %w", err)
+	}
+
+	switch cniConf.Args.CNI.AppType {
+		case "network_function":
+			logger.InfoLogger().Printf("Tearing down network function for container %s\n", args.ContainerID)
+			if err := tearDownNetworkFunction(&cniConf, args); err != nil {
+				logger.ErrorLogger().Printf("Failed to tear down network function: %v\n", err)
+				return fmt.Errorf("failed to tear down network function: %w", err)
+			}
+		case "application_function":
+			logger.InfoLogger().Printf("Tearing down application function for container %s\n", args.ContainerID)
+			if err := tearDownApplicationFunction(&cniConf, args); err != nil {
+				logger.ErrorLogger().Printf("Failed to tear down application function: %v\n", err)
+				return fmt.Errorf("failed to tear down application function: %w", err)
+			}
+		default:
+			logger.ErrorLogger().Printf("Unknown app type: %s\n", cniConf.Args.CNI.AppType)
+			return fmt.Errorf("unknown app type: %s", cniConf.Args.CNI.AppType)
+	}
+	return nil
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
-  fmt.Fprintf(os.Stderr, "CHECK not implemented\n")
-  return nil
+	logger.InfoLogger().Printf("CHECK called for container %s\n", args.ContainerID)
+	fmt.Fprintf(os.Stderr, "CHECK not implemented\n")
+	return nil
 }
 
 func versionInfo() version.PluginInfo {
-  return version.PluginSupports("0.3.1","0.4.0")
+	return version.PluginSupports("0.3.1", "0.4.0")
 }
 
 func main() {
-  skel.PluginMainFuncs(skel.CNIFuncs{
-    Add: cmdAdd,
-    Del: cmdDel,
-    Check: cmdCheck,
-  }, versionInfo(), "CNI Plugin for IML")
+	logger.InfoLogger().Println("IML CNI Plugin starting...")
+	skel.PluginMainFuncs(skel.CNIFuncs{
+		Add:   cmdAdd,
+		Del:   cmdDel,
+		Check: cmdCheck,
+	}, versionInfo(), "CNI Plugin for IML")
 }

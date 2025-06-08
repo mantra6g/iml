@@ -68,7 +68,7 @@ given_ips = []
 def generate_ip():
   global given_ips
   while True:
-    next_ip = IML_SUBNET + ".".join([f"{random.randint(0, 255)}" for x in range(2)])
+    next_ip = IML_SUBNET + "." + ".".join([f"{random.randint(0, 255)}" for x in range(2)])
     if next_ip not in given_ips:
       break
   given_ips.append(next_ip)
@@ -209,9 +209,9 @@ def generate_values(nsd, path):
     data['interfaces'] = {}
     for i in nsd['lnsd']['ns']['application-functions']:
       found_app = None
-      for app in app_registry:
-        if app['id'] == i['af-id']:
-          found_app = app
+      for af in app_registry:
+        if af['id'] == i['af-id']:
+          found_app = af
           break
       if found_app is None:
         print(f"Application function {i['af-id']} not found in app registry.")
@@ -331,6 +331,36 @@ def generate_values(nsd, path):
     yaml.default_flow_style = False
     yaml.dump(data, f)
 
+def get_app(app_id):
+  for af in app_registry:
+    if af['id'] == app_id:
+      return af
+  return None
+
+def generate_values2(ns, path):
+  values = {}
+  for app_id in ns["required_app_instances"]:
+    app_data = get_app(app_id)
+    if app_data is None:
+      print(f"Application function {app_id} not found in app registry.")
+      return
+
+    values[app_data['af-instance-id']] = {
+      'if_name': app_data['if_name'],
+      'mac': app_data['mac'],
+      'ip': app_data['ip'],
+    }
+
+    values["nfrouter"] = {
+      'node': app_data['node'],
+    }
+
+  with open(path, 'w') as f:
+    yaml=YAML()
+    yaml.width = 4096
+    yaml.default_flow_style = False
+    yaml.dump(values, f)
+
 def register_app_instance(app_data):
   app_instance = {
     'id': app_data['af-id'],
@@ -344,61 +374,54 @@ def register_app_instance(app_data):
   app_registry.append(app_instance)
 
 def update_app_instance(app_id, host_id):
-  ip = None, src_mac = None, gateway_mac = None
-  routes = []
+  print(f"Updating app instance {app_id} on host {host_id}")
+  global app_registry
+  ip = None; src_mac = None; gateway_mac = None; peer_name = None
 
-  for app in app_registry:
-    if app['id'] == app_id:
-      app['node'] = host_id
+  for af in app_registry:
+    if af['id'] == app_id:
+      af['node'] = host_id
       # Generate a new IP and MAC address for the app instance
-      ip = generate_ip()
+      ip = generate_ip() + IML_SUBNET_PREFIX
       src_mac = generate_mac()
       gateway_mac = generate_mac()
+      peer_name = f"nfr-{hex(random.randint(0x0000, 0xFFFF))[2:]}"
       # Update the app instance with the new IP and MAC
-      app['ip'] = ip
-      app['src_mac'] = src_mac
-      app['gateway_mac'] = gateway_mac
+      af['ip'] = ip
+      af['src_mac'] = src_mac
+      af['gateway_mac'] = gateway_mac
+      af['peer_name'] = peer_name
 
   notify_app_instance_update()
-  return ip, src_mac, gateway_mac, routes
+  return ip, src_mac, gateway_mac, peer_name
 
 def notify_app_instance_update():
   for ns in ns_registry:
     required_app_ids = ns['required_app_instances']
     missing_apps = len(required_app_ids)
-    for app in app_registry:
-      if app['id'] in required_app_ids and app['node'] is not None:
+    for af in app_registry:
+      if af['id'] in required_app_ids and af['node'] is not None:
         missing_apps -= 1
     if missing_apps == 0:
       # All required apps are available, trigger NS deployment
       deploy_ns(ns)
 
 def deploy_ns(ns):
-  path = os.path.join(app.config['UPLOAD_FOLDER'], "uploaded.yml")
+  deploy_id = get_next_deploy_id()
+  values_path = os.path.join(DEPLOY_FOLDER, f'values-{deploy_id}.yaml')
+  generate_values2(ns, values_path)
 
-  with open(path, 'r') as f:
-    try:
-      yaml=YAML(typ='safe')
-      yaml_data = yaml.load(f)
+  result = run(['helm', 'install', '--dry-run', '--debug', '--namespace', DEFAULT_NAMESPACE, '--create-namespace', '-f', values_path, f'deploy-{deploy_id}', DEFAULT_CHART], capture_output = True, text = True)
 
-      deploy_id = get_next_deploy_id()
-      values_path = os.path.join(DEPLOY_FOLDER, f'values-{deploy_id}.yaml')
-      generate_values(yaml_data, values_path)
-
-      result = run(['helm', 'install', '--namespace', DEFAULT_NAMESPACE, '--create-namespace', '--post-renderer', './kustomize.sh', '-f', values_path, f'deploy-{deploy_id}', DEFAULT_CHART], capture_output = True, text = True)
-
-      if result.stderr:
-        print(f"Failed to deploy: {result.stderr}")
-      else:
-        print(f"Deployed: {yaml_data['lnsd']['ns']['name']} as id {deploy_id}")
-      
-    except ParserError:
-      print("Failed to parse")
+  if result.stderr:
+    print(f"Failed to deploy: {result.stderr}")
+  else:
+    print(f"Deployed: {ns['name']} as id {deploy_id}")
 
 
 @app.route("/iml/yaml/deploy/<id>", methods=["DELETE"])
 def deleteDeployment(id):
-  result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
+  result = run(['helm', 'uninstall', '--dry-run', '--debug', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
 
   if result.stderr:
     return jsonify({"response": result.stderr}), 500
@@ -422,9 +445,9 @@ def deploy_yaml():
         'required_app_instances': [],
       }
 
-      for app in yaml_data['lnsd']['ns']['application-functions']:
-        register_app_instance(app)
-        ns['required_app_instances'].append(app['af-id'])
+      for af in yaml_data['lnsd']['ns']['application-functions']:
+        register_app_instance(af)
+        ns['required_app_instances'].append(af['af-id'])
 
       ns_registry.append(ns)
       
@@ -446,12 +469,76 @@ def handle_cni_register():
   host_id = data.get("host_id")
 
   # TODO: Register app and obtain its IP and MAC address
-  ip, mac, gateway_ip, routes = update_app_instance(application_id, host_id)
+  ip, mac, gateway_mac, peer_name = update_app_instance(application_id, host_id)
   if ip is None or mac is None:
     return jsonify({"error": "Failed to update app: instance not found"}), 404
 
   # Return the app information in the response
-  return jsonify({"ip": ip, "mac": mac}), 200
+  return jsonify({
+    "ip": ip, 
+    "mac_address": mac,
+    "peer_name": peer_name,
+    "route": {
+      "destination": IML_SUBNET + ".0.0" + IML_SUBNET_PREFIX,
+      "gateway_ip": IML_SUBNET + ".0.1",
+      "gateway_mac": gateway_mac
+    }
+  }), 200
+
+def remove_app_instance(app_id):
+  global app_registry
+  app_registry = [af for af in app_registry if af['id'] != app_id]
+
+@app.route("/iml/cni/teardown", methods=["POST"])
+def handle_cni_teardown():
+  data = request.get_json()
+  # Validate the received data
+  if 'application_id' not in data:
+    return jsonify({"error": "Invalid request data"}), 400
+
+  # Extract app information from the received data
+  application_id = data.get("application_id")
+
+  # TODO: Register app and obtain its IP and MAC address
+  remove_app_instance(application_id)
+
+  # Return the app information in the response
+  return jsonify({"message": "Application removed successfully"}), 204
+
+def get_nfrouter_config(nf_id):
+  interfaces = []
+  for af in app_registry:
+    if af['id'] == nf_id:
+      if 'interfaces' in af:
+        interfaces = af['interfaces']
+      else:
+        return None
+      break
+  else:
+    return None
+
+  raise NotImplementedError
+
+
+@app.route("/iml/nfrouter/register", methods=["POST"])
+def handle_nfrouter_register():
+  data = request.get_json()
+  # Validate the received data
+  if 'nf_id' not in data:
+    return jsonify({"error": "Invalid request data"}), 400
+
+  # Extract app information from the received data
+  nf_id = data.get("nf_id")
+
+  # TODO: Register app and obtain its IP and MAC address
+  interfaces = get_nfrouter_config(nf_id)
+  if interfaces is None:
+    return jsonify({"error": "Failed to update app: instance not found"}), 404
+
+  # Return the app information in the response
+  return jsonify({
+    "interfaces": interfaces
+  }), 200
 
 if __name__ == "__main__":
   app.run(host='0.0.0.0', debug=True)

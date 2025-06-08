@@ -12,7 +12,6 @@ spec:
       labels:
         app: install-iml-cni
     spec:
-      hostNetwork: true
       tolerations:
         - operator: "Exists"  # Allow running on master and tainted nodes
       containers:
@@ -44,6 +43,9 @@ metadata:
   name: iml-cni
 spec:
   config: '{
-            "cniVersion": "0.4.0",
-            "type": "imlcni"
-        }'
+    "cniVersion": "0.4.0",
+    "type": "imlcni"
+  }'
+
+
+# TODO: Add a DaemonSet to create the vfbridge on all the nodes
