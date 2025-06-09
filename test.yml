@@ -11,12 +11,12 @@ lnsd:
     network-functions: []
 
     application-functions:
-      - af-instance-id: "pkt-src"
+      - af-instance-id: "pkt_src"
         af-id: "curl"
         af-name: "Pkt source"
         af-version: "1.0"
 
-      - af-instance-id: "pkt-dst"
+      - af-instance-id: "pkt_dst"
         af-id: "nginx"
         af-name: "Pkt destination"
         af-version: "1.0"
@@ -29,13 +29,13 @@ lnsd:
           - id: "to-dst"
             connection-points:
             - member-connection-point-index: 1
-              member-if-id-ref: "pkt-src:1"
+              member-if-id-ref: "pkt_src:1"
             - member-connection-point-index: 2
-              member-if-id-ref: "pkt-dst:1"
+              member-if-id-ref: "pkt_dst:1"
           - id: "to-src"
             connection-points:
             - member-connection-point-index: 1
-              member-if-id-ref: "pkt-dst:1"
+              member-if-id-ref: "pkt_dst:1"
             - member-connection-point-index: 2
-              member-if-id-ref: "pkt-src:1"
+              member-if-id-ref: "pkt_src:1"
         e2e_delay_budget: "5ms"

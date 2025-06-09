@@ -11,6 +11,17 @@
 #     mac: "66:77:88:99:AA:BB"
 #     ip: "10.179.48.77"
 
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nfrouter-config
+data:
+  ipv4rules.cfg: |
+    R{{.Values.pkt_src.ip}}/32 0
+    R{{.Values.pkt_dst.ip}}/32 1
+  ipv6rules.cfg: R::/128 0
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,28 +35,59 @@ spec:
       labels:
         app: nfrouter
       annotations:
-        k8s.v1.cni.cncf.io/networks: '{ "name": "iml-cni", "cni-args": {"app_type": "network_function", "src_if": "{{Values.pkt_src.if_name}}", "dst_if": "{{Values.pkt_dst.if_name}}"} }'
+        k8s.v1.cni.cncf.io/networks: |
+          [{
+            "name": "iml-cni",
+            "namespace": "default",
+            "cni-args": {
+              "app_type": "network_function",
+              "src_if": "{{.Values.pkt_src.if_name}}",
+              "dst_if": "{{.Values.pkt_dst.if_name}}"
+            }
+          }]
     spec:
-      nodeName: {{ Values.nfrouter.node }}
+      nodeName: {{ .Values.nfrouter.node }}
       containers:
       - name: nfrouter
         image: tomasagata/nfrouter:latest
-        args: [ './l3fwd-static -l 0-1 -n 4 --no-pci --vdev=net_tap0,iface=dtap0,remote={{Values.pkt_src.if_name}} --vdev=net_tap1,iface=dtap1,remote={{Values.pkt_dst.if_name}} -- -p 0x3 --config="(0,0,0),(0,1,1),(1,0,0),(1,1,1)" --mode=poll -P --eth-dest=0,{{Values.pkt_src.mac}} --eth-dest=1,{{Values.pkt_dst.mac}} --rule_ipv4="/opt/nfconfig/ipv4rules.cfg" --rule_ipv6="/opt/nfconfig/ipv6rules.cfg"' ]
+        securityContext:
+          privileged: true
+        args: [ 
+          # 'sleep', 'infinity'
+          # './l3fwd-static -l 0-1 -n 4 --no-pci --vdev=net_tap0,iface=dtap0,remote=nfr-f43d --vdev=net_tap1,iface=dtap1,remote=nfr-2587 -- -p 0x3 --config="(0,0,0),(0,1,1),(1,0,0),(1,1,1)" --mode=poll -P --eth-dest=0,02:58:4d:56:41:59 --eth-dest=1,02:7e:d5:b8:fd:1d --rule_ipv4="/opt/nfconfig/ipv4rules.cfg" --rule_ipv6="/opt/nfconfig/ipv6rules.cfg"'
+          './l3fwd-static', 
+          '-l', '0-1', 
+          '-n', '4', 
+          '--no-pci', 
+          '--vdev=net_tap0,iface=dtap0,remote={{.Values.pkt_src.if_name}}',
+          '--vdev=net_tap1,iface=dtap1,remote={{.Values.pkt_dst.if_name}}',
+          '--', 
+          '-p', '0x3',
+          '--config=(0,0,0),(0,1,1),(1,0,0),(1,1,1)',
+          '--mode=poll', '-P',
+          '--eth-dest=0,{{.Values.pkt_src.mac}}',
+          '--eth-dest=1,{{.Values.pkt_dst.mac}}',
+          '--rule_ipv4=/opt/nfconfig/ipv4rules.cfg',
+          '--rule_ipv6=/opt/nfconfig/ipv6rules.cfg',
+        ]
         volumeMounts:
+          - name: hugepage
+            mountPath: /hugepages
           - name: nf-config
             mountPath: /opt/nfconfig
+        resources:
+          limits:
+            hugepages-1Gi: 1Gi
+            memory: 1Gi
+            nvidia.com/cx6dx_vf: '1'
+          requests:
+            hugepages-1Gi: 1Gi
+            memory: 1Gi
+            nvidia.com/cx6dx_vf: '1'
       volumes:
+      - name: hugepage
+        emptyDir:
+          medium: HugePages
       - name: nf-config
         configMap:
           name: nfrouter-config
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: nfrouter-config
-data:
-  ipv4rules.cfg: |
-    R{{Values.pkt_src.ip}}/32 0
-    R{{Values.pkt_dst.ip}}/32 1
-  ipv6rules.cfg: R::/128 0

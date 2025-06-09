@@ -98,6 +98,7 @@ spec:
       containers:
       - name: curl
         image: alpine/curl:8.12.1
+        command: ["sh", "-c", "sleep infinity"]
         ports:
         - containerPort: 80
         resources:

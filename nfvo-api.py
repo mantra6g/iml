@@ -345,10 +345,10 @@ def generate_values2(ns, path):
       print(f"Application function {app_id} not found in app registry.")
       return
 
-    values[app_data['af-instance-id']] = {
-      'if_name': app_data['if_name'],
-      'mac': app_data['mac'],
-      'ip': app_data['ip'],
+    values[app_data['instance-id']] = {
+      'if_name': app_data['peer_name'],
+      'mac': SingleQuotedScalarString(app_data['mac']),
+      'ip': app_data['ip'][:-3], # Remove the last 3 characters (the /16 part)
     }
 
     values["nfrouter"] = {
@@ -388,7 +388,7 @@ def update_app_instance(app_id, host_id):
       peer_name = f"nfr-{hex(random.randint(0x0000, 0xFFFF))[2:]}"
       # Update the app instance with the new IP and MAC
       af['ip'] = ip
-      af['src_mac'] = src_mac
+      af['mac'] = src_mac
       af['gateway_mac'] = gateway_mac
       af['peer_name'] = peer_name
 
@@ -411,7 +411,7 @@ def deploy_ns(ns):
   values_path = os.path.join(DEPLOY_FOLDER, f'values-{deploy_id}.yaml')
   generate_values2(ns, values_path)
 
-  result = run(['helm', 'install', '--dry-run', '--debug', '--namespace', DEFAULT_NAMESPACE, '--create-namespace', '-f', values_path, f'deploy-{deploy_id}', DEFAULT_CHART], capture_output = True, text = True)
+  result = run(['helm', 'install', '--namespace', DEFAULT_NAMESPACE, '--create-namespace', '-f', values_path, f'deploy-{deploy_id}', DEFAULT_CHART], capture_output = True, text = True)
 
   if result.stderr:
     print(f"Failed to deploy: {result.stderr}")
@@ -421,7 +421,7 @@ def deploy_ns(ns):
 
 @app.route("/iml/yaml/deploy/<id>", methods=["DELETE"])
 def deleteDeployment(id):
-  result = run(['helm', 'uninstall', '--dry-run', '--debug', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
+  result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
 
   if result.stderr:
     return jsonify({"response": result.stderr}), 500

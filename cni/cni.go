@@ -86,7 +86,7 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 	logger.DebugLogger().Printf("Deploying application function with config: %+v\n", netConfig)
 
 	// Parse the IP address from the response
-	_, ipNet, err := net.ParseCIDR(netConfig.IP)
+	ipNet, err := netlink.ParseIPNet(netConfig.IP)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.IP)
 	}
@@ -115,76 +115,84 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		return nil, fmt.Errorf("failed to parse gateway MAC: %s", netConfig.Route.GatewayMac)
 	}
 
-	// Open the container's network namespace
-	ns, err := netns.GetFromPath(cniArgs.Netns)
+	// Get the host's network namespace
+	hostNs, err := netns.Get()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open netns %s: %w", cniArgs.Netns, err)
+		return nil, fmt.Errorf("failed to get host netns: %w", err)
 	}
+	defer hostNs.Close()
 
 	// Create a veth pair for the container
 	// The container interface is called "iml0"
-	// The host interface is called "veth-<containerID>"
-	// The host interface will be added to the "vfbridge" bridge
+	// The host interface is called "nfr-..."
 	imlInterface := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: netConfig.PeerName,
+			Name: "iml0",
 			MTU:  1500,
+			HardwareAddr: macAddr,
 		},
-		PeerName:         "iml0",
+		PeerName:         netConfig.PeerName,
 		PeerMTU:          1500,
-		PeerHardwareAddr: macAddr,
-		PeerNamespace:    ns,
-	}
-
-	// Add the veth pair
-	if err := netlink.LinkAdd(imlInterface); err != nil {
-		ns.Close()
-		return nil, fmt.Errorf("failed to create veth pair: %w", err)
-	}
-	ns.Close()
-
-	// Set both ends of the veth pair up
-	if err := netlink.LinkSetUp(imlInterface); err != nil {
-		return nil, fmt.Errorf("failed to set veth interface up: %w", err)
-	}
-
-	// Create route to the destination network
-	routeLink := &netlink.Route{
-		Dst: dstNet,
-		Gw:  gwIP,
-		Src: ipNet.IP,
-	}
-
-	// Create static ARP entry for the gateway MAC address
-	arpEntry := &netlink.Neigh{
-		IP:           gwIP,
-		HardwareAddr: gwMac,
-		State:        netlink.NUD_PERMANENT,
 	}
 
 	// Change to the container namespace
 	err = execInsideNs(cniArgs.Netns, func() error {
-		// Get the peer interface of the veth pair
-		peerLink, err := netlink.LinkByName(imlInterface.PeerName)
+		// Add the veth pair
+		if err := netlink.LinkAdd(imlInterface); err != nil {
+			return fmt.Errorf("failed to create veth pair: %w", err)
+		}
+		peerInterface, err := netlink.LinkByName(imlInterface.PeerName)
 		if err != nil {
 			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.PeerName, err)
 		}
-		// Set the peer interface's IP address
-		if err := netlink.AddrAdd(peerLink, &netlink.Addr{IPNet: ipNet}); err != nil {
-			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.PeerName, err)
+		// Move the peer interface to the host namespace
+		if err := netlink.LinkSetNsFd(peerInterface, int(hostNs)); err != nil {
+			return fmt.Errorf("failed to move peer interface %s to host netns: %w", imlInterface.PeerName, err)
 		}
+		// Set both ends of the veth pair up
+		if err := netlink.LinkSetUp(imlInterface); err != nil {
+			return fmt.Errorf("failed to set veth interface up: %w", err)
+		}
+		// Get the peer interface of the veth pair
+		containerLink, err := netlink.LinkByName(imlInterface.Name)
+		if err != nil {
+			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.Name, err)
+		}
+		// Set the peer interface's IP address
+		if err := netlink.AddrAdd(containerLink, &netlink.Addr{IPNet: ipNet}); err != nil {
+			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.Name, err)
+		}
+
+		// Create static ARP entry for the gateway MAC address
+		arpEntry := &netlink.Neigh{
+			IP:           gwIP,
+			HardwareAddr: gwMac,
+			State:        netlink.NUD_PERMANENT,
+			LinkIndex: 	  containerLink.Attrs().Index,
+			Family:       netlink.FAMILY_V4,
+		}
+
 		// Add the ARP entry inside the container's network namespace
 		if err := netlink.NeighAdd(arpEntry); err != nil {
 			return fmt.Errorf("failed to add ARP entry: %w", err)
 		}
 		// Disable arp on the peer interface
-		if err := netlink.LinkSetARPOff(peerLink); err != nil {
-			return fmt.Errorf("failed to disable ARP on peer interface %s: %w", imlInterface.PeerName, err)
+		if err := netlink.LinkSetARPOff(containerLink); err != nil {
+			return fmt.Errorf("failed to disable ARP on peer interface %s: %w", imlInterface.Name, err)
 		}
-		// Add the route inside the container's network namespace
-		if err := netlink.RouteAdd(routeLink); err != nil {
-			return fmt.Errorf("failed to add route: %w", err)
-		}
+
+		// // Create route to the destination network
+		// routeLink := &netlink.Route{
+		// 	Dst: dstNet,
+		// 	Gw:  gwIP,
+		// 	Src: ipNet.IP,
+		// 	Scope: netlink.SCOPE_UNIVERSE,
+		// }
+
+		// // Add the route inside the container's network namespace
+		// if err := netlink.RouteChange(routeLink); err != nil {
+		// 	return fmt.Errorf("failed to add route: %w", err)
+		// }
 		return nil
 	})
 	if err != nil {
@@ -195,7 +203,7 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 	result := &current.Result{
 		Interfaces: []*current.Interface{
 			{
-				Name:    imlInterface.PeerName,
+				Name:    imlInterface.Name,
 				Mac:     netConfig.MacAddress,
 				Sandbox: cniArgs.Netns,
 			},
