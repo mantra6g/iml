@@ -1,8 +1,8 @@
+from http import HTTPStatus
 import os
 from ruamel.yaml import YAML
-from ruamel.yaml.scalarstring import SingleQuotedScalarString,DoubleQuotedScalarString
+from ruamel.yaml.scalarstring import SingleQuotedScalarString
 from ruamel.yaml.parser import ParserError
-import json
 import random
 from subprocess import run
 
@@ -407,11 +407,17 @@ def notify_app_instance_update():
       deploy_ns(ns)
 
 def deploy_ns(ns):
-  deploy_id = get_next_deploy_id()
+  deploy_id = ns['id']
   values_path = os.path.join(DEPLOY_FOLDER, f'values-{deploy_id}.yaml')
   generate_values2(ns, values_path)
 
-  result = run(['helm', 'install', '--namespace', DEFAULT_NAMESPACE, '--create-namespace', '-f', values_path, f'deploy-{deploy_id}', DEFAULT_CHART], capture_output = True, text = True)
+  result = run([
+    'helm', 'install', 
+    '--namespace', DEFAULT_NAMESPACE, '--create-namespace', 
+    '-f', values_path, 
+    f'deploy-{deploy_id}', 
+    DEFAULT_CHART
+  ], capture_output = True, text = True)
 
   if result.stderr:
     print(f"Failed to deploy: {result.stderr}")
@@ -421,57 +427,71 @@ def deploy_ns(ns):
 
 @app.route("/iml/yaml/deploy/<id>", methods=["DELETE"])
 def deleteDeployment(id):
+  ns = find_ns_by_id(id)
+  if ns is None: return jsonify({
+    "response": "network service does not exist"
+  }), HTTPStatus.NO_CONTENT
+
   result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
 
-  if result.stderr:
-    return jsonify({"response": result.stderr}), 500
-  else:
-    return jsonify({"response": f"Succesfull deletion of the deployment with id: {id}"}), 200
+  if result.stderr: return jsonify({
+    "response": result.stderr
+  }), HTTPStatus.INTERNAL_SERVER_ERROR
+  
+  remove_ns(id)
+
+  return jsonify({
+    "response": f"Succesful deletion of the deployment with id: {id}"
+  }), HTTPStatus.NO_CONTENT
 
 @app.route("/iml/yaml/deploy", methods=["POST"])
 def deploy_yaml():
-  path = os.path.join(app.config['UPLOAD_FOLDER'], "uploaded.yml")
   file = request.files['file']
-  file.save(path)
 
-  with open(path, 'r') as f:
-    try:
-      yaml=YAML(typ='safe')
-      yaml_data = yaml.load(f)
+  try:
+    yaml=YAML(typ='safe')
+    yaml_data = yaml.load(file.stream)
+  except ParserError:
+    return jsonify({
+      "message": "Failed to parse yaml file"
+    }), HTTPStatus.BAD_REQUEST
 
-      ns = {
-        'id': yaml_data['lnsd']['ns']['id'],
-        'name': yaml_data['lnsd']['ns']['name'],
-        'required_app_instances': [],
-      }
+  found_ns = find_ns_by_id(yaml_data['lnsd']['ns']['id'])
+  if found_ns is not None: return jsonify({
+    "message": "a network service with that ID already exists"
+  }), HTTPStatus.CONFLICT
 
-      for af in yaml_data['lnsd']['ns']['application-functions']:
-        register_app_instance(af)
-        ns['required_app_instances'].append(af['af-id'])
+  ns = {
+    'id': yaml_data['lnsd']['ns']['id'],
+    'name': yaml_data['lnsd']['ns']['name'],
+    'forwarding_graphs': yaml_data['lnsd']['ns']['forwarding_graphs'],
+    'required_app_instances': [],
+  }
 
-      ns_registry.append(ns)
-      
-      response = ("Network service registered successfully", 200)
-    except ParserError:
-      response = ("Failed to parse", 500)
+  for af in yaml_data['lnsd']['ns']['application-functions']:
+    register_app_instance(af)
+    ns['required_app_instances'].append(af['af-id'])
 
-  return jsonify({"response": response[0]}), response[1]
+  ns_registry.append(ns)
+  
+  return jsonify({"response": "Network service registered successfully"}), HTTPStatus.OK
 
 @app.route("/iml/cni/register", methods=["POST"])
 def handle_cni_register():
   data = request.get_json()
   # Validate the received data
   if 'application_id' not in data or 'host_id' not in data:
-    return jsonify({"error": "Invalid request data"}), 400
+    return jsonify({"error": "Invalid request data"}), HTTPStatus.BAD_REQUEST
 
   # Extract app information from the received data
   application_id = data.get("application_id")
   host_id = data.get("host_id")
 
-  # TODO: Register app and obtain its IP and MAC address
+  # Register app and obtain its IP and MAC address
   ip, mac, gateway_mac, peer_name = update_app_instance(application_id, host_id)
-  if ip is None or mac is None:
-    return jsonify({"error": "Failed to update app: instance not found"}), 404
+  if ip is None or mac is None: return jsonify({
+    "error": "Failed to update app: instance not found"
+  }), HTTPStatus.NOT_FOUND
 
   # Return the app information in the response
   return jsonify({
@@ -483,62 +503,40 @@ def handle_cni_register():
       "gateway_ip": IML_SUBNET + ".0.1",
       "gateway_mac": gateway_mac
     }
-  }), 200
+  }), HTTPStatus.OK
+
+def find_ns_by_id(ns_id):
+  global ns_registry
+  for ns in ns_registry:
+    if ns['id'] == ns_id: return ns
+  return None
 
 def remove_app_instance(app_id):
   global app_registry
   app_registry = [af for af in app_registry if af['id'] != app_id]
 
+def remove_ns(ns_id):
+  global ns_registry
+  ns_registry = [ns for ns in ns_registry if ns['id'] != ns_id]
+
 @app.route("/iml/cni/teardown", methods=["POST"])
 def handle_cni_teardown():
   data = request.get_json()
   # Validate the received data
-  if 'application_id' not in data:
-    return jsonify({"error": "Invalid request data"}), 400
+  if 'application_id' not in data: return jsonify({
+    "error": "Invalid request data"
+  }), HTTPStatus.BAD_REQUEST
 
   # Extract app information from the received data
   application_id = data.get("application_id")
 
-  # TODO: Register app and obtain its IP and MAC address
   remove_app_instance(application_id)
 
   # Return the app information in the response
-  return jsonify({"message": "Application removed successfully"}), 204
-
-def get_nfrouter_config(nf_id):
-  interfaces = []
-  for af in app_registry:
-    if af['id'] == nf_id:
-      if 'interfaces' in af:
-        interfaces = af['interfaces']
-      else:
-        return None
-      break
-  else:
-    return None
-
-  raise NotImplementedError
-
-
-@app.route("/iml/nfrouter/register", methods=["POST"])
-def handle_nfrouter_register():
-  data = request.get_json()
-  # Validate the received data
-  if 'nf_id' not in data:
-    return jsonify({"error": "Invalid request data"}), 400
-
-  # Extract app information from the received data
-  nf_id = data.get("nf_id")
-
-  # TODO: Register app and obtain its IP and MAC address
-  interfaces = get_nfrouter_config(nf_id)
-  if interfaces is None:
-    return jsonify({"error": "Failed to update app: instance not found"}), 404
-
-  # Return the app information in the response
   return jsonify({
-    "interfaces": interfaces
-  }), 200
+    "message": "Application removed successfully"
+  }), HTTPStatus.NO_CONTENT
+
 
 if __name__ == "__main__":
-  app.run(host='0.0.0.0', debug=True)
+  app.run(host='0.0.0.0', debug=False)

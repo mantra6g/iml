@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: iml-lnfvo-sa
-  namespace: default
+  name: iml-nfvo-sa
+  namespace: desire6g-system
 
 
 
@@ -11,14 +11,15 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: iml-lnfvo-crb
+  name: iml-nfvo-crb
+  namespace: desire6g-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-admin
 subjects:
   - kind: ServiceAccount
-    name: iml-lnfvo-sa
+    name: iml-nfvo-sa
     namespace: default
 
 
@@ -27,21 +28,23 @@ subjects:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: iml-lnfvo
+  name: iml-nfvo
+  namespace: desire6g-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: iml-lnfvo
+      app: iml-nfvo
   template:
     metadata:
       labels:
-        app: iml-lnfvo
+        app: iml-nfvo
     spec:
-      serviceAccountName: iml-lnfvo-sa
+      nodeName: oai-01
+      serviceAccountName: iml-nfvo-sa
       containers:
-        - name: iml-lnfvo
-          image: tomasagata/iml-lnfvo
+        - name: iml-nfvo
+          image: tomasagata/iml-nfvo
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
@@ -54,10 +57,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: iml-lnfvo
+  name: iml-nfvo
+  namespace: desire6g-system
 spec:
   selector:
-    app: iml-lnfvo
+    app: iml-nfvo
   type: NodePort
   ports:
     - protocol: TCP

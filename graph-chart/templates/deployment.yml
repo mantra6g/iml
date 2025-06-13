@@ -63,7 +63,7 @@ spec:
           '--vdev=net_tap1,iface=dtap1,remote={{.Values.pkt_dst.if_name}}',
           '--', 
           '-p', '0x3',
-          '--config=(0,0,0),(0,1,1),(1,0,0),(1,1,1)',
+          '--config="(0,0,0),(0,1,1),(1,0,0),(1,1,1)"',
           '--mode=poll', '-P',
           '--eth-dest=0,{{.Values.pkt_src.mac}}',
           '--eth-dest=1,{{.Values.pkt_dst.mac}}',

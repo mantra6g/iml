@@ -3,7 +3,7 @@ lnsd:
   ns-instance-id: "11223344-e2a8-4338-bc8c-be685548bad2"
   ns:
     name: "Ping demo"
-    id: "418420e3-e2a8-4338-bc8c-be685548bad2" # refers to the ns in the service catalog
+    id: "deadbeef" # refers to the ns in the service catalog
     vendor: "D6G"
     descriptor-version: "1.0"
     site-id: "d6g-001"
