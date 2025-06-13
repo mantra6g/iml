@@ -23,7 +23,7 @@ RUN curl https://baltocdn.com/helm/signing.asc | gpg --dearmor -o /usr/share/key
 WORKDIR /app
 
 # Move the graph-charts to 
-COPY graph-chart .
+COPY graph-chart ./graph-chart
 COPY requirements.txt .
 COPY nfvo-api.py .
 
@@ -31,4 +31,4 @@ COPY nfvo-api.py .
 RUN pip install -r requirements.txt
 
 # Default command
-ENTRYPOINT ["python3 nfvo-api.py"]
+ENTRYPOINT ["python3", "nfvo-api.py"]

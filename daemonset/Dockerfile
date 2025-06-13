@@ -1,12 +1,8 @@
-FROM golang:alpine AS builder
+FROM python:3.11-alpine AS builder
 
 WORKDIR /app
+
 COPY . .
+RUN pip3 install -r requirements.txt
 
-RUN go mod tidy
-RUN GOOS=linux GOARCH=amd64 go build -o imldaemon
-
-FROM alpine:latest
-WORKDIR /app
-
-COPY --from=builder /app/imldaemon .
+ENTRYPOINT ["python3", "proxy-daemon.py"]

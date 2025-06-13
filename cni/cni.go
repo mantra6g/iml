@@ -326,7 +326,7 @@ func getAppConfigFromIML(payload AppConfigRequest) (*AppConfigResponse, error) {
 	}
 
 	resp, err := http.Post(
-		"http://145.100.131.17:5000/iml/cni/register",
+		"http://localhost:7623/iml/cni/register",
 		"application/json", bytes.NewBuffer(data),
 	)
 	if err != nil {
@@ -352,7 +352,7 @@ func getAppConfigFromIML(payload AppConfigRequest) (*AppConfigResponse, error) {
 // 	}
 
 // 	resp, err := http.Post(
-// 		"http://145.100.131.17:5000/iml/nfrouter/register",
+// 		"http://localhost:7623/iml/nfrouter/register",
 // 		"application/json", bytes.NewBuffer(data),
 // 	)
 // 	if err != nil {
@@ -450,7 +450,7 @@ func notifyIMLOfTeardown(request AppTeardownRequest) error {
 	}
 
 	resp, err := http.Post(
-		"http://145.100.131.17:5000/iml/cni/teardown",
+		"http://localhost:7623/iml/cni/teardown",
 		"application/json", bytes.NewBuffer(data),
 	)
 	if err != nil {
