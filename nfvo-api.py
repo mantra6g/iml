@@ -365,7 +365,6 @@ def register_app_instance(app_data):
   app_instance = {
     'id': app_data['af-id'],
     'instance-id': app_data['af-instance-id'],
-    'name': app_data['af-name'],
     'af-version': app_data['af-version'],
     'node': None,  # This will be updated later
     'ip': None,  # This will be generated later

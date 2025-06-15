@@ -13,12 +13,10 @@ lnsd:
     application-functions:
       - af-instance-id: "pkt_src"
         af-id: "curl"
-        af-name: "Pkt source"
         af-version: "1.0"
 
       - af-instance-id: "pkt_dst"
         af-id: "nginx"
-        af-name: "Pkt destination"
         af-version: "1.0"
 
     site-connections: []
