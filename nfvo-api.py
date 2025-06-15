@@ -463,7 +463,6 @@ def deploy_yaml():
 
   ns = {
     'id': yaml_data['lnsd']['ns']['id'],
-    'name': yaml_data['lnsd']['ns']['name'],
     'forwarding_graphs': yaml_data['lnsd']['ns']['forwarding_graphs'],
     'required_app_instances': [],
   }
