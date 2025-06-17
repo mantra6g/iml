@@ -1,5 +1,6 @@
 from http import HTTPStatus
 import os
+import uuid
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import SingleQuotedScalarString
 from ruamel.yaml.parser import ParserError
@@ -373,7 +374,7 @@ def register_app_instance(app_data):
   app_registry.append(app_instance)
 
 def update_app_instance(app_id, host_id):
-  print(f"Updating app instance {app_id} on host {host_id}")
+  app.logger.info(f"Updating app instance {app_id} on host {host_id}")
   global app_registry
   ip = None; src_mac = None; gateway_mac = None; peer_name = None
 
@@ -401,6 +402,7 @@ def notify_app_instance_update():
     for af in app_registry:
       if af['id'] in required_app_ids and af['node'] is not None:
         missing_apps -= 1
+    app.logger.info(f"Checking deployment for network service {ns['id']}: {missing_apps} missing apps")
     if missing_apps == 0:
       # All required apps are available, trigger NS deployment
       deploy_ns(ns)
@@ -419,10 +421,19 @@ def deploy_ns(ns):
   ], capture_output = True, text = True)
 
   if result.stderr:
-    print(f"Failed to deploy: {result.stderr}")
-  else:
-    print(f"Deployed: {ns['name']} as id {deploy_id}")
+    app.logger.error(f"Failed to deploy: {result.stderr}")
+    return
+  
+  set_ns_deployed(deploy_id)
+  app.logger.info(f"Deployed: network service {deploy_id}")
 
+def set_ns_deployed(ns_id):
+  global ns_registry
+  for ns in ns_registry:
+    if ns['id'] == ns_id:
+      ns['deployed'] = True
+      return
+  print(f"Network service {ns_id} not found in registry.")
 
 @app.route("/iml/yaml/deploy/<id>", methods=["DELETE"])
 def deleteDeployment(id):
@@ -431,11 +442,12 @@ def deleteDeployment(id):
     "response": "network service does not exist"
   }), HTTPStatus.NO_CONTENT
 
-  result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
+  if ns['deployed']:
+    result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
 
-  if result.stderr: return jsonify({
-    "response": result.stderr
-  }), HTTPStatus.INTERNAL_SERVER_ERROR
+    if result.stderr: return jsonify({
+      "response": result.stderr
+    }), HTTPStatus.INTERNAL_SERVER_ERROR
   
   remove_ns(id)
 
@@ -455,15 +467,16 @@ def deploy_yaml():
       "message": "Failed to parse yaml file"
     }), HTTPStatus.BAD_REQUEST
 
-  found_ns = find_ns_by_id(yaml_data['lnsd']['ns']['id'])
-  if found_ns is not None: return jsonify({
-    "message": "a network service with that ID already exists"
-  }), HTTPStatus.CONFLICT
+  # found_ns = find_ns_by_id(yaml_data['lnsd']['ns']['id'])
+  # if found_ns is not None: return jsonify({
+  #   "message": "a network service with that ID already exists"
+  # }), HTTPStatus.CONFLICT
 
   ns = {
-    'id': yaml_data['lnsd']['ns']['id'],
+    'id': uuid.uuid4().hex,
     'forwarding_graphs': yaml_data['lnsd']['ns']['forwarding_graphs'],
     'required_app_instances': [],
+    'deployed': False,
   }
 
   for af in yaml_data['lnsd']['ns']['application-functions']:
@@ -472,7 +485,7 @@ def deploy_yaml():
 
   ns_registry.append(ns)
   
-  return jsonify({"response": "Network service registered successfully"}), HTTPStatus.OK
+  return jsonify(ns), HTTPStatus.OK
 
 @app.route("/iml/cni/register", methods=["POST"])
 def handle_cni_register():
