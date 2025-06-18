@@ -354,7 +354,7 @@ def generate_values2(ns, path):
     # The source and destination are in the format "app_name:intf_number"
     # e.g., "app1:1", "app1:2", "app2:1", etc.
     src_app_name, src_intf_number = graph['source'].split(':')
-    dst_app_name, dst_intf_number = graph['destination'].split(':')
+    dst_app_name, dst_intf_number = graph['target'].split(':')
 
     # Find the source and destination application functions in the app registry
     src_app = get_app_by_name(src_app_name)
@@ -364,7 +364,7 @@ def generate_values2(ns, path):
       print(f"Source application function {src_app_name} not found in app registry.")
       return
     if not dst_app:
-      print(f"Destination application function {dst_app_name} not found in app registry.")
+      print(f"Target application function {dst_app_name} not found in app registry.")
       return
 
     nfrouter_data = {}
@@ -390,8 +390,8 @@ def generate_values2(ns, path):
       # Get the interface name and MAC address from the application function
       interface_data = {
         'name': app['peer_name'],
-        'mac': SingleQuotedScalarString(app['mac']), # SingleQuotedScalarString needed because yaml does not like colons in MAC addresses
-        'ip': app['ip'][:-3], # Remove the last 3 characters (the /16 part)
+        'peer_mac': SingleQuotedScalarString(app['mac']), # SingleQuotedScalarString needed because yaml does not like colons in MAC addresses
+        'peer_ip': app['ip'][:-3], # Remove the last 3 characters (the /16 part)
       }
       nfrouter_data["interfaces"].append(interface_data)
     

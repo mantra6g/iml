@@ -24,7 +24,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-config
+  name: {{ $nfrouter.name }}-config
 data:
   ipv4rules.cfg: |
 {{- range $index, $intf := $nfrouter.interfaces }}
@@ -55,7 +55,7 @@ spec:
               "interfaces": [
               {{- range $index, $intf := $nfrouter.interfaces }}
                 {{ if $index }},{{ end }}
-                {{ $intf.name }}
+                "{{ $intf.name }}"
               {{- end }}
               ]
             }
@@ -83,7 +83,7 @@ spec:
           '--eth-dest={{$index}},{{$intf.peer_mac}}',
         {{- end }}
           '--rule_ipv4=/opt/nfconfig/ipv4rules.cfg',
-          '--rule_ipv6=/opt/nfconfig/ipv6rules.cfg',
+          '--rule_ipv6=/opt/nfconfig/ipv6rules.cfg'
         ]
         volumeMounts:
           - name: hugepage
@@ -105,6 +105,6 @@ spec:
           medium: HugePages
       - name: nf-config
         configMap:
-          name: nfrouter-config
+          name: {{$nfrouter.name}}-config
 
 {{ end -}}
