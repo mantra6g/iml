@@ -121,7 +121,8 @@ kind: NetworkAttachmentDefinition
 metadata:
   name: iml-cni
 spec:
-  config: '{
-    "cniVersion": "0.4.0",
-    "type": "imlcni"
-  }'
+  config: |
+    {
+      "cniVersion": "0.4.0",
+      "type": "imlcni"
+    }

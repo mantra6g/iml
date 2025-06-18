@@ -10,8 +10,7 @@ type IMLCNIConfig struct {
 		CNI struct {
 			AppId   string `json:"app_id,omitempty"`
 			AppType string `json:"app_type"` // network function or application function
-			SrcInterface string `json:"src_if,omitempty"`
-			DstInterface string `json:"dst_if,omitempty"`
+			Interfaces []string `json:"interfaces,omitempty"`
 		} `json:"cni,omitempty"`
 	} `json:"args,omitempty"`
 }

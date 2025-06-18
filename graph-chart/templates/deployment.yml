@@ -1,39 +1,50 @@
 # Example values:
 # -------------------------------------------------------
-#   nfrouter:
+#   nfrouters:
+#   - name: "nfrouter-abcd"
 #     node: "node-01"
-#   pkt_src:
-#     if_name: "nfr-f4bc"
-#     mac: "00:11:22:33:44:55"
-#     ip: "10.226.255.53"
-#   pkt_dst:
-#     if_name: "nfr-09ab"
-#     mac: "66:77:88:99:AA:BB"
-#     ip: "10.179.48.77"
+#     interfaces:
+#     - name: "nfr-f4bc"
+#       peer_mac: "00:11:22:33:44:55"
+#       peer_ip: "10.100.1.1"
+#     - name: "nfr-09ab"
+#       peer_mac: "66:77:88:99:AA:BB"
+#       peer_ip: "10.100.2.2"
+#   - name: "nfrouter-ef01"
+#     node: "node-01"
+#     interfaces:
+#     - name: "nfr-0cde"
+#       peer_mac: "CC:DD:EE:FF:00:11"
+#       peer_ip: "10.100.3.3"
+#     - name: "nfr-0fgh"
+#       peer_mac: "22:33:44:55:66:77"
+#       peer_ip: "10.100.4.4"
 
+{{- range $nfrouter_index, $nfrouter := .Values.nfrouters }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nfrouter-config
+  name: {{ .Release.Name }}-config
 data:
   ipv4rules.cfg: |
-    R{{.Values.pkt_src.ip}}/32 0
-    R{{.Values.pkt_dst.ip}}/32 1
+{{- range $index, $intf := $nfrouter.interfaces }}
+    R{{ $intf.peer_ip }}/32 {{ $index }}
+{{- end }}
   ipv6rules.cfg: R::/128 0
 ---
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nfrouter
+  name: {{ $nfrouter.name }}
 spec:
   selector:
     matchLabels:
-      app: nfrouter
+      app: {{ $nfrouter.name }}
   template:
     metadata:
       labels:
-        app: nfrouter
+        app: {{ $nfrouter.name }}
       annotations:
         k8s.v1.cni.cncf.io/networks: |
           [{
@@ -41,32 +52,36 @@ spec:
             "namespace": "default",
             "cni-args": {
               "app_type": "network_function",
-              "src_if": "{{.Values.pkt_src.if_name}}",
-              "dst_if": "{{.Values.pkt_dst.if_name}}"
+              "interfaces": [
+              {{- range $index, $intf := $nfrouter.interfaces }}
+                {{ if $index }},{{ end }}
+                {{ $intf.name }}
+              {{- end }}
+              ]
             }
           }]
     spec:
-      nodeName: {{ .Values.nfrouter.node }}
+      nodeName: {{ $nfrouter.node }}
       containers:
-      - name: nfrouter
+      - name: {{ $nfrouter.name }}
         image: tomasagata/nfrouter:latest
         securityContext:
           privileged: true
-        args: [ 
-          # 'sleep', 'infinity'
-          # './l3fwd-static -l 0-1 -n 4 --no-pci --vdev=net_tap0,iface=dtap0,remote=nfr-f43d --vdev=net_tap1,iface=dtap1,remote=nfr-2587 -- -p 0x3 --config="(0,0,0),(0,1,1),(1,0,0),(1,1,1)" --mode=poll -P --eth-dest=0,02:58:4d:56:41:59 --eth-dest=1,02:7e:d5:b8:fd:1d --rule_ipv4="/opt/nfconfig/ipv4rules.cfg" --rule_ipv6="/opt/nfconfig/ipv6rules.cfg"'
+        args: [
           './l3fwd-static', 
           '-l', '0-1', 
           '-n', '4', 
           '--no-pci', 
-          '--vdev=net_tap0,iface=dtap0,remote={{.Values.pkt_src.if_name}}',
-          '--vdev=net_tap1,iface=dtap1,remote={{.Values.pkt_dst.if_name}}',
+        {{- range $index, $intf := $nfrouter.interfaces }}
+          '--vdev=net_tap{{$index}},iface=dtap{{$index}},remote={{$intf.name}}',
+        {{- end }}
           '--', 
           '-p', '0x3',
           '--config="(0,0,0),(0,1,1),(1,0,0),(1,1,1)"',
           '--mode=poll', '-P',
-          '--eth-dest=0,{{.Values.pkt_src.mac}}',
-          '--eth-dest=1,{{.Values.pkt_dst.mac}}',
+        {{- range $index, $intf := $nfrouter.interfaces }}
+          '--eth-dest={{$index}},{{$intf.peer_mac}}',
+        {{- end }}
           '--rule_ipv4=/opt/nfconfig/ipv4rules.cfg',
           '--rule_ipv6=/opt/nfconfig/ipv6rules.cfg',
         ]
@@ -91,3 +106,5 @@ spec:
       - name: nf-config
         configMap:
           name: nfrouter-config
+
+{{ end -}}

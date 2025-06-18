@@ -338,23 +338,66 @@ def get_app(app_id):
       return af
   return None
 
+def get_app_by_name(app_name):
+  global app_registry
+  for af in app_registry:
+    if af['instance-id'] == app_name:
+      return af
+  return None
+
 def generate_values2(ns, path):
   values = {}
-  for app_id in ns["required_app_instances"]:
-    app_data = get_app(app_id)
-    if app_data is None:
-      print(f"Application function {app_id} not found in app registry.")
+  values["nfrouters"] = []
+
+  for graph in ns['forwarding_graphs']:
+    # Get the source and destination application functions from the graph
+    # The source and destination are in the format "app_name:intf_number"
+    # e.g., "app1:1", "app1:2", "app2:1", etc.
+    src_app_name, src_intf_number = graph['source'].split(':')
+    dst_app_name, dst_intf_number = graph['destination'].split(':')
+
+    # Find the source and destination application functions in the app registry
+    src_app = get_app_by_name(src_app_name)
+    dst_app = get_app_by_name(dst_app_name)
+    
+    if not src_app:
+      print(f"Source application function {src_app_name} not found in app registry.")
+      return
+    if not dst_app:
+      print(f"Destination application function {dst_app_name} not found in app registry.")
       return
 
-    values[app_data['instance-id']] = {
-      'if_name': app_data['peer_name'],
-      'mac': SingleQuotedScalarString(app_data['mac']),
-      'ip': app_data['ip'][:-3], # Remove the last 3 characters (the /16 part)
-    }
+    nfrouter_data = {}
 
-    values["nfrouter"] = {
-      'node': app_data['node'],
-    }
+    # Generate a "unique" ID for the nfrouter. 
+    # TODO: check if this ID is already used in the registry
+    nfrouter_id = random.randint(0x0000, 0xFFFF)
+
+    # Assign a name to the nfrouter like "nfrouter-89ab"
+    nfrouter_data["name"] = f"nfrouter-{nfrouter_id:04x}"
+
+    # Assign the node where the nfrouter will be deployed.
+    # For now, it is assumed that all application functions are deployed on the same node.
+    # As a result, the node the nfrouter will be deployed will be on the first node 
+    # of the first application function.
+    # In a real scenario, this should be calculated based on the forwarding graph.
+    nfrouter_data["node"] = src_app['node']
+
+    # Generate the interfaces for the nfrouter from the 
+    # application functions in the forwarding graph
+    nfrouter_data["interfaces"] = []
+    for app in [src_app, dst_app]:
+      # Get the interface name and MAC address from the application function
+      interface_data = {
+        'name': app['peer_name'],
+        'mac': SingleQuotedScalarString(app['mac']), # SingleQuotedScalarString needed because yaml does not like colons in MAC addresses
+        'ip': app['ip'][:-3], # Remove the last 3 characters (the /16 part)
+      }
+      nfrouter_data["interfaces"].append(interface_data)
+    
+    # Add the nfrouter data to the values dictionary
+    # This will be used to generate the values.yaml file for the Helm chart
+    values["nfrouters"].append(nfrouter_data)
 
   with open(path, 'w') as f:
     yaml=YAML()
@@ -416,7 +459,7 @@ def deploy_ns(ns):
     'helm', 'install', 
     '--namespace', DEFAULT_NAMESPACE, '--create-namespace', 
     '-f', values_path, 
-    f'deploy-{deploy_id}', 
+    f'nfrouter-{deploy_id}', 
     DEFAULT_CHART
   ], capture_output = True, text = True)
 
@@ -443,7 +486,7 @@ def deleteDeployment(id):
   }), HTTPStatus.NO_CONTENT
 
   if ns['deployed']:
-    result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
+    result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'nfrouter-{id}'], capture_output = True, text = True)
 
     if result.stderr: return jsonify({
       "response": result.stderr

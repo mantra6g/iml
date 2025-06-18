@@ -235,7 +235,7 @@ func deployNetworkFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) (type
 	defer ns.Close()
 
 	var interfaces []*current.Interface
-	for _, intf := range []string{netConfig.Args.CNI.SrcInterface, netConfig.Args.CNI.DstInterface} {
+	for _, intf := range netConfig.Args.CNI.Interfaces {
 		// Get the interface from the host namespace
 		hostIntf, err := netlink.LinkByName(intf)
 		if err != nil {
@@ -375,7 +375,7 @@ func tearDownNetworkFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) err
 
 	// Change to the container namespace
 	err := execInsideNs(cniArgs.Netns, func() error {
-		for _, intfName := range []string{netConfig.Args.CNI.SrcInterface, netConfig.Args.CNI.DstInterface} {
+		for _, intfName := range netConfig.Args.CNI.Interfaces {
 			// Get the interface by name inside the container's namespace
 			intf, err := netlink.LinkByName(intfName)
 			if err != nil {
@@ -425,12 +425,12 @@ func tearDownApplicationFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs)
 
 		// Set the interface down
 		if err := netlink.LinkSetDown(intf); err != nil {
-			return fmt.Errorf("failed to set interface %s down in netns %s: %w", netConfig.Args.CNI.SrcInterface, cniArgs.Netns, err)
+			return fmt.Errorf("failed to set interface %s down in netns %s: %w", "iml0", cniArgs.Netns, err)
 		}
 
 		// Delete the interface
 		if err := netlink.LinkDel(intf); err != nil {
-			return fmt.Errorf("failed to delete interface %s in netns %s: %w", netConfig.Args.CNI.SrcInterface, cniArgs.Netns, err)
+			return fmt.Errorf("failed to delete interface %s in netns %s: %w", "iml0", cniArgs.Netns, err)
 		}
 
 		return nil
