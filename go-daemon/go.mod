@@ -1,0 +1,13 @@
+module iml-daemon
+
+go 1.24.2
+
+require (
+	github.com/gorilla/mux v1.8.1
+	github.com/vishvananda/netlink v1.3.1
+)
+
+require (
+	github.com/vishvananda/netns v0.0.5 // indirect
+	golang.org/x/sys v0.10.0 // indirect
+)
