@@ -9,15 +9,19 @@ import (
 
 // IPAllocator manages IP allocation within a CIDR block
 type IPAllocator struct {
-  subnet   		  net.IPNet
+  subnet   		  *net.IPNet
   broadcast 		net.IP
   lastAssigned  net.IP
-  IPVersion     int // 4 for IPv4, 6 for IPv6
+  ipVersion     int // 4 for IPv4, 6 for IPv6
   mutex         sync.Mutex // Mutex to protect concurrent access
 }
 
 // NewIPAllocator creates a new allocator from a CIDR string
-func NewIPAllocator(ipNet net.IPNet) (*IPAllocator, error) {
+func NewIPAllocator(ipNet *net.IPNet) (*IPAllocator, error) {
+  if ipNet == nil {
+    return nil, fmt.Errorf("IPNet cannot be nil")
+  }
+
   if (ipNet.IP == nil) {
     return nil, fmt.Errorf("IPNet's IP is nil")
   }
@@ -49,7 +53,7 @@ func NewIPAllocator(ipNet net.IPNet) (*IPAllocator, error) {
     subnet:    ipNet,
     broadcast: bigIntToIP(broadcastInt, ipVersion),
     lastAssigned: ipNet.IP,
-    IPVersion: ipVersion,
+    ipVersion: ipVersion,
   }, nil
 }
 
@@ -70,7 +74,7 @@ func (a *IPAllocator) Next() (*net.IPNet, error) {
   }
   
   // Update the last assigned IP
-  a.lastAssigned = bigIntToIP(nextIpInt, a.IPVersion)
+  a.lastAssigned = bigIntToIP(nextIpInt, a.ipVersion)
 
   return &net.IPNet{
     IP:   a.lastAssigned,

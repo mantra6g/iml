@@ -2,25 +2,41 @@ package api
 
 import (
 	"encoding/json"
-	"iml-daemon/registry"
+	"fmt"
+	"iml-daemon/services/apps"
+	"iml-daemon/services/vnfs"
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 )
 
+type CNIController struct {
+	appService *apps.AppService
+	vnfService *vnfs.VnfService
+}
 
-func handleAppRegistration(response http.ResponseWriter, request *http.Request) {
+var validate *validator.Validate
+
+func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWriter, request *http.Request) {
 	// First, parse the request body to get the application details
-	var configRequest AppConfigRequest
-	if err := json.NewDecoder(request.Body).Decode(&configRequest); err != nil {
+	var instanceConfigDto AppInstanceConfigRequest
+	if err := json.NewDecoder(request.Body).Decode(&instanceConfigDto); err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate the request
+	err := validate.Struct(instanceConfigDto)
+	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Create the registration request
-	registrationRequest := registry.AppRegistrationRequest{
-		ApplicationID: configRequest.ApplicationID,
-		ContainerID:   configRequest.ContainerID,
+	instanceConfigRequest := &apps.AppInstanceRegistrationRequest{
+		ApplicationID: instanceConfigDto.ApplicationID,
+		ContainerID:   instanceConfigDto.ContainerID,
 	}
 
 	// Register the container details in the APPLICATION registry. This will
@@ -29,9 +45,9 @@ func handleAppRegistration(response http.ResponseWriter, request *http.Request) 
 	// This call is idempotent, so if the container is already registered,
 	// it will simply return the existing details.
 	// If the application ID references a non-existent application, return an error.
-	appDetails, err := registry.RegisterApp(registrationRequest)
-	if err != nil {
-		http.Error(response, err.Error(), http.StatusNotFound)
+	appDetails, errResponse := c.appService.RegisterAppInstance(instanceConfigRequest)
+	if errResponse != nil {
+		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}
 
@@ -44,38 +60,130 @@ func handleAppRegistration(response http.ResponseWriter, request *http.Request) 
 	response.Header().Set("Content-Type", "application/json")
 }
 
-func handleAppTeardown(response http.ResponseWriter, request *http.Request) {
+func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, request *http.Request) {
+	// First, parse the request body to get the container ID
+	var teardownDto AppInstanceTeardownRequest
+	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
 
+	// Validate the request
+	err := validate.Struct(teardownDto)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create the teardown request
+	teardownRequest := &apps.AppInstanceTeardownRequest{
+		ContainerID: teardownDto.ContainerID,
+	}
+
+	// Teardown the application instance
+	errResponse := c.appService.TeardownAppInstance(teardownRequest)
+	if errResponse != nil {
+		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
+		return
+	}
+
+	response.WriteHeader(http.StatusOK)
+	response.Header().Set("Content-Type", "application/json")
 }
 
-func handleVnfRegistration(response http.ResponseWriter, request *http.Request) {
+func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWriter, request *http.Request) {
 	// First, parse the request body to get the VNF details
+	var instanceConfigDto VnfInstanceConfigRequest
+	if err := json.NewDecoder(request.Body).Decode(&instanceConfigDto); err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	
-	// Register the VNF instance in the VNF registry. This will assign the necessary 
+	// Validate the request
+	err := validate.Struct(instanceConfigDto)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create the registration request
+	instanceConfigRequest := &vnfs.VnfInstanceRegistrationRequest{
+		VnfID:       instanceConfigDto.VnfID,
+		ContainerID: instanceConfigDto.ContainerID,
+	}
+
+	// Register the VNF instance in the VNF registry. This will assign the necessary
 	// resources and IPs to the VNF, as well as create the necessary routes in the nfrouter.
-	// This call is idempotent, so if the VNF is already registered, 
+	// This call is idempotent, so if the VNF is already registered,
 	// it will simply return the existing details.
 	// If the VNF ID references a non-existent VNF, return an error.
-	
+	vnfDetails, errResponse := c.vnfService.RegisterVnfInstance(instanceConfigRequest)
+	if errResponse != nil {
+		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
+		return
+	}
 
 	// Finally, return the VNF details including the allocated IP.
-	
+	if err := json.NewEncoder(response).Encode(vnfDetails); err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response.WriteHeader(http.StatusOK)
+	response.Header().Set("Content-Type", "application/json")
 }
 
-func handleVnfTeardown(response http.ResponseWriter, request *http.Request) {
+func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, request *http.Request) {
+	// First, parse the request body to get the container ID
+	var teardownDto VnfInstanceTeardownRequest
+	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
 
+	// Validate the request
+	err := validate.Struct(teardownDto)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create the teardown request
+	teardownRequest := &vnfs.VnfInstanceTeardownRequest{
+		ContainerID: teardownDto.ContainerID,
+	}
+
+	// Teardown the VNF instance
+	errResponse := c.vnfService.TeardownVnfInstance(teardownRequest)
+	if errResponse != nil {
+		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
+		return
+	}
+
+	response.WriteHeader(http.StatusOK)
+	response.Header().Set("Content-Type", "application/json")
 }
 
 // Sets up the local API for CNI operations
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func InitializeCNIApi() error {
+func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService) error {
+	// Validate the services
+	if appSvc == nil || vnfSvc == nil {
+		return fmt.Errorf("appService and vnfService cannot be nil")
+	}
+
+	// Create a new CNI controller with the services
+	cniController := &CNIController{
+		appService: appSvc,
+		vnfService: vnfSvc,
+	}
+	validate = validator.New(validator.WithRequiredStructEnabled())
 	router := mux.NewRouter()
-	router.HandleFunc("/api/v1/cni/app/register", handleAppRegistration).Methods("POST")
-	router.HandleFunc("/api/v1/cni/app/teardown", handleAppTeardown).Methods("POST")
-	router.HandleFunc("/api/v1/cni/vnf/register", handleVnfRegistration).Methods("POST")
-	router.HandleFunc("/api/v1/cni/vnf/teardown", handleVnfTeardown).Methods("POST")
+
+	router.HandleFunc("/api/v1/cni/app/register", cniController.handleAppInstanceRegistration).Methods("POST")
+	router.HandleFunc("/api/v1/cni/app/teardown", cniController.handleAppInstanceTeardown).Methods("POST")
+	router.HandleFunc("/api/v1/cni/vnf/register", cniController.handleVnfInstanceRegistration).Methods("POST")
+	router.HandleFunc("/api/v1/cni/vnf/teardown", cniController.handleVnfInstanceTeardown).Methods("POST")
 	return http.ListenAndServe("127.0.0.1:7623", router)
 }

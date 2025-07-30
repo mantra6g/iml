@@ -2,12 +2,13 @@ package dataplane
 
 import (
 	"fmt"
-	"iml-daemon/config"
+	"iml-daemon/env"
+	"iml-daemon/helpers"
 
 	"github.com/vishvananda/netlink"
 )
 
-func configureNFRouter(env *config.Environment) error {
+func configureNFRouter(env *env.GlobalConfig) error {
 	// Ensure the nfrouter interface does not exist
 	nfrouter, err := netlink.LinkByName("nfrouter")
 	if nfrouter != nil {
@@ -26,9 +27,9 @@ func configureNFRouter(env *config.Environment) error {
 	}
 
 	// Get an IP from the Application domain for the nfrouter
-	appIp, err := env.AppSIDAllocator.Next()
+	appIp, err := helpers.NextAppIP()
 	if err != nil {
-		return fmt.Errorf("failed to allocate IP from Application domain")
+		return fmt.Errorf("failed to allocate IP from Application domain: %w", err)
 	}
 
 	// Set it on the nfrouter
@@ -41,9 +42,9 @@ func configureNFRouter(env *config.Environment) error {
 	}
 
 	// Get an IP from the VNF domain for the nfrouter
-	vnfIp, err := env.NFSIDAllocator.Next()
+	vnfIp, err := helpers.NextVnfIP()
 	if err != nil {
-		return fmt.Errorf("failed to allocate IP from VNF domain")
+		return fmt.Errorf("failed to allocate IP from VNF domain: %w", err)
 	}
 
 	// Set it on the nfrouter
