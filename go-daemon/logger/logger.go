@@ -20,17 +20,6 @@ var debugMode = true
 
 const logFilePath = "/var/log/iml/nodemanager.log"
 
-type EventType string
-
-const (
-	DEPLOYREQUEST     EventType = "DEPLOY_REQUEST"
-	UNDEPLOYREQUEST   EventType = "UNDEPLOY_REQUEST"
-	DEPLOYED          EventType = "DEPLOYED"
-	SERVICE_RESOURCES EventType = "RESOURCES"
-	NODE_RESOURCES    EventType = "RESOURCES"
-	DEAD              EventType = "DEAD"
-)
-
 func SetDebugMode() {
 	debugMode = true
 }

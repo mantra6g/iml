@@ -2,11 +2,11 @@ package dataplane
 
 import (
 	"fmt"
-	"iml-daemon/config"
+	"iml-daemon/env"
 	"net"
 )
 
-func InitializeController(env *config.Environment) error {
+func InitializeController(env *env.GlobalConfig) error {
 	// Initialize the NFRouter with the provided environment
 	if err := configureNFRouter(env); err != nil {
 		return fmt.Errorf("failed to configure NFRouter: %w", err)
