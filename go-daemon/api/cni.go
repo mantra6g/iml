@@ -45,7 +45,7 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	// This call is idempotent, so if the container is already registered,
 	// it will simply return the existing details.
 	// If the application ID references a non-existent application, return an error.
-	appDetails, errResponse := c.appService.RegisterAppInstance(instanceConfigRequest)
+	appDetails, errResponse := c.appService.RegisterLocalAppInstance(instanceConfigRequest)
 	if errResponse != nil {
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
@@ -117,7 +117,7 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 	// This call is idempotent, so if the VNF is already registered,
 	// it will simply return the existing details.
 	// If the VNF ID references a non-existent VNF, return an error.
-	vnfDetails, errResponse := c.vnfService.RegisterVnfInstance(instanceConfigRequest)
+	vnfDetails, errResponse := c.vnfService.RegisterLocalVnfInstance(instanceConfigRequest)
 	if errResponse != nil {
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return

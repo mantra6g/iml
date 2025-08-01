@@ -9,7 +9,7 @@ type AppInstance struct {
 	ID          uuid.UUID `gorm:"primaryKey"`
 	GroupID     uuid.UUID
 	ContainerID string
-	IntfName    string // e.g., "nfr-aabbcc"
+	IfaceName   string // e.g., "nfr-aabbcc"
 	IP          string // in "IP/prefix" format
 }
 
