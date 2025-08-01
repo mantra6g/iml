@@ -1,13 +1,16 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 type Route struct {
-	ID       uint64 `gorm:"primaryKey"`
-	ChainID  string
-	SrcID    uint64
-	DstID    uint64
-	Segments []VnfGroup `gorm:"many2many:route_segments"`
+	ID              uuid.UUID `gorm:"primaryKey"`
+	ChainID         uuid.UUID
+	SrcAppGroupID   uuid.UUID
+	DstAppGroupID   uuid.UUID
+	Stages          []VnfGroup `gorm:"many2many:route_stages"`
 }
 
 func (r *Route) AfterSave(tx *gorm.DB) (err error) {

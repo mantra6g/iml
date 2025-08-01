@@ -7,7 +7,7 @@ import (
 
 type VirtualNetworkFunction struct {
 	ID        uuid.UUID  `gorm:"primaryKey"`
-	IMLVnfID  string     `gorm:"uniqueIndex:iml_vnf_id"`
+	GlobalID  string     `gorm:"uniqueIndex:vnf_global_id"`
 	Groups    []VnfGroup `gorm:"foreignKey:vnf_id"`
 }
 

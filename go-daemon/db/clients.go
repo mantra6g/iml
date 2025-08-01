@@ -20,14 +20,14 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 		&models.AppInstance{},
 		&models.VirtualNetworkFunction{},
 		&models.VnfGroup{},
-		&models.NetworkServiceChain{},
-		&models.ChainElement{},
-		&models.RouteSegment{},
+		&models.ServiceChain{},
+		&models.ServiceChainVnfs{},
+		&models.RouteStage{},
 		&models.Route{},
 	)
 
 	// Setup many-to-many relationship for Route and Segment
-	db.SetupJoinTable(&models.Route{}, "RouteSegments", &models.RouteSegment{})
+	db.SetupJoinTable(&models.Route{}, "RouteSegments", &models.RouteStage{})
 
 	return &Registry{
 		dbHandle: db,

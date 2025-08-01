@@ -10,7 +10,7 @@ type VnfInstance struct {
 	GroupID     uuid.UUID
 	Group       VnfGroup  `gorm:"foreignKey:group_id"`
 	ContainerID string
-	IntfName    string // e.g., "nfr-aabbcc"
+	IfaceName   string // e.g., "nfr-aabbcc"
 }
 
 func (VnfInstance) BeforeCreate(tx *gorm.DB) (err error) {

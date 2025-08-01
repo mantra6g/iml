@@ -10,6 +10,7 @@ import (
 	"iml-daemon/services/apps"
 	"iml-daemon/services/chains"
 	"iml-daemon/services/eventbus"
+	"iml-daemon/services/routecalc"
 	"iml-daemon/services/vnfs"
 )
 
@@ -55,28 +56,32 @@ func main() {
 	eb := eventbus.New()
 
 	// Initialize the application services
-	appService, err := apps.InitializeAppService(registry, appIP, vnfIP)
+	appService, err := apps.InitializeAppService(registry, appIP, vnfIP, eb)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize AppService: %v", err)
 		panic("Failed to initialize AppService: " + err.Error())
 	}
 
 	// Initialize the VNF services
-	vnfService, err := vnfs.InitializeVnfService(registry, appIP, vnfIP)
+	vnfService, err := vnfs.InitializeVnfService(registry, appIP, vnfIP, eb)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize VnfService: %v", err)
 		panic("Failed to initialize VnfService: " + err.Error())
 	}
 
 	// Initialize the network service chain services
-	chainService, err := chains.InitializeNetworkServiceChainService(registry, appIP, vnfIP)
+	chainService, err := chains.InitializeNetworkServiceChainService(registry, appIP, vnfIP, eb)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize NetworkServiceChainService: %v", err)
 		panic("Failed to initialize NetworkServiceChainService: " + err.Error())
 	}
 
 	// Initialize the route calculation service
-	// TODO
+	_, err = routecalc.NewRouteCalcService(registry, eb)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to initialize RouteCalcService: %v", err)
+		panic("Failed to initialize RouteCalcService: " + err.Error())
+	}
 
 	// Initialize the APIs
 	err = api.InitializeIMLApi(chainService)

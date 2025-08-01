@@ -9,5 +9,7 @@ type Worker struct {
 	ID            uuid.UUID `gorm:"primaryKey"`
 	ClusterNodeID string    `gorm:"unique_index:cluster_node_id"`
 	IP            string // in "IP" format (without prefix)
-	HubSID        string // in "IP/prefix" format
+	DecapSID      string // in "IP/prefix" format
+	VnfGroups     []VnfGroup `gorm:"foreignKey:worker_id"` // VNF groups running on this worker
+	AppGroups     []AppGroup `gorm:"foreignKey:worker_id"` // App groups running on this worker
 }

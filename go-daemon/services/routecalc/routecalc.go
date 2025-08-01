@@ -7,18 +7,20 @@ import (
 	"iml-daemon/models"
 	"iml-daemon/services/eventbus"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 // RouteCalcService listens for topology events and recalculates routes.
 type RouteCalcService struct {
-	eb       *eventbus.EventBus
+	eventBus *eventbus.EventBus
 	registry *db.Registry
 	graph    *Graph
-	mu       sync.Mutex
+	mutex    sync.Mutex
 }
 
 // NewRouteCalcService constructs the service and subscribes to events.
-func NewRouteCalcService(eb *eventbus.EventBus, registry *db.Registry) (*RouteCalcService, error) {
+func NewRouteCalcService(registry *db.Registry, eb *eventbus.EventBus) (*RouteCalcService, error) {
 	// Validate the event bus and registry
 	if eb == nil {
 		return nil, fmt.Errorf("event bus cannot be nil")
@@ -32,44 +34,66 @@ func NewRouteCalcService(eb *eventbus.EventBus, registry *db.Registry) (*RouteCa
 		return nil, fmt.Errorf("failed to create new graph: %w", err)
 	}
 	rc := &RouteCalcService{
-		eb:       eb,
+		eventBus:       eb,
 		registry: registry,
 		graph:    g,
 	}
 
 	// subscribe to instance lifecycle events
 	eb.Subscribe("AppGroupCreated", rc.handleEvent)
-	eb.Subscribe("AppGroupRemoved", rc.handleEvent)
 	eb.Subscribe("VnfGroupCreated", rc.handleEvent)
+	eb.Subscribe("WorkerNodeCreated", rc.handleEvent)
+	eb.Subscribe("AppGroupRemoved", rc.handleEvent)
 	eb.Subscribe("VnfGroupRemoved", rc.handleEvent)
+	eb.Subscribe("WorkerNodeRemoved", rc.handleEvent)
 
 	return rc, nil
 }
 
 // handleEvent processes incoming events and triggers recalculation.
 func (rc *RouteCalcService) handleEvent(evt eventbus.Event) {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
+	rc.mutex.Lock()
+	defer rc.mutex.Unlock()
 
 	switch evt.Name {
 	case "VnfGroupCreated":
 		inst := evt.Payload.(models.VnfGroup)
 		rc.graph.AddVNFGroup(&inst)
-	case "AppGroupCreated":
+		// rc.recalculateRoutesWithVnf(inst.ID)
+	case "LocalAppGroupCreated":
 		inst := evt.Payload.(models.AppGroup)
 		rc.graph.AddAppGroup(&inst)
+		// rc.recalculateRoutesWhereAppGroupIsSrc(inst.ID)
+	case "RemoteAppGroupCreated":
+		inst := evt.Payload.(models.AppGroup)
+		rc.graph.AddAppGroup(&inst)
+		// rc.recalculateRoutesWhereAppGroupIsDst(inst.ID)
 	case "WorkerNodeCreated":
 		inst := evt.Payload.(models.Worker)
 		rc.graph.AddWorker(&inst)
 	case "VnfGroupRemoved":
 		inst := evt.Payload.(models.VnfGroup)
-		rc.graph.RemoveVNFGroup(&inst)
-	case "AppGroupRemoved":
+		rc.graph.RemoveNode(inst.ID)
+		// rc.recalculateRoutesWithVnf(inst.ID)
+	case "LocalAppGroupRemoved":
 		inst := evt.Payload.(models.AppGroup)
-		rc.graph.RemoveAppGroup(&inst)
+		rc.graph.RemoveNode(inst.ID)
+		// When removing a local app group, 
+		// this means that there is no longer a source for routes
+		// rc.invalidateRoutesWhereAppGroupIsSrc(inst.ID)
+	case "RemoteAppGroupRemoved":
+		inst := evt.Payload.(models.AppGroup)
+		rc.graph.RemoveNode(inst.ID)
+		// rc.recalculateRoutesWhereAppGroupIsDst(inst.ID)
 	case "WorkerNodeRemoved":
 		inst := evt.Payload.(models.Worker)
-		rc.graph.RemoveWorker(&inst)
+		rc.graph.RemoveNode(inst.ID)
+		// When removing a worker, we need to recalculate 
+		// all routes that might have used this worker
+		// This is a more complex operation, so we will just recalculate all routes
+		// In the future, we might want to optimize this
+		// by only recalculating routes that were directly affected.
+		// rc.recalculateAll()
 	}
 
 	// recalculate all routes after update
@@ -92,7 +116,7 @@ func (rc *RouteCalcService) recalculateAll() error {
 	}
 
 	// Notify that routes are being recalculated
-	rc.eb.Publish(eventbus.Event{
+	rc.eventBus.Publish(eventbus.Event{
 		Name:    "RoutesRecalculating",
 		Payload: nil,
 	})
@@ -112,19 +136,19 @@ func (rc *RouteCalcService) recalculateAll() error {
 }
 
 // computeRoute finds shortest path for a single chain.
-func (rc *RouteCalcService) computeRoutes(chain *models.NetworkServiceChain) ([]*models.Route, error) {
+func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*models.Route, error) {
 
 	srcAppNode := rc.graph.FindLocalAppGroupNode(chain.SrcAppID)
 	if srcAppNode == nil {
 		return nil, fmt.Errorf("no source app group found for chain %s", chain.ID)
 	}
 
-	dstAppNodes := rc.graph.FindNodesByAppID(chain.DstAppID)
+	dstAppNodes := rc.graph.FindAllAppGroupNodes(chain.DstAppID)
 	if len(dstAppNodes) == 0 {
 		return nil, fmt.Errorf("no destination app groups found for chain %s", chain.ID)
 	}
 
-	var vnfIDChain []string
+	var vnfIDChain []uuid.UUID
 	for _, elem := range chain.Elements {
 		vnfIDChain = append(vnfIDChain, elem.VnfID)
 	}
@@ -132,38 +156,33 @@ func (rc *RouteCalcService) computeRoutes(chain *models.NetworkServiceChain) ([]
 	var routes []*models.Route
 	for _, dstAppNode := range dstAppNodes {
 
-		path, err := rc.graph.ShortestPath(srcAppNode, dstAppNode, vnfIDChain)
+		path, err := rc.graph.ShortestPath(dstAppNode.ID(), vnfIDChain)
 		if err != nil {
 			logger.InfoLogger().Printf("failed to compute shortest path for chain %s: %v", chain.ID, err)
-		}
-
-		// Build Route
-		route := &models.Route{
-			ChainID: chain.ID,
-			SrcID:   srcAppNode.ID,
-			DstID:   dstAppNode.ID,
+			continue
 		}
 
 		// Save route
-		if err := rc.registry.SaveRoute(route); err != nil {
-			return nil, fmt.Errorf("failed to save route for chain %s: %v", chain.ID, err)
+		route := &models.Route{
+			ChainID:       chain.ID,
+			SrcAppGroupID: srcAppNode.ID(),
+			DstAppGroupID: dstAppNode.ID(),
 		}
+		rc.registry.SaveRoute(route)
 
-		// Build segments from the full path
-		var segments []*models.RouteSegment
-		for i := 0; i < len(path)-1; i++ {
-			seg := &models.RouteSegment{
-				RouteID:  route.ID,
-				VnfGroupID: path[i].ID,
-				Position:  uint8(i),
-			}
-			segments = append(segments, seg)
+		// Set the stages for the route
+		var stages []*models.RouteStage
+		pos := uint8(0)
+		for _, node := range path {
+			if node.Type() != "VNF" {continue}
+			stages = append(stages, &models.RouteStage{
+				RouteID: 	route.ID,
+				VnfGroupID: node.ID(),
+				Position:   pos,
+			})
+			pos++
 		}
-
-		// Save segments
-		if err := rc.registry.SaveRouteSegments(segments); err != nil {
-			return nil, fmt.Errorf("failed to save route segments for chain %s: %v", chain.ID, err)
-		}
+		rc.registry.SaveRouteStages(stages)
 
 		// Add the route to the list
 		routes = append(routes, route)
