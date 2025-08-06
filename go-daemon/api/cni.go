@@ -167,10 +167,10 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService) error {
+func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService) (*http.Server, error) {
 	// Validate the services
 	if appSvc == nil || vnfSvc == nil {
-		return fmt.Errorf("appService and vnfService cannot be nil")
+		return nil, fmt.Errorf("appService and vnfService cannot be nil")
 	}
 
 	// Create a new CNI controller with the services
@@ -180,10 +180,14 @@ func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService) error {
 	}
 	validate = validator.New(validator.WithRequiredStructEnabled())
 	router := mux.NewRouter()
-
+	server := &http.Server{
+		Addr:    "127.0.0.1:7623",
+		Handler: router,
+	}
 	router.HandleFunc("/api/v1/cni/app/register", cniController.handleAppInstanceRegistration).Methods("POST")
 	router.HandleFunc("/api/v1/cni/app/teardown", cniController.handleAppInstanceTeardown).Methods("POST")
 	router.HandleFunc("/api/v1/cni/vnf/register", cniController.handleVnfInstanceRegistration).Methods("POST")
 	router.HandleFunc("/api/v1/cni/vnf/teardown", cniController.handleVnfInstanceTeardown).Methods("POST")
-	return http.ListenAndServe("127.0.0.1:7623", router)
+	go server.ListenAndServe()
+	return server, nil
 }

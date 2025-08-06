@@ -5,6 +5,8 @@
 // as well as handling tunnel configurations and monitoring their status.
 //
 // VXLAN is used to create the tunnels in the underlying network.
+//
+// IMPORTANT: This package is still a work in progress and is not yet fully implemented.
 package tunnel
 
 import (

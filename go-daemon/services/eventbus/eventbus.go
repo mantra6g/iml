@@ -63,21 +63,3 @@ func (eb *EventBus) Publish(event Event) {
 		}(sub.handler)
 	}
 }
-
-// Example usage:
-//
-// func main() {
-//     bus := eventbus.New()
-//
-//     // Subscribe to "UserCreated" events
-//     subID := bus.Subscribe("UserCreated", func(e eventbus.Event) {
-//         user := e.Payload.(User)
-//         fmt.Println("New user created:", user.Name)
-//     })
-//
-//     // Publish an event
-//     bus.Publish(eventbus.Event{Name: "UserCreated", Payload: User{Name: "Alice"}})
-//
-//     // Unsubscribe when no longer interested
-//     bus.Unsubscribe("UserCreated", subID)
-// }

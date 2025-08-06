@@ -15,8 +15,8 @@ type AppService struct {
 }
 
 type AppInstanceRegistrationRequest struct {
-	ApplicationID string `json:"application_id" validate:"required,mongodb"`
-	ContainerID   string `json:"container_id" validate:"required"`
+	ApplicationID string
+	ContainerID   string
 }
 
 type AppInstanceDetails struct {
@@ -25,5 +25,5 @@ type AppInstanceDetails struct {
 }
 
 type AppInstanceTeardownRequest struct {
-	ContainerID string `json:"container_id" validate:"required"`
+	ContainerID string
 }

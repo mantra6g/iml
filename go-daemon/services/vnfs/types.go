@@ -19,8 +19,8 @@ type VnfService struct {
 // =================================================
 
 type VnfInstanceRegistrationRequest struct {
-	VnfID       string `json:"vnf_id" validate:"required,mongodb"`
-	ContainerID string `json:"container_id" validate:"required"`
+	VnfID       string
+	ContainerID string
 }
 
 type VnfInstanceRegistrationResponse struct {
@@ -33,7 +33,7 @@ type VnfInstanceRegistrationResponse struct {
 // =================================================
 
 type VnfInstanceTeardownRequest struct {
-	ContainerID string `json:"container_id" validate:"required"`
+	ContainerID string
 }
 
 type VnfInstanceTeardownResponse struct {

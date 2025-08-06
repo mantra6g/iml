@@ -12,6 +12,8 @@ const IML_ADDR = "http://iml-nfvo.desire6g-system.svc.cluster.local:5000"
 type GlobalConfig struct {
 	AppSubnet  *net.IPNet
 	NFSubnet   *net.IPNet
+	NFRouterAppIP string
+	NFRouterVNFIP string
 }
 
 // Singleton instance of GlobalConfig

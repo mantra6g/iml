@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"iml-daemon/api"
-	"iml-daemon/dataplane"
 	"iml-daemon/db"
 	"iml-daemon/env"
 	"iml-daemon/helpers"
@@ -11,7 +11,12 @@ import (
 	"iml-daemon/services/chains"
 	"iml-daemon/services/eventbus"
 	"iml-daemon/services/routecalc"
+	"iml-daemon/services/router"
 	"iml-daemon/services/vnfs"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -22,13 +27,6 @@ func main() {
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to request NodeManager subnet: %v", err)
 		panic("Failed to request NodeManager subnet: " + err.Error())
-	}
-
-	// Initialize the dataplane controller with the environment
-	err = dataplane.InitializeController(config)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize dataplane controller: %v", err)
-		panic("Failed to initialize dataplane controller: " + err.Error())
 	}
 
 	// Initialize the IP allocator for the applications
@@ -77,22 +75,64 @@ func main() {
 	}
 
 	// Initialize the route calculation service
-	_, err = routecalc.NewRouteCalcService(registry, eb)
+	routeCalcService, err := routecalc.NewRouteCalcService(registry, eb)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize RouteCalcService: %v", err)
 		panic("Failed to initialize RouteCalcService: " + err.Error())
 	}
 
+	// Initialize the router service
+	routerService, err := router.New(registry, eb)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to initialize RouterService: %v", err)
+		panic("Failed to initialize RouterService: " + err.Error())
+	}
+
 	// Initialize the APIs
-	err = api.InitializeIMLApi(chainService)
+	imlApi, err := api.InitializeIMLApi(chainService)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize IML API: %v", err)
 		panic("Failed to initialize IML API: " + err.Error())
 	}
-
-	err = api.InitializeCNIApi(appService, vnfService)
+	cniApi, err := api.InitializeCNIApi(appService, vnfService)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize CNI API: %v", err)
 		panic("Failed to initialize CNI API: " + err.Error())
 	}
+
+	// Listen for termination signals (SIGINT, SIGTERM)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	<-stop // Wait for signal
+	logger.InfoLogger().Println("Shutting down services...")
+
+	// Graceful shutdown context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Shutdown services gracefully
+	if err := imlApi.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("IML API shutdown error: %v", err)
+	}
+	if err := cniApi.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("CNI API shutdown error: %v", err)
+	}
+	if err := routerService.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("RouterService shutdown error: %v", err)
+	}
+	if err := routeCalcService.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("RouteCalcService shutdown error: %v", err)
+	}
+	if err := chainService.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("ChainService shutdown error: %v", err)
+	}
+	if err := appService.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("AppService shutdown error: %v", err)
+	}
+	if err := vnfService.Shutdown(ctx); err != nil {
+		logger.ErrorLogger().Printf("VnfService shutdown error: %v", err)
+	}
+
+	logger.InfoLogger().Println("All services stopped gracefully.")
 }
