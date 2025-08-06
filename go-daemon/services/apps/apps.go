@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -108,6 +109,12 @@ func (svc *AppService) TeardownAppInstance(request *AppInstanceTeardownRequest) 
 			"failed to remove app instance with container id %s: %v", request.ContainerID, err)
 	}
 
+	return nil
+}
+
+func (svc *AppService) Shutdown(ctx context.Context) error {
+	// Place any necessary cleanup logic here
+	// For now, this is a no-op
 	return nil
 }
 

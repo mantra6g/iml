@@ -55,6 +55,14 @@ func (r *Registry) FindAppInstancesByAppID(appID string) ([]*models.AppInstance,
 	return instances, nil
 }
 
+func (r *Registry) FindAppInstancesByGroupID(groupID uuid.UUID) ([]*models.AppInstance, error) {
+	var instances []*models.AppInstance
+	if err := r.dbHandle.Find(&instances, "group_id = ?", groupID).Error; err != nil {
+		return nil, fmt.Errorf("failed to find app instances for group ID %s: %w", groupID, err)
+	}
+	return instances, nil
+}
+
 func (r *Registry) FindAllNetworkFunctions() ([]*models.VirtualNetworkFunction, error) {
 	var functions []*models.VirtualNetworkFunction
 	if err := r.dbHandle.Find(&functions).Error; err != nil {

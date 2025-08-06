@@ -9,14 +9,20 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"iml-daemon/db"
+	"iml-daemon/env"
+	"iml-daemon/logger"
+	"iml-daemon/models"
 	"iml-daemon/services/eventbus"
+	"net"
 )
 
 type RouterService struct {
 	registry *db.Registry
 	eventBus *eventbus.EventBus
+	nfrouter *NFRouter
 }
 
 func New(registry *db.Registry, eventBus *eventbus.EventBus) (*RouterService, error) {
@@ -28,20 +34,75 @@ func New(registry *db.Registry, eventBus *eventbus.EventBus) (*RouterService, er
 		return nil, fmt.Errorf("event bus cannot be nil")
 	}
 
+	config, err := env.Config()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get global config: %w", err)
+	}
+
+	nfrInstance, err := newNFRouter(config.NFRouterAppIP, config.NFRouterVNFIP)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to configure NFRouter: %v", err)
+		return nil, fmt.Errorf("failed to configure NFRouter: %w", err)
+	}
+
 	router := &RouterService{
 		registry: registry,
 		eventBus: eventBus,
+		nfrouter: nfrInstance,
 	}
 	eventBus.Subscribe("RouteUpdated", router.handleRouteUpdated)
-	eventBus.Subscribe("RouteDeleted", router.handleRouteDeleted)
 
 	return router, nil
 }
 
 func (r *RouterService) handleRouteUpdated(evt eventbus.Event) {
-	panic("handleRouteUpdated not implemented")
+	route, ok := evt.Payload.(models.Route)
+	if !ok {
+		logger.ErrorLogger().Printf("handleRouteUpdated: error casting event payload to Route")
+		return
+	}
+
+	// Search for instances in the registry
+	srcAppInstances, err := r.registry.FindAppInstancesByGroupID(route.SrcAppGroupID)
+	if err != nil {
+		logger.ErrorLogger().Printf("handleRouteUpdated: error finding source app instances: %v", err)
+		return
+	}
+	dstAppInstances, err := r.registry.FindAppInstancesByGroupID(route.DstAppGroupID)
+	if err != nil {
+		logger.ErrorLogger().Printf("handleRouteUpdated: error finding destination app instances: %v", err)
+		return
+	}
+
+	var sids []net.IP
+	for _, vnfGroup := range route.Stages {
+		sid := net.ParseIP(vnfGroup.SID)
+		if sid == nil {
+			logger.ErrorLogger().Printf("handleRouteUpdated: error parsing SID %s: %v", vnfGroup.SID, err)
+			return
+		}
+		sids = append(sids, sid)
+	}
+
+	for _, srcAppInstance := range srcAppInstances {
+		for _, dstAppInstance := range dstAppInstances {
+			err = r.nfrouter.AddRoute(srcAppInstance.IP, dstAppInstance.IP, sids)
+			if err != nil {
+				logger.ErrorLogger().Printf("handleRouteUpdated: error adding route from %s to %s: %v", srcAppInstance.IP, dstAppInstance.IP, err)
+			}
+		}
+	}
 }
 
-func (r *RouterService) handleRouteDeleted(evt eventbus.Event) {
-	panic("handleRouteDeleted not implemented")
+func (r *RouterService) Shutdown(ctx context.Context) error {
+	// Place any necessary cleanup logic here
+	if r.nfrouter == nil {
+		return nil
+	}
+	// tear the nfrouter interface down
+	if err := r.nfrouter.Teardown(); err != nil {
+		logger.ErrorLogger().Printf("RouterService shutdown error: %v", err)
+		return fmt.Errorf("failed to shutdown NFRouter: %w", err)
+	}
+	return nil
 }

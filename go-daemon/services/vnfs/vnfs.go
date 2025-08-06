@@ -1,6 +1,7 @@
 package vnfs
 
 import (
+	"context"
 	"fmt"
 	"iml-daemon/db"
 	"iml-daemon/helpers"
@@ -103,6 +104,12 @@ func (r *VnfService) TeardownVnfInstance(request *VnfInstanceTeardownRequest) se
 			"failed to remove VNF instance %s: %v", request.ContainerID, err)
 	}
 
+	return nil
+}
+
+func (r *VnfService) Shutdown(ctx context.Context) error {
+	// Perform any necessary cleanup here
+	// For now, this is a no-op
 	return nil
 }
 

@@ -7,7 +7,7 @@ package api
 // =========== Applications ===========
 
 type AppInstanceConfigRequest struct {
-	ApplicationID string `json:"application_id" validate:"required"`
+	ApplicationID string `json:"application_id" validate:"required,mongodb"`
 	ContainerID   string `json:"container_id" validate:"required"`
 }
 
@@ -40,7 +40,7 @@ type AppInstanceTeardownResponse struct {
 // ========== VNFs ===========
 
 type VnfInstanceConfigRequest struct {
-	VnfID       string `json:"vnf_id" validate:"required"`
+	VnfID       string `json:"vnf_id" validate:"required,mongodb"`
 	ContainerID string `json:"container_id" validate:"required"`
 }
 
@@ -75,5 +75,8 @@ type VnfInstanceTeardownResponse struct {
 **************************************************************/
 
 type NetworkServiceRegistrationRequest struct {
-	ChainID string `json:"chain_id" validate:"required"`
+	ChainID  string   `json:"chain_id" validate:"required,mongodb"`
+	SrcAppID string   `json:"src_app_id" validate:"required,mongodb"`
+	DstAppID string   `json:"dst_app_id" validate:"required,mongodb"`
+	Vnfs     []string `json:"vnfs" validate:"required,dive,required,mongodb"`
 }

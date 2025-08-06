@@ -53,18 +53,22 @@ func (c *IMLController) handleNetworkServiceRegistration(response http.ResponseW
 // Sets up an externally accessible API for network service operations
 //
 // The IML will announce all new network service chains to this API.
-func InitializeIMLApi(chainSvc *chains.ChainService) error {
+func InitializeIMLApi(chainSvc *chains.ChainService) (*http.Server, error) {
 	// Validate the chain service
 	if chainSvc == nil {
-		return fmt.Errorf("chain service cannot be nil")
+		return nil, fmt.Errorf("chain service cannot be nil")
 	}
 
 	// Create a new CNI controller with the service
 	imlController := &IMLController{
 		chainService: chainSvc,
 	}
-
 	router := mux.NewRouter()
+	server := &http.Server{
+		Addr:    ":3267",
+		Handler: router,
+	}
 	router.HandleFunc("/api/v1/iml/ns/register", imlController.handleNetworkServiceRegistration).Methods("POST")
-	return http.ListenAndServe(":3267", router)
+	go server.ListenAndServe()
+	return server, nil
 }

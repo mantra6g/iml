@@ -1,6 +1,7 @@
 package routecalc
 
 import (
+	"context"
 	"fmt"
 	"iml-daemon/db"
 	"iml-daemon/logger"
@@ -189,4 +190,11 @@ func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*models
 	}
 
 	return routes, nil
+}
+
+func (rc *RouteCalcService) Shutdown(ctx context.Context) error {
+	// Place any necessary cleanup logic here
+	// Maybe cancel any ongoing calculations or close resources
+	// For now, this is a no-op
+	return nil
 }

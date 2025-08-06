@@ -1,6 +1,7 @@
 package chains
 
 import (
+	"context"
 	"fmt"
 	"iml-daemon/db"
 	"iml-daemon/helpers"
@@ -77,6 +78,12 @@ func (svc *ChainService) RegisterNetworkService(request *NetworkServiceRegistrat
 	})
 
 	return details, nil
+}
+
+func (svc *ChainService) Shutdown(ctx context.Context) error {
+	// Perform any necessary cleanup here
+	// For now, this is a no-op
+	return nil
 }
 
 func InitializeNetworkServiceChainService(
