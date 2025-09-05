@@ -1,0 +1,38 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications
+  - networkfunctions
+  - servicechains
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/finalizers
+  - networkfunctions/finalizers
+  - servicechains/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/status
+  - networkfunctions/status
+  - servicechains/status
+  verbs:
+  - get
+  - patch
+  - update
