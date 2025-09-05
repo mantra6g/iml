@@ -1,0 +1,268 @@
+package controller
+
+import (
+	"context"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	cachev1alpha1 "builder/api/v1alpha1"
+	"builder/services/mqtt"
+)
+
+// ServiceChainReconciler reconciles a ServiceChain object
+type ServiceChainReconciler struct {
+	client.Client
+	Scheme *runtime.Scheme
+	MQTT   *mqtt.MQTTService
+}
+
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains/finalizers,verbs=update
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications/status,verbs=get
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions/status,verbs=get
+
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// TODO(user): Modify the Reconcile function to compare the state specified by
+// the ServiceChain object against the actual cluster state, and then
+// perform operations to make the cluster state reflect the state specified by
+// the user.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := logf.FromContext(ctx)
+	const finalizerName = "cache.desire6g.eu/finalizer"
+
+	logger.Info("Reconciling ServiceChain", "request", req)
+	var serviceChain cachev1alpha1.ServiceChain
+	if err := r.Get(ctx, req.NamespacedName, &serviceChain); err != nil {
+		// Service chain was deleted.
+		logger.Error(err, "unable to fetch ServiceChain")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Check if being deleted
+	if !serviceChain.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Handle deletion
+		if containsString(serviceChain.GetFinalizers(), finalizerName) {
+			if err := r.MQTT.DeleteServiceChainDefinition(&serviceChain); err != nil {
+				logger.Error(err, "Failed to publish deletion event")
+				return ctrl.Result{}, err // retry
+			}
+
+			// Remove finalizer
+			serviceChain.SetFinalizers(removeString(serviceChain.GetFinalizers(), finalizerName))
+			if err := r.Update(ctx, &serviceChain); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if missing
+	if !containsString(serviceChain.GetFinalizers(), finalizerName) {
+		serviceChain.SetFinalizers(append(serviceChain.GetFinalizers(), finalizerName))
+		if err := r.Update(ctx, &serviceChain); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	var srcApp, dstApp cachev1alpha1.Application
+	if err := r.Get(ctx, serviceChain.Spec.From.ToObjectKey(), &srcApp); err != nil {
+		// Source app was deleted.
+		logger.Error(err, "Unable to fetch source application. Deleting service chain.")
+		if err := r.Delete(ctx, &serviceChain); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	if err := r.Get(ctx, serviceChain.Spec.To.ToObjectKey(), &dstApp); err != nil {
+		// Destination app was deleted.
+		logger.Error(err, "Unable to fetch destination application. Deleting service chain.")
+		if err := r.Delete(ctx, &serviceChain); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	var nfs []cachev1alpha1.NetworkFunction
+	for _, fn := range serviceChain.Spec.Functions {
+		var nf cachev1alpha1.NetworkFunction
+		if err := r.Get(ctx, fn.ToObjectKey(), &nf); err != nil {
+			// Network function was deleted.
+			logger.Error(err, "Unable to fetch network function. Deleting service chain.")
+			if err := r.Delete(ctx, &serviceChain); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		nfs = append(nfs, nf)
+	}
+
+	// Update the status fields
+	serviceChain.Status.SourceAppUID = srcApp.UID
+	serviceChain.Status.DestinationAppUID = dstApp.UID
+	for _, fn := range nfs {
+		serviceChain.Status.Functions = append(serviceChain.Status.Functions, fn.UID)
+	}
+
+	// All is well
+	// TODO: Announce creation to MQTT
+	r.MQTT.UpdateServiceChainDefinition(&serviceChain)
+
+	return ctrl.Result{}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ServiceChainReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Index the ServiceChain by its source application name
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &cachev1alpha1.ServiceChain{},
+		"spec.from",
+		func(obj client.Object) []string {
+			sc := obj.(*cachev1alpha1.ServiceChain)
+			if sc.Spec.From.Name == "" {
+				return nil
+			}
+			ns := sc.Spec.From.Namespace
+			if ns == "" {
+				ns = sc.Namespace
+			}
+			return []string{ns + "/" + sc.Spec.From.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	// Index the ServiceChain by its destination application name
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &cachev1alpha1.ServiceChain{},
+		"spec.to",
+		func(obj client.Object) []string {
+			sc := obj.(*cachev1alpha1.ServiceChain)
+			if sc.Spec.From.Name == "" {
+				return nil
+			}
+			ns := sc.Spec.From.Namespace
+			if ns == "" {
+				ns = sc.Namespace
+			}
+			return []string{ns + "/" + sc.Spec.From.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	// Index based on the functions
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &cachev1alpha1.ServiceChain{},
+		"spec.functions",
+		func(obj client.Object) []string {
+			sc := obj.(*cachev1alpha1.ServiceChain)
+			if sc.Spec.Functions == nil {
+				return nil
+			}
+			var nfs []string
+			for _, fn := range sc.Spec.Functions {
+				if fn.Name == "" {
+					continue
+				}
+				ns := fn.Namespace
+				if ns == "" {
+					ns = sc.Namespace
+				}
+				nfs = append(nfs, ns+"/"+fn.Name)
+			}
+			return nfs
+		},
+	); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&cachev1alpha1.ServiceChain{}).
+		Watches(&cachev1alpha1.Application{},
+			handler.EnqueueRequestsFromMapFunc(r.mapApplicationsToRequests)).
+		Watches(&cachev1alpha1.NetworkFunction{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNetworkFunctionsToRequests)).
+		Named("servicechain").
+		Complete(r)
+}
+
+func (r *ServiceChainReconciler) mapApplicationsToRequests(ctx context.Context, object client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
+	app := object.(*cachev1alpha1.Application)
+
+	// Find all ServiceChains that use this Application as source...
+	var fromList cachev1alpha1.ServiceChainList
+	if err := r.List(ctx, &fromList,
+		client.MatchingFields{
+			"spec.from": app.Namespace + "/" + app.Name,
+		},
+	); err != nil {
+		logger.Error(err, "could not list ServiceChains. "+
+			"change to Application %s.%s will not be reconciled.",
+			app.Name, app.Namespace)
+		return nil
+	}
+
+	// ... now find all that use this App as destination...
+	var toList cachev1alpha1.ServiceChainList
+	if err := r.List(ctx, &toList,
+		client.MatchingFields{
+			"spec.to": app.Namespace + "/" + app.Name,
+		},
+	); err != nil {
+		logger.Error(err, "could not list ServiceChains. "+
+			"change to Application %s.%s will not be reconciled.",
+			app.Name, app.Namespace)
+		return nil
+	}
+
+	// ... merge the service chain lists and transform them into requests.
+	requests := make([]reconcile.Request, len(fromList.Items)+len(toList.Items))
+	for i, sc := range fromList.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&sc),
+		}
+	}
+	for i, sc := range toList.Items {
+		requests[i+len(fromList.Items)] = reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&sc),
+		}
+	}
+	return requests
+}
+
+func (r *ServiceChainReconciler) mapNetworkFunctionsToRequests(ctx context.Context, object client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
+	nf := object.(*cachev1alpha1.NetworkFunction)
+
+	// Find all ServiceChains that contain this NetworkFunction...
+	var scList cachev1alpha1.ServiceChainList
+	if err := r.List(ctx, &scList,
+		client.MatchingFields{
+			"spec.functions": nf.Namespace + "/" + nf.Name,
+		},
+	); err != nil {
+		logger.Error(err, "could not list ServiceChains. "+
+			"change to NetworkFunction %s.%s will not be reconciled.",
+			nf.Name, nf.Namespace)
+		return nil
+	}
+
+	// ... transform them into requests.
+	requests := make([]reconcile.Request, len(scList.Items))
+	for i, sc := range scList.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&sc),
+		}
+	}
+	return requests
+}
