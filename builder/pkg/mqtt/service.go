@@ -10,10 +10,10 @@ import (
 
 type MQTTService struct {
 	broker    *mqtt.Server
-	apps      map[string]ApplicationDefinition
-	appChains map[string]ApplicationServiceChains
-	nfs       map[string]NetworkFunctionDefinition
-	chains    map[string]ServiceChainDefinition
+	apps      map[string]dto.ApplicationDefinition
+	appChains map[string]dto.ApplicationServiceChains
+	nfs       map[string]dto.NetworkFunctionDefinition
+	chains    map[string]dto.ServiceChainDefinition
 }
 
 func Initialize() (*MQTTService, error) {

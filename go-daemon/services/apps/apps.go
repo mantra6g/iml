@@ -23,6 +23,9 @@ func (svc *AppService) RegisterLocalAppInstance(request *AppInstanceRegistration
 	// Verify that the application exists in the registry
 	app, err := svc.registry.FindAppByGlobalID(request.ApplicationID)
 	if err != nil {
+		// App not found in the local registry. Ask IML if it exists there.
+		// If it does, we can register it locally
+		// TODO: CREATE THIS FUNCTIONALITY
 		return nil, services.Errorf(
 			http.StatusNotFound,
 			"application %s not found: %v", request.ApplicationID, err)

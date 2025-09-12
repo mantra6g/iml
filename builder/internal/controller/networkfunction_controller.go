@@ -9,7 +9,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1alpha1 "builder/api/v1alpha1"
-	"builder/services/mqtt"
+	"builder/pkg/mqtt"
 )
 
 // NetworkFunctionReconciler reconciles a NetworkFunction object

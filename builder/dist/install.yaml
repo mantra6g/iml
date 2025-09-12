@@ -1,0 +1,735 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+    control-plane: controller-manager
+  name: desire6g-system
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: applications.cache.desire6g.eu
+spec:
+  group: cache.desire6g.eu
+  names:
+    kind: Application
+    listKind: ApplicationList
+    plural: applications
+    singular: application
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Application is the Schema for the applications API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of Application
+            type: object
+          status:
+            description: status defines the observed state of Application
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: networkfunctions.cache.desire6g.eu
+spec:
+  group: cache.desire6g.eu
+  names:
+    kind: NetworkFunction
+    listKind: NetworkFunctionList
+    plural: networkfunctions
+    singular: networkfunction
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NetworkFunction is the Schema for the networkfunctions API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of NetworkFunction
+            type: object
+          status:
+            description: status defines the observed state of NetworkFunction
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: servicechains.cache.desire6g.eu
+spec:
+  group: cache.desire6g.eu
+  names:
+    kind: ServiceChain
+    listKind: ServiceChainList
+    plural: servicechains
+    singular: servicechain
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ServiceChain is the Schema for the servicechains API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of ServiceChain
+            properties:
+              from:
+                description: Specifies the source application
+                properties:
+                  name:
+                    description: Name of the resource.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  namespace:
+                    default: default
+                    description: |-
+                      Namespace of the resource.
+                      Optional. Defaults to "default" if not set.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+              functions:
+                description: Specifies the intermediate functions between the source
+                  and destination applications
+                items:
+                  properties:
+                    name:
+                      description: Name of the resource.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    namespace:
+                      default: default
+                      description: |-
+                        Namespace of the resource.
+                        Optional. Defaults to "default" if not set.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              to:
+                description: Specifies the destination application
+                properties:
+                  name:
+                    description: Name of the resource.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  namespace:
+                    default: default
+                    description: |-
+                      Namespace of the resource.
+                      Optional. Defaults to "default" if not set.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - from
+            - to
+            type: object
+          status:
+            description: status defines the observed state of ServiceChain
+            properties:
+              dst_app_uid:
+                description: UID of the destinatination application.
+                type: string
+              nfs_uids:
+                description: UID of the intermediate functions.
+                items:
+                  description: |-
+                    UID is a type that holds unique ID values, including UUIDs.  Because we
+                    don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                    intent and helps make sure that UIDs and names do not get conflated.
+                  type: string
+                type: array
+              src_app_uid:
+                description: UID of the source application.
+                type: string
+            required:
+            - dst_app_uid
+            - nfs_uids
+            - src_app_uid
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-controller-manager
+  namespace: desire6g-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-leader-election-role
+  namespace: desire6g-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-application-admin-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications
+  verbs:
+  - '*'
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-application-editor-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-application-viewer-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: iml-manager-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications
+  - networkfunctions
+  - servicechains
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/finalizers
+  - networkfunctions/finalizers
+  - servicechains/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - applications/status
+  - networkfunctions/status
+  - servicechains/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: iml-metrics-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: iml-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-networkfunction-admin-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - networkfunctions
+  verbs:
+  - '*'
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-networkfunction-editor-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - networkfunctions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-networkfunction-viewer-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - networkfunctions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-servicechain-admin-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - servicechains
+  verbs:
+  - '*'
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - servicechains/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-servicechain-editor-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - servicechains
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - servicechains/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-servicechain-viewer-role
+rules:
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - servicechains
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cache.desire6g.eu
+  resources:
+  - servicechains/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-leader-election-rolebinding
+  namespace: desire6g-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: iml-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: iml-controller-manager
+  namespace: desire6g-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: iml-manager-role
+subjects:
+- kind: ServiceAccount
+  name: iml-controller-manager
+  namespace: desire6g-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: iml-metrics-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: iml-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: iml-controller-manager
+  namespace: desire6g-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+    control-plane: controller-manager
+  name: iml-controller-manager-metrics-service
+  namespace: desire6g-system
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: builder
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+    control-plane: controller-manager
+  name: iml-updates-service
+  namespace: desire6g-system
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 1810
+  - name: mqtt
+    port: 1883
+    protocol: TCP
+    targetPort: 1816
+  selector:
+    app.kubernetes.io/name: builder
+    control-plane: controller-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+    control-plane: controller-manager
+  name: iml-controller-manager
+  namespace: desire6g-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: builder
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: builder
+        control-plane: controller-manager
+    spec:
+      containers:
+      - args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        command:
+        - /manager
+        image: tomasagata/iml-controller:latest
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports: []
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts: []
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: iml-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes: []

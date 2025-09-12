@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-type ApplicationDefinition struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Namespace string    `json:"namespace"`
-	Status    string    `json:"status"`
-	Version   string    `json:"version"`
-	Seq       int       `json:"seq"`
-	Timestamp time.Time `json:"timestamp"`
-}
 
 func (svc *MQTTService) UpdateAppDefinition(app *v1alpha1.Application) error {
 	id := string(app.UID)
@@ -24,13 +15,16 @@ func (svc *MQTTService) UpdateAppDefinition(app *v1alpha1.Application) error {
 	if err != nil {
 		return fmt.Errorf("failed to update application service chains: %w", err)
 	}
-	appDef := &ApplicationDefinition{
+	appDef := &dto.ApplicationDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		ID:        id,
 		Name:      app.Name,
 		Namespace: app.Namespace,
-		Status:    "active",
-		Seq:       seq,
-		Timestamp: time.Now(),
 	}
 	svc.apps[id] = *appDef
 	err = svc.publishApp(appDef)
@@ -43,17 +37,20 @@ func (svc *MQTTService) UpdateAppDefinition(app *v1alpha1.Application) error {
 func (svc *MQTTService) DeleteAppDefinition(app *v1alpha1.Application) error {
 	id := string(app.UID)
 	seq := svc.nextSeqNumberOfApp(id)
-	err := svc.updateAppServiceChains(app.UID)
+	err := svc.removeAppServiceChains(app.UID)
 	if err != nil {
 		return fmt.Errorf("failed to remove application service chains: %w", err)
 	}
-	appDef := &ApplicationDefinition{
+	appDef := &dto.ApplicationDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "deleted",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		ID:        id,
 		Name:      app.Name,
 		Namespace: app.Namespace,
-		Status:    "deleted",
-		Seq:       seq,
-		Timestamp: time.Now(),
 	}
 	svc.apps[id] = *appDef
 	err = svc.publishApp(appDef)
@@ -72,7 +69,7 @@ func (svc *MQTTService) nextSeqNumberOfApp(id string) int {
 	return seq
 }
 
-func (svc *MQTTService) publishApp(app *ApplicationDefinition) error {
+func (svc *MQTTService) publishApp(app *dto.ApplicationDefinition) error {
 	appBytes, err := json.Marshal(app)
 	if err != nil {
 		return fmt.Errorf("failed to marshal application: %w", err)

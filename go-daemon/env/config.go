@@ -7,7 +7,11 @@ import (
 	"net/http"
 )
 
-const IML_ADDR = "http://iml-nfvo.desire6g-system.svc.cluster.local:5000"
+const IML_ADDR  = "updates-service.desire6g-system.svc.cluster.local"
+const API_PORT  = "1810"
+const MQTT_PORT = "1816" 
+const API_URL   = "http://" + IML_ADDR + ":" + API_PORT
+const MQTT_URL  = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
 
 type GlobalConfig struct {
 	AppSubnet  *net.IPNet

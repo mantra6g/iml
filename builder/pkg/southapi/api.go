@@ -4,6 +4,7 @@ import (
 	"builder/api/v1alpha1"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	iplib "github.com/c-robinson/iplib/v2"
 	"github.com/gorilla/mux"
@@ -32,6 +33,7 @@ func InitializeSouthboundAPI(k8sClient client.Reader) (*http.Server, error) {
 		Handler: router,
 	}
 	router.HandleFunc("/api/v1/nodemanager/subnet", controller.handleSubnetRequest).Methods("GET")
+	router.HandleFunc("/api/v1/chains/{id}", controller.handleSCDefinitionRequest).Methods("GET")
 	router.HandleFunc("/api/v1/apps/{id}", controller.handleAppDefinitionRequest).Methods("GET")
 	router.HandleFunc("/api/v1/nfs/{id}", controller.handleNFDefinitionRequest).Methods("GET")
 	go server.ListenAndServe()
@@ -80,7 +82,7 @@ func (c *SouthboundAPIController) handleAppDefinitionRequest(w http.ResponseWrit
 	// TODO: Implement app definition retrieval
 	appID, exists := mux.Vars(r)["id"]
 	if !exists {
-		http.Error(w, "App ID is required", http.StatusBadRequest)
+		http.Error(w, "Application ID is required", http.StatusBadRequest)
 		return
 	}
 
@@ -94,10 +96,14 @@ func (c *SouthboundAPIController) handleAppDefinitionRequest(w http.ResponseWrit
 		return
 	}
 
-	// Return the first matching object (UID is unique)
-	app := apps.Items[0]
+	appStatus := ApplicationStatusResponse{
+		ID:        appID,
+		Status:    "active",
+		Timestamp: time.Now(),
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(app); err != nil {
+	if err := json.NewEncoder(w).Encode(appStatus); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -107,7 +113,7 @@ func (c *SouthboundAPIController) handleNFDefinitionRequest(w http.ResponseWrite
 	// TODO: Implement NF definition retrieval
 	nfID, exists := mux.Vars(r)["id"]
 	if !exists {
-		http.Error(w, "NF ID is required", http.StatusBadRequest)
+		http.Error(w, "Network Function ID is required", http.StatusBadRequest)
 		return
 	}
 
@@ -120,11 +126,51 @@ func (c *SouthboundAPIController) handleNFDefinitionRequest(w http.ResponseWrite
 		http.NotFound(w, r)
 		return
 	}
-
-	// Return the first matching object (UID is unique)
 	nf := nfs.Items[0]
+
+	nfDto := dto.NetworkFunctionDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       1,
+			Timestamp: time.Now(),
+		},
+		ID:        nfID,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(nf); err != nil {
+	if err := json.NewEncoder(w).Encode(nfStatus); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (c *SouthboundAPIController) handleSCDefinitionRequest(w http.ResponseWriter, r *http.Request) {
+	// TODO: Implement service chain definition retrieval
+	scID, exists := mux.Vars(r)["id"]
+	if !exists {
+		http.Error(w, "Service Chain ID is required", http.StatusBadRequest)
+		return
+	}
+
+	var chains v1alpha1.ServiceChainList
+	if err := c.Reader.List(r.Context(), &chains, client.MatchingFields{"metadata.uid": scID}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(chains.Items) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+
+	scStatus := SCStatusResponse{
+		ID:        scID,
+		Status:    "active",
+		Timestamp: time.Now(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(scStatus); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

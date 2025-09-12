@@ -26,8 +26,8 @@ import (
 	"builder/api/v1alpha1"
 	cachev1alpha1 "builder/api/v1alpha1"
 	"builder/internal/controller"
-	"builder/services/mqtt"
-	"builder/services/southapi"
+	"builder/pkg/mqtt"
+	"builder/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -237,6 +237,14 @@ func main() {
 			return []string{string(obj.GetUID())}
 		}); err != nil {
 		setupLog.Error(err, "unable to set index for NetworkFunction metadata.uid")
+		os.Exit(1)
+	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(),
+		&v1alpha1.ServiceChain{}, "metadata.uid",
+		func(obj client.Object) []string {
+			return []string{string(obj.GetUID())}
+		}); err != nil {
+		setupLog.Error(err, "unable to set index for ServiceChain metadata.uid")
 		os.Exit(1)
 	}
 
