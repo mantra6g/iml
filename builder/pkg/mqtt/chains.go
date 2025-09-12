@@ -7,29 +7,20 @@ import (
 	"time"
 )
 
-type ServiceChainDefinition struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Namespace string    `json:"namespace"`
-	Status    string    `json:"status"`
-	Version   string    `json:"version"`
-	Seq       int       `json:"seq"`
-	Timestamp time.Time `json:"timestamp"`
-	SrcAppID  string    `json:"src_app_id"`
-	DstAppID  string    `json:"dst_app_id"`
-}
-
 func (svc *MQTTService) UpdateServiceChainDefinition(sc *v1alpha1.ServiceChain) error {
 	id := string(sc.UID)
 	seq := svc.nextSeqNumberOfChain(id)
 	svc.updateChainInAppServiceChains(sc.Status.SourceAppUID, sc.UID)
-	scDef := &ServiceChainDefinition{
+	scDef := &dto.ServiceChainDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		ID:        id,
 		Name:      sc.Name,
 		Namespace: sc.Namespace,
-		Status:    "active",
-		Seq:       seq,
-		Timestamp: time.Now(),
 	}
 	svc.chains[id] = *scDef
 	err := svc.publishChain(scDef)
@@ -43,13 +34,16 @@ func (svc *MQTTService) DeleteServiceChainDefinition(sc *v1alpha1.ServiceChain) 
 	id := string(sc.UID)
 	seq := svc.nextSeqNumberOfChain(id)
 	svc.removeChainInAppServiceChains(sc.Status.SourceAppUID, sc.UID)
-	scDef := &ServiceChainDefinition{
+	scDef := &dto.ServiceChainDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "deleted",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		ID:        id,
 		Name:      sc.Name,
 		Namespace: sc.Namespace,
-		Status:    "deleted",
-		Seq:       seq,
-		Timestamp: time.Now(),
 	}
 	svc.chains[id] = *scDef
 	err := svc.publishChain(scDef)
@@ -68,7 +62,7 @@ func (svc *MQTTService) nextSeqNumberOfChain(id string) int {
 	return seq
 }
 
-func (svc *MQTTService) publishChain(sc *ServiceChainDefinition) error {
+func (svc *MQTTService) publishChain(sc *dto.ServiceChainDefinition) error {
 	scBytes, err := json.Marshal(sc)
 	if err != nil {
 		return fmt.Errorf("failed to marshal service chain: %w", err)

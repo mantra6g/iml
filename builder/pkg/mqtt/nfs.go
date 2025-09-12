@@ -7,26 +7,19 @@ import (
 	"time"
 )
 
-type NetworkFunctionDefinition struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Namespace string    `json:"namespace"`
-	Status    string    `json:"status"`
-	Version   string    `json:"version"`
-	Seq       int       `json:"seq"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
 func (svc *MQTTService) UpdateNetworkFunctionDefinition(nf *v1alpha1.NetworkFunction) error {
 	id := string(nf.UID)
 	seq := svc.nextSeqNumberOfNf(id)
-	nfDef := &NetworkFunctionDefinition{
+	nfDef := &dto.NetworkFunctionDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		ID:        id,
 		Name:      nf.Name,
 		Namespace: nf.Namespace,
-		Status:    "active",
-		Seq:       seq,
-		Timestamp: time.Now(),
 	}
 	svc.nfs[id] = *nfDef
 	err := svc.publishNf(nfDef)
@@ -39,13 +32,16 @@ func (svc *MQTTService) UpdateNetworkFunctionDefinition(nf *v1alpha1.NetworkFunc
 func (svc *MQTTService) DeleteNetworkFunctionDefinition(nf *v1alpha1.NetworkFunction) error {
 	id := string(nf.UID)
 	seq := svc.nextSeqNumberOfNf(id)
-	nfDef := &NetworkFunctionDefinition{
+	nfDef := &dto.NetworkFunctionDefinition{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "deleted",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		ID:        id,
 		Name:      nf.Name,
 		Namespace: nf.Namespace,
-		Status:    "deleted",
-		Seq:       seq,
-		Timestamp: time.Now(),
 	}
 	svc.nfs[id] = *nfDef
 	err := svc.publishNf(nfDef)
@@ -64,7 +60,7 @@ func (svc *MQTTService) nextSeqNumberOfNf(id string) int {
 	return seq
 }
 
-func (svc *MQTTService) publishNf(nf *NetworkFunctionDefinition) error {
+func (svc *MQTTService) publishNf(nf *dto.NetworkFunctionDefinition) error {
 	nfBytes, err := json.Marshal(nf)
 	if err != nil {
 		return fmt.Errorf("failed to marshal network function: %w", err)

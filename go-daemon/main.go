@@ -7,9 +7,11 @@ import (
 	"iml-daemon/env"
 	"iml-daemon/helpers"
 	"iml-daemon/logger"
+	"iml-daemon/mqtt"
 	"iml-daemon/services/apps"
 	"iml-daemon/services/chains"
 	"iml-daemon/services/eventbus"
+	"iml-daemon/services/iml"
 	"iml-daemon/services/routecalc"
 	"iml-daemon/services/router"
 	"iml-daemon/services/vnfs"
@@ -53,6 +55,20 @@ func main() {
 	// Initialize the event bus
 	eb := eventbus.New()
 
+	// Create the MQTT client config
+	mqttClient, err := mqtt.NewClient(context.Background())
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create MQTT client: %v", err)
+		panic("Failed to create MQTT client: " + err.Error())
+	}
+
+	// Initialize the IML Client
+	imlClient, err := iml.NewClient(eb, mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to initialize IML client: %v", err)
+		panic("Failed to initialize IML client: " + err.Error())
+	}
+
 	// Initialize the application services
 	appService, err := apps.InitializeAppService(registry, appIP, vnfIP, eb)
 	if err != nil {
@@ -61,7 +77,7 @@ func main() {
 	}
 
 	// Initialize the VNF services
-	vnfService, err := vnfs.InitializeVnfService(registry, appIP, vnfIP, eb)
+	vnfService, err := vnfs.InitializeVnfService(registry, appIP, vnfIP, eb, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize VnfService: %v", err)
 		panic("Failed to initialize VnfService: " + err.Error())

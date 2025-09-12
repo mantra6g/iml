@@ -8,26 +8,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type ApplicationServiceChains struct {
-	AppID     string    `json:"app_id"`
-	Version   string    `json:"version"`
-	Status    string    `json:"status"`
-	Seq       int       `json:"seq"`
-	Timestamp time.Time `json:"timestamp"`
-	Chains    []string  `json:"chains"`
-}
-
 func (svc *MQTTService) updateAppServiceChains(app types.UID) error {
 	_, exists := svc.appChains[string(app)]
 	if exists {
 		return nil
 	}
-	appChains := ApplicationServiceChains{
+	appChains := dto.ApplicationServiceChains{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       1,
+			Timestamp: time.Now(),
+		},
 		AppID:     string(app),
-		Version:   "1.0",
-		Status:    "active",
-		Seq:       1,
-		Timestamp: time.Now(),
 		Chains:    []string{},
 	}
 	svc.appChains[string(app)] = appChains
@@ -43,12 +36,14 @@ func (svc *MQTTService) removeAppServiceChains(app types.UID) error {
 	if !exists {
 		return nil
 	}
-	appChains := ApplicationServiceChains{
+	appChains := dto.ApplicationServiceChains{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "deleted",
+			Seq:       1,
+			Timestamp: time.Now(),
+		},
 		AppID:     string(app),
-		Version:   "1.0",
-		Status:    "deleted",
-		Seq:       1,
-		Timestamp: time.Now(),
 		Chains:    []string{},
 	}
 	svc.appChains[string(app)] = appChains
@@ -74,12 +69,14 @@ func (svc *MQTTService) updateChainInAppServiceChains(app types.UID, chain types
 
 	// Update the application service chains in MQTT
 	seq := svc.nextSeqNumberOfAppServiceChains(app)
-	appChains := ApplicationServiceChains{
+	appChains := dto.ApplicationServiceChains{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
 		AppID:     string(app),
-		Version:   "1.0",
-		Status:    "active",
-		Seq:       seq,
-		Timestamp: time.Now(),
 		Chains:    append(prevApp.Chains, string(chain)),
 	}
 
@@ -101,11 +98,34 @@ func (svc *MQTTService) nextSeqNumberOfAppServiceChains(app types.UID) int {
 
 func (svc *MQTTService) removeChainInAppServiceChains(app types.UID, chain types.UID) error {
 	// Update the application service chains in MQTT
-	appChains := ApplicationServiceChains{
-		AppID:     string(app),
-		Seq:       1,
-		Timestamp: time.Now(),
-		Chains:    []string{string(chain)},
+	prevApp, appExists := svc.appChains[string(app)]
+	if !appExists {
+		return fmt.Errorf("application %s not found in appChains", app)
+	}
+
+	// If it doesn't already exist, just return and don't update the chains topic
+	exist := false
+	for _, c := range prevApp.Chains {
+		if c == string(chain) {
+			exist = true
+			break
+		}
+	}
+	if !exist {
+		return nil
+	}
+
+	// Update the application service chains in MQTT
+	seq := svc.nextSeqNumberOfAppServiceChains(app)
+	appChains := dto.ApplicationServiceChains{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    "active",
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
+		AppID:  string(app),
+		Chains: removeStringFromSlice(prevApp.Chains, string(chain)),
 	}
 
 	err := svc.publishAppServiceChains(appChains)
@@ -115,7 +135,7 @@ func (svc *MQTTService) removeChainInAppServiceChains(app types.UID, chain types
 	return nil
 }
 
-func (svc *MQTTService) publishAppServiceChains(appChains ApplicationServiceChains) error {
+func (svc *MQTTService) publishAppServiceChains(appChains dto.ApplicationServiceChains) error {
 	appBytes, err := json.Marshal(appChains)
 	if err != nil {
 		return fmt.Errorf("failed to marshal application: %w", err)
@@ -128,4 +148,14 @@ func (svc *MQTTService) publishAppServiceChains(appChains ApplicationServiceChai
 		return fmt.Errorf("failed to publish application: %w", err)
 	}
 	return nil
+}
+
+func removeStringFromSlice(slice []string, str string) []string {
+	newSlice := []string{}
+	for _, s := range slice {
+		if s != str {
+			newSlice = append(newSlice, s)
+		}
+	}
+	return newSlice
 }

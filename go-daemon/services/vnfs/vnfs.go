@@ -8,6 +8,7 @@ import (
 	"iml-daemon/models"
 	"iml-daemon/services"
 	"iml-daemon/services/eventbus"
+	"iml-daemon/services/iml"
 	"net/http"
 )
 
@@ -18,8 +19,8 @@ func (svc *VnfService) RegisterLocalVnfInstance(request *VnfInstanceRegistration
 		return vnfInstance, nil
 	}
 
-	// Verify that the VNF exists in the registry
-	vnf, _ := svc.registry.FindNetworkFunctionByGlobalID(request.VnfID)
+	// Get the VNF definition
+	vnf, _ := svc.getVNFDefinition(request.VnfID)
 	if vnf == nil {
 		return nil, services.Errorf(
 			http.StatusNotFound,
@@ -62,6 +63,17 @@ func (svc *VnfService) RegisterLocalVnfInstance(request *VnfInstanceRegistration
 	return details, nil
 }
 
+func (svc *VnfService) getVNFDefinition(id string) (*models.VirtualNetworkFunction, error) {
+	// First, check if the VNF is already in the local registry
+	vnf, err := svc.registry.FindNetworkFunctionByGlobalID(id)
+	if err == nil {
+		return vnf, nil
+	}
+
+	// If not, then subscribe to it from IML.
+	return svc.imlClient.GetNF(id)
+}
+
 func (svc *VnfService) RegisterLocalVnfGroup(vnf *models.VirtualNetworkFunction) (*models.VnfGroup, services.Error) {
 	sid, err := svc.vnfIP.Next()
 	if err != nil {
@@ -71,9 +83,9 @@ func (svc *VnfService) RegisterLocalVnfGroup(vnf *models.VirtualNetworkFunction)
 	}
 
 	vnfGroup := &models.VnfGroup{
-		VnfID:   vnf.ID,
+		VnfID:    vnf.ID,
 		WorkerID: nil,
-		SID:     sid.String(),
+		SID:      sid.String(),
 	}
 	if err := svc.registry.SaveVnfGroup(vnfGroup); err != nil {
 		return nil, services.Errorf(
@@ -82,7 +94,7 @@ func (svc *VnfService) RegisterLocalVnfGroup(vnf *models.VirtualNetworkFunction)
 	}
 
 	svc.eventBus.Publish(eventbus.Event{
-		Name: "VnfGroupRegistered",
+		Name:    "VnfGroupRegistered",
 		Payload: *vnfGroup,
 	})
 
@@ -114,7 +126,7 @@ func (r *VnfService) Shutdown(ctx context.Context) error {
 }
 
 func InitializeVnfService(
-	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *eventbus.EventBus) (*VnfService, error) {
+	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *eventbus.EventBus, imlClient *iml.Client) (*VnfService, error) {
 	// Validate the registry
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -122,9 +134,10 @@ func InitializeVnfService(
 
 	// Create a new VNF service with the provided registry
 	return &VnfService{
-		registry: registry,
-		appIP:    appIP,
-		vnfIP:    vnfIP,
-		eventBus: eb,
+		registry:  registry,
+		appIP:     appIP,
+		vnfIP:     vnfIP,
+		eventBus:  eb,
+		imlClient: imlClient,
 	}, nil
 }

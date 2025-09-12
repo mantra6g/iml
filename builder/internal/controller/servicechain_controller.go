@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	cachev1alpha1 "builder/api/v1alpha1"
-	"builder/services/mqtt"
+	"builder/pkg/mqtt"
 )
 
 // ServiceChainReconciler reconciles a ServiceChain object

@@ -4,6 +4,7 @@ import (
 	"iml-daemon/db"
 	"iml-daemon/helpers"
 	"iml-daemon/services/eventbus"
+	"iml-daemon/services/iml"
 	"net"
 )
 
@@ -12,6 +13,7 @@ type VnfService struct {
 	appIP    *helpers.IPAllocator
 	vnfIP    *helpers.IPAllocator
 	eventBus *eventbus.EventBus
+	imlClient *iml.Client
 }
 
 // =================================================
