@@ -9,14 +9,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1alpha1 "builder/api/v1alpha1"
-	"builder/pkg/mqtt"
+	"builder/pkg/events"
 )
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	MQTT   *mqtt.MQTTService
+	Bus    *events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -49,10 +49,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !app.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
 		if containsString(app.GetFinalizers(), finalizerName) {
-			if err := r.MQTT.UpdateAppDefinition(&app); err != nil {
-				logger.Error(err, "Failed to publish deletion event")
-				return ctrl.Result{}, err // retry
-			}
+			r.Bus.Publish(events.Event{
+				Name:    events.EventAppPreDeleted,
+				Payload: &app,
+			})
 
 			// Remove finalizer
 			app.SetFinalizers(removeString(app.GetFinalizers(), finalizerName))
@@ -73,7 +73,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// All is well
 	// TODO: Announce creation to MQTT
-	r.MQTT.UpdateAppDefinition(&app)
+	r.Bus.Publish(events.Event{
+		Name:    events.EventAppPreUpdated,
+		Payload: &app,
+	})
 
 	return ctrl.Result{}, nil
 }

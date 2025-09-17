@@ -9,14 +9,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1alpha1 "builder/api/v1alpha1"
-	"builder/pkg/mqtt"
+	"builder/pkg/events"
 )
 
 // NetworkFunctionReconciler reconciles a NetworkFunction object
 type NetworkFunctionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	MQTT   *mqtt.MQTTService
+	Bus    *events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
@@ -49,10 +49,10 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if !nf.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
 		if containsString(nf.GetFinalizers(), finalizerName) {
-			if err := r.MQTT.DeleteNetworkFunctionDefinition(&nf); err != nil {
-				logger.Error(err, "Failed to publish deletion event")
-				return ctrl.Result{}, err // retry
-			}
+			r.Bus.Publish(events.Event{
+				Name:    events.EventNfPreDeleted,
+				Payload: &nf,
+			})
 
 			// Remove finalizer
 			nf.SetFinalizers(removeString(nf.GetFinalizers(), finalizerName))
@@ -71,9 +71,12 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// All is well
-	// TODO: Announce creation to MQTT
-	r.MQTT.UpdateNetworkFunctionDefinition(&nf)
+	// All is well.
+	// Publish creation/update event
+	r.Bus.Publish(events.Event{
+		Name:    events.EventNfPreUpdated,
+		Payload: &nf,
+	})
 
 	return ctrl.Result{}, nil
 }
