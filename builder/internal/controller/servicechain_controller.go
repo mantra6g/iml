@@ -11,14 +11,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	cachev1alpha1 "builder/api/v1alpha1"
-	"builder/pkg/mqtt"
+	"builder/pkg/events"
 )
 
 // ServiceChainReconciler reconciles a ServiceChain object
 type ServiceChainReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	MQTT   *mqtt.MQTTService
+	Bus    *events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains,verbs=get;list;watch;create;update;patch;delete
@@ -54,10 +54,10 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !serviceChain.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
 		if containsString(serviceChain.GetFinalizers(), finalizerName) {
-			if err := r.MQTT.DeleteServiceChainDefinition(&serviceChain); err != nil {
-				logger.Error(err, "Failed to publish deletion event")
-				return ctrl.Result{}, err // retry
-			}
+			r.Bus.Publish(events.Event{
+				Name:    events.EventChainPreDeleted,
+				Payload: &serviceChain,
+			})
 
 			// Remove finalizer
 			serviceChain.SetFinalizers(removeString(serviceChain.GetFinalizers(), finalizerName))
@@ -116,8 +116,10 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// All is well
-	// TODO: Announce creation to MQTT
-	r.MQTT.UpdateServiceChainDefinition(&serviceChain)
+	r.Bus.Publish(events.Event{
+		Name:    events.EventChainPreUpdated,
+		Payload: &serviceChain,
+	})
 
 	return ctrl.Result{}, nil
 }

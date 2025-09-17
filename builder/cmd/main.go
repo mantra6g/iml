@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -16,16 +15,16 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"builder/api/v1alpha1"
 	cachev1alpha1 "builder/api/v1alpha1"
 	"builder/internal/controller"
+	"builder/pkg/cache"
+	"builder/pkg/events"
 	"builder/pkg/mqtt"
 	"builder/pkg/southapi"
 	// +kubebuilder:scaffold:imports
@@ -191,16 +190,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	mqttService, err := mqtt.Initialize()
+	eventbus := events.New()
+
+	cacheService, err := cache.New(eventbus)
+	if err != nil {
+		setupLog.Error(err, "unable to initialize cache service")
+		os.Exit(1)
+	}
+
+	_, err = mqtt.Initialize(eventbus)
 	if err != nil {
 		setupLog.Error(err, "unable to initialize MQTT service")
+		os.Exit(1)
+	}
+
+	_, err = southapi.InitializeSouthboundAPI(cacheService)
+	if err != nil {
+		setupLog.Error(err, "unable to initialize southbound API")
 		os.Exit(1)
 	}
 
 	if err := (&controller.ApplicationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		MQTT:   mqttService,
+		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
@@ -208,7 +221,7 @@ func main() {
 	if err := (&controller.NetworkFunctionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		MQTT:   mqttService,
+		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)
@@ -216,43 +229,12 @@ func main() {
 	if err := (&controller.ServiceChainReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		MQTT:   mqttService,
+		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(),
-		&v1alpha1.Application{}, "metadata.uid",
-		func(obj client.Object) []string {
-			return []string{string(obj.GetUID())}
-		}); err != nil {
-		setupLog.Error(err, "unable to set index for Application metadata.uid")
-		os.Exit(1)
-	}
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(),
-		&v1alpha1.NetworkFunction{}, "metadata.uid",
-		func(obj client.Object) []string {
-			return []string{string(obj.GetUID())}
-		}); err != nil {
-		setupLog.Error(err, "unable to set index for NetworkFunction metadata.uid")
-		os.Exit(1)
-	}
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(),
-		&v1alpha1.ServiceChain{}, "metadata.uid",
-		func(obj client.Object) []string {
-			return []string{string(obj.GetUID())}
-		}); err != nil {
-		setupLog.Error(err, "unable to set index for ServiceChain metadata.uid")
-		os.Exit(1)
-	}
-
-	_, err = southapi.InitializeSouthboundAPI(mgr.GetClient())
-	if err != nil {
-		setupLog.Error(err, "unable to initialize southbound API")
-		os.Exit(1)
-	}
 
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")
