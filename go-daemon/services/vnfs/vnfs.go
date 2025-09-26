@@ -7,8 +7,9 @@ import (
 	"iml-daemon/helpers"
 	"iml-daemon/models"
 	"iml-daemon/services"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
+	"iml-daemon/vnfs"
 	"net/http"
 )
 
@@ -27,16 +28,6 @@ func (svc *VnfService) RegisterLocalVnfInstance(request *VnfInstanceRegistration
 			"VNF %s not found", request.VnfID)
 	}
 
-	// Check if there is already a VNF Group for this vnf
-	vnfGroup, _ := svc.registry.FindLocalVnfGroupByVnfID(request.VnfID)
-	var errDetails services.Error
-	if vnfGroup == nil {
-		vnfGroup, errDetails = svc.RegisterLocalVnfGroup(vnf)
-		if errDetails != nil {
-			return nil, errDetails
-		}
-	}
-
 	// Generate an interface name for the VNF instance
 	ifaceName, err := helpers.GenerateUniqueInterfaceName(request.ContainerID)
 	if err != nil {
@@ -45,60 +36,25 @@ func (svc *VnfService) RegisterLocalVnfInstance(request *VnfInstanceRegistration
 			"failed to generate interface name for VNF instance %s: %v", request.ContainerID, err)
 	}
 
-	// Create the VNF instance details
-	details := &models.VnfInstance{
-		GroupID:     vnfGroup.ID,
-		ContainerID: request.ContainerID,
-		IfaceName:   ifaceName,
-	}
-
-	// Save/Update the VNF instance in the registry
-	err = svc.registry.SaveVnfInstance(details)
+	instance, err := svc.vnfFactory.NewLocalInstance(request.VnfID, request.ContainerID, ifaceName)
 	if err != nil {
 		return nil, services.Errorf(
 			http.StatusInternalServerError,
-			"failed to register VNF instance %s: %v", request.ContainerID, err)
+			"failed to create VNF instance %s: %v", request.ContainerID, err)
 	}
 
-	return details, nil
+	return instance, nil
 }
 
 func (svc *VnfService) getVNFDefinition(id string) (*models.VirtualNetworkFunction, error) {
 	// First, check if the VNF is already in the local registry
-	vnf, err := svc.registry.FindNetworkFunctionByGlobalID(id)
+	vnf, err := svc.registry.FindActiveNetworkFunctionByGlobalID(id)
 	if err == nil {
 		return vnf, nil
 	}
 
 	// If not, then subscribe to it from IML.
-	return svc.imlClient.GetNF(id)
-}
-
-func (svc *VnfService) RegisterLocalVnfGroup(vnf *models.VirtualNetworkFunction) (*models.VnfGroup, services.Error) {
-	sid, err := svc.vnfIP.Next()
-	if err != nil {
-		return nil, services.Errorf(
-			http.StatusInternalServerError,
-			"failed to allocate IP for VNF group %s: %v", vnf.GlobalID, err)
-	}
-
-	vnfGroup := &models.VnfGroup{
-		VnfID:    vnf.ID,
-		WorkerID: nil,
-		SID:      sid.String(),
-	}
-	if err := svc.registry.SaveVnfGroup(vnfGroup); err != nil {
-		return nil, services.Errorf(
-			http.StatusInternalServerError,
-			"failed to save VNF group %s: %v", vnf.GlobalID, err)
-	}
-
-	svc.eventBus.Publish(eventbus.Event{
-		Name:    "VnfGroupRegistered",
-		Payload: *vnfGroup,
-	})
-
-	return vnfGroup, nil
+	return svc.imlClient.PullNetworkFunction(id)
 }
 
 func (r *VnfService) TeardownVnfInstance(request *VnfInstanceTeardownRequest) services.Error {
@@ -110,10 +66,11 @@ func (r *VnfService) TeardownVnfInstance(request *VnfInstanceTeardownRequest) se
 	}
 
 	// Remove the VNF instance from the registry
-	if err := r.registry.RemoveVnfInstanceByContainerID(request.ContainerID); err != nil {
+	err := r.vnfFactory.DeleteInstance(vnfInstance)
+	if err != nil {
 		return services.Errorf(
 			http.StatusInternalServerError,
-			"failed to remove VNF instance %s: %v", request.ContainerID, err)
+			"failed to delete VNF instance %s: %v", request.ContainerID, err)
 	}
 
 	return nil
@@ -126,7 +83,7 @@ func (r *VnfService) Shutdown(ctx context.Context) error {
 }
 
 func InitializeVnfService(
-	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *eventbus.EventBus, imlClient *iml.Client) (*VnfService, error) {
+	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *events.EventBus, imlClient *iml.Client, vnfFactory *vnfs.InstanceFactory) (*VnfService, error) {
 	// Validate the registry
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -134,10 +91,11 @@ func InitializeVnfService(
 
 	// Create a new VNF service with the provided registry
 	return &VnfService{
-		registry:  registry,
-		appIP:     appIP,
-		vnfIP:     vnfIP,
-		eventBus:  eb,
-		imlClient: imlClient,
+		registry:   registry,
+		appIP:      appIP,
+		vnfIP:      vnfIP,
+		eventBus:   eb,
+		imlClient:  imlClient,
+		vnfFactory: vnfFactory,
 	}, nil
 }

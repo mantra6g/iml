@@ -15,17 +15,17 @@ import (
 	"iml-daemon/env"
 	"iml-daemon/logger"
 	"iml-daemon/models"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 	"net"
 )
 
 type RouterService struct {
 	registry *db.Registry
-	eventBus *eventbus.EventBus
+	eventBus *events.EventBus
 	nfrouter *NFRouter
 }
 
-func New(registry *db.Registry, eventBus *eventbus.EventBus) (*RouterService, error) {
+func New(registry *db.Registry, eventBus *events.EventBus) (*RouterService, error) {
 	// Validate the registry and event bus
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -55,7 +55,7 @@ func New(registry *db.Registry, eventBus *eventbus.EventBus) (*RouterService, er
 	return router, nil
 }
 
-func (r *RouterService) handleRouteUpdated(evt eventbus.Event) {
+func (r *RouterService) handleRouteUpdated(evt events.Event) {
 	route, ok := evt.Payload.(models.Route)
 	if !ok {
 		logger.ErrorLogger().Printf("handleRouteUpdated: error casting event payload to Route")

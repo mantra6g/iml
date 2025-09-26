@@ -124,7 +124,7 @@ func (svc *MQTTService) handleAppChainsUpdates(event events.Event) {
 		fmt.Printf("Failed to marshal application service chains: %v\n", err)
 		return
 	}
-	err = svc.broker.Publish(fmt.Sprintf("apps/%s/chains", appChains.AppID), bytes, true, 1)
+	err = svc.broker.Publish(fmt.Sprintf("apps/%s/services", appChains.AppID), bytes, true, 1)
 	if err != nil {
 		fmt.Printf("Failed to publish application service chains: %v\n", err)
 	}

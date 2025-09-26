@@ -1,8 +1,7 @@
-package eventbus
+package events
 
-
-// New creates a new EventBus instance.
-func New() *EventBus {
+// NewEventBus creates a new EventBus instance.
+func NewEventBus() *EventBus {
 	return &EventBus{
 		subscribers: make(map[string][]subscription),
 		nextID:      1,

@@ -7,7 +7,7 @@ import (
 	"iml-daemon/helpers"
 	"iml-daemon/models"
 	"iml-daemon/services"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 	"net/http"
 )
 
@@ -15,13 +15,13 @@ type ChainService struct {
 	registry *db.Registry
 	appIP    *helpers.IPAllocator
 	vnfIP    *helpers.IPAllocator
-	eventBus *eventbus.EventBus
+	eventBus *events.EventBus
 }
 
 func (svc *ChainService) RegisterNetworkService(request *NetworkServiceRegistrationRequest) (*models.ServiceChain, services.Error) {
 	// Check if the chain is already registered
 	// If it is, return an error
-	chainInstance, _ := svc.registry.FindNetworkServiceChainByGlobalID(request.ChainID)
+	chainInstance, _ := svc.registry.FindActiveNetworkServiceChainByGlobalID(request.ChainID)
 	if chainInstance != nil {
 		return chainInstance, services.Errorf(
 			http.StatusConflict,
@@ -29,13 +29,13 @@ func (svc *ChainService) RegisterNetworkService(request *NetworkServiceRegistrat
 	}
 
 	// Find the applications and VNFs involved in the chain
-	srcApp, err := svc.registry.FindAppByGlobalID(request.SrcAppID)
+	srcApp, err := svc.registry.FindActiveAppByGlobalID(request.SrcAppID)
 	if err != nil {
 		return nil, services.Errorf(
 			http.StatusNotFound,
 			"source application %s not found: %v", request.SrcAppID, err)
 	}
-	dstApp, err := svc.registry.FindAppByGlobalID(request.DstAppID)
+	dstApp, err := svc.registry.FindActiveAppByGlobalID(request.DstAppID)
 	if err != nil {
 		return nil, services.Errorf(
 			http.StatusNotFound,
@@ -43,7 +43,7 @@ func (svc *ChainService) RegisterNetworkService(request *NetworkServiceRegistrat
 	}
 	var vnfs []models.ServiceChainVnfs
 	for i, vnfID := range request.Vnfs {
-		vnf, err := svc.registry.FindNetworkFunctionByGlobalID(vnfID)
+		vnf, err := svc.registry.FindActiveNetworkFunctionByGlobalID(vnfID)
 		if err != nil {
 			return nil, services.Errorf(
 				http.StatusNotFound,
@@ -72,7 +72,7 @@ func (svc *ChainService) RegisterNetworkService(request *NetworkServiceRegistrat
 	}
 
 	// Publish an event to the event bus
-	svc.eventBus.Publish(eventbus.Event{
+	svc.eventBus.Publish(events.Event{
 		Name:    "ServiceChainAdded",
 		Payload: *details,
 	})
@@ -87,7 +87,7 @@ func (svc *ChainService) Shutdown(ctx context.Context) error {
 }
 
 func InitializeNetworkServiceChainService(
-	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *eventbus.EventBus) (*ChainService, error) {
+	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *events.EventBus) (*ChainService, error) {
 	// Validate the registry
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")

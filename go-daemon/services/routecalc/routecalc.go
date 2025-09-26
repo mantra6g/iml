@@ -6,7 +6,7 @@ import (
 	"iml-daemon/db"
 	"iml-daemon/logger"
 	"iml-daemon/models"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 	"sync"
 
 	"github.com/google/uuid"
@@ -14,14 +14,14 @@ import (
 
 // RouteCalcService listens for topology events and recalculates routes.
 type RouteCalcService struct {
-	eventBus *eventbus.EventBus
+	eventBus *events.EventBus
 	registry *db.Registry
 	graph    *Graph
 	mutex    sync.Mutex
 }
 
 // NewRouteCalcService constructs the service and subscribes to events.
-func NewRouteCalcService(registry *db.Registry, eb *eventbus.EventBus) (*RouteCalcService, error) {
+func NewRouteCalcService(registry *db.Registry, eb *events.EventBus) (*RouteCalcService, error) {
 	// Validate the event bus and registry
 	if eb == nil {
 		return nil, fmt.Errorf("event bus cannot be nil")
@@ -52,7 +52,7 @@ func NewRouteCalcService(registry *db.Registry, eb *eventbus.EventBus) (*RouteCa
 }
 
 // handleEvent processes incoming events and triggers recalculation.
-func (rc *RouteCalcService) handleEvent(evt eventbus.Event) {
+func (rc *RouteCalcService) handleEvent(evt events.Event) {
 	rc.mutex.Lock()
 	defer rc.mutex.Unlock()
 
@@ -117,7 +117,7 @@ func (rc *RouteCalcService) recalculateAll() error {
 	}
 
 	// Notify that routes are being recalculated
-	rc.eventBus.Publish(eventbus.Event{
+	rc.eventBus.Publish(events.Event{
 		Name:    "RoutesRecalculating",
 		Payload: nil,
 	})

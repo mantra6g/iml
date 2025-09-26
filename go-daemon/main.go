@@ -8,13 +8,15 @@ import (
 	"iml-daemon/helpers"
 	"iml-daemon/logger"
 	"iml-daemon/mqtt"
-	"iml-daemon/services/apps"
+	appServices "iml-daemon/services/apps"
+	vnfServices "iml-daemon/services/vnfs"
 	"iml-daemon/services/chains"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
 	"iml-daemon/services/routecalc"
 	"iml-daemon/services/router"
-	"iml-daemon/services/vnfs"
+	"iml-daemon/apps"
+	"iml-daemon/vnfs"
 	"os"
 	"os/signal"
 	"syscall"
@@ -53,7 +55,7 @@ func main() {
 	}
 
 	// Initialize the event bus
-	eb := eventbus.New()
+	eb := events.NewEventBus()
 
 	// Create the MQTT client config
 	mqttClient, err := mqtt.NewClient(context.Background())
@@ -63,21 +65,33 @@ func main() {
 	}
 
 	// Initialize the IML Client
-	imlClient, err := iml.NewClient(eb, mqttClient)
+	imlClient, err := iml.NewClient(eb, mqttClient, registry)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize IML client: %v", err)
 		panic("Failed to initialize IML client: " + err.Error())
 	}
 
+	// Create app and vnf instance factories
+	appFactory, err := apps.NewInstanceFactory(registry, eb)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create AppInstanceFactory: %v", err)
+		panic("Failed to create AppInstanceFactory: " + err.Error())
+	}
+	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, vnfIP)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create VnfInstanceFactory: %v", err)
+		panic("Failed to create VnfInstanceFactory: " + err.Error())
+	}
+
 	// Initialize the application services
-	appService, err := apps.InitializeAppService(registry, appIP, vnfIP, eb)
+	appService, err := appServices.InitializeAppService(registry, appIP, vnfIP, eb, appFactory)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize AppService: %v", err)
 		panic("Failed to initialize AppService: " + err.Error())
 	}
 
 	// Initialize the VNF services
-	vnfService, err := vnfs.InitializeVnfService(registry, appIP, vnfIP, eb, imlClient)
+	vnfService, err := vnfServices.InitializeVnfService(registry, appIP, vnfIP, eb, imlClient, vnfFactory)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize VnfService: %v", err)
 		panic("Failed to initialize VnfService: " + err.Error())

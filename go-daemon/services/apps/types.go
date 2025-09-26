@@ -1,9 +1,10 @@
 package apps
 
 import (
+	"iml-daemon/apps"
 	"iml-daemon/db"
 	"iml-daemon/helpers"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 	"net"
 )
 
@@ -11,7 +12,8 @@ type AppService struct {
 	registry *db.Registry
 	appIP    *helpers.IPAllocator
 	vnfIP    *helpers.IPAllocator
-	eventBus *eventbus.EventBus
+	eventBus *events.EventBus
+	appFactory *apps.InstanceFactory
 }
 
 type AppInstanceRegistrationRequest struct {
