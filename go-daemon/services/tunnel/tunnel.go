@@ -12,15 +12,15 @@ package tunnel
 import (
 	"fmt"
 	"iml-daemon/db"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 )
 
 type TunnelService struct {
 	registry *db.Registry
-	eventBus *eventbus.EventBus
+	eventBus *events.EventBus
 }
 
-func New(registry *db.Registry, eventBus *eventbus.EventBus) (*TunnelService, error) {
+func New(registry *db.Registry, eventBus *events.EventBus) (*TunnelService, error) {
 	// Validate the registry and event bus
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -41,10 +41,10 @@ func New(registry *db.Registry, eventBus *eventbus.EventBus) (*TunnelService, er
 	return tunnelService, nil
 }
 
-func (t *TunnelService) handleWorkerAdded(evt eventbus.Event) {
+func (t *TunnelService) handleWorkerAdded(evt events.Event) {
 	panic("handleWorkerAdded not implemented")
 }
 
-func (t *TunnelService) handleWorkerRemoved(evt eventbus.Event) {
+func (t *TunnelService) handleWorkerRemoved(evt events.Event) {
 	panic("handleWorkerRemoved not implemented")
 }

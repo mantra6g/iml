@@ -23,6 +23,7 @@ type ServiceChainDefinition struct {
 	Namespace string    `json:"namespace"`
 	SrcAppID  string    `json:"src_app_id"`
 	DstAppID  string    `json:"dst_app_id"`
+	Functions []string  `json:"functions"`
 }
 
 type ApplicationDefinition struct {

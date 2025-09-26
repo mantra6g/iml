@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"iml-daemon/apps"
 	"iml-daemon/db"
 	"iml-daemon/helpers"
 	"iml-daemon/models"
 	"iml-daemon/services"
-	"iml-daemon/services/eventbus"
+	"iml-daemon/services/events"
 )
 
 func (svc *AppService) RegisterLocalAppInstance(request *AppInstanceRegistrationRequest) (*models.AppInstance, services.Error) {
@@ -18,27 +19,6 @@ func (svc *AppService) RegisterLocalAppInstance(request *AppInstanceRegistration
 	appInstance, _ := svc.registry.FindAppInstanceByContainerID(request.ContainerID)
 	if appInstance != nil {
 		return appInstance, nil
-	}
-
-	// Verify that the application exists in the registry
-	app, err := svc.registry.FindAppByGlobalID(request.ApplicationID)
-	if err != nil {
-		// App not found in the local registry. Ask IML if it exists there.
-		// If it does, we can register it locally
-		// TODO: CREATE THIS FUNCTIONALITY
-		return nil, services.Errorf(
-			http.StatusNotFound,
-			"application %s not found: %v", request.ApplicationID, err)
-	}
-
-	// Check if there is already an App Group for this app
-	appGroup, _ := svc.registry.FindLocalAppGroupByGlobalID(request.ApplicationID)
-	var errDetails services.Error
-	if appGroup == nil {
-		appGroup, errDetails = svc.RegisterLocalAppGroup(app)
-		if errDetails != nil {
-			return nil, errDetails
-		}
 	}
 
 	// Allocate an IP for the application instance
@@ -57,47 +37,18 @@ func (svc *AppService) RegisterLocalAppInstance(request *AppInstanceRegistration
 			"failed to generate interface name for app instance %s: %v", request.ContainerID, err)
 	}
 
-	// Create the application details
-	details := &models.AppInstance{
-		GroupID:     appGroup.ID,
-		ContainerID: request.ContainerID,
-		IfaceName:   ifaceName,
-		IP:          appIP.String(),
-	}
-
-	// Save the application instance in the registry
-	// This will also assign an ID to the object automatically
-	err = svc.registry.SaveAppInstance(details)
+	appDetails, err := svc.appFactory.NewLocalInstance(request.ApplicationID, appIP, request.ContainerID, ifaceName)
 	if err != nil {
 		return nil, services.Errorf(
 			http.StatusInternalServerError,
-			"failed to register app instance %s: %v", request.ContainerID, err)
+			"failed to create app instance %s: %v", request.ContainerID, err)
 	}
 
-	return details, nil
+	return appDetails, nil
 }
 
-func (svc *AppService) RegisterLocalAppGroup(app *models.Application) (*models.AppGroup, services.Error) {
-	appGroup := &models.AppGroup{
-		AppID:     app.ID,
-		WorkerID:  nil,
-	}
 
-	if err := svc.registry.SaveAppGroup(appGroup); err != nil {
-		return nil, services.Errorf(
-			http.StatusInternalServerError,
-			"failed to save app group %s: %v", app.GlobalID, err)
-	}
-
-	svc.eventBus.Publish(eventbus.Event{
-		Name:    "AppGroupCreated",
-		Payload: *appGroup,
-	})
-
-	return appGroup, nil
-}
-
-func (svc *AppService) TeardownAppInstance(request *AppInstanceTeardownRequest) (services.Error) {
+func (svc *AppService) TeardownAppInstance(request *AppInstanceTeardownRequest) services.Error {
 	// First, find the application instance by container ID
 	// If it does not exist, just return
 	appInstance, _ := svc.registry.FindAppInstanceByContainerID(request.ContainerID)
@@ -105,11 +56,10 @@ func (svc *AppService) TeardownAppInstance(request *AppInstanceTeardownRequest) 
 		return nil
 	}
 
-	// Remove the application instance from the registry
-	if err := svc.registry.RemoveAppInstanceByContainerID(request.ContainerID); err != nil {
+	if err := svc.appFactory.DeleteInstance(appInstance); err != nil {
 		return services.Errorf(
 			http.StatusInternalServerError,
-			"failed to remove app instance with container id %s: %v", request.ContainerID, err)
+			"failed to delete app instance %s: %v", request.ContainerID, err)
 	}
 
 	return nil
@@ -122,7 +72,7 @@ func (svc *AppService) Shutdown(ctx context.Context) error {
 }
 
 func InitializeAppService(
-	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *eventbus.EventBus) (*AppService, error) {
+	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *events.EventBus, appFactory *apps.InstanceFactory) (*AppService, error) {
 	// Validate the registry
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -130,9 +80,10 @@ func InitializeAppService(
 
 	// Initialize the application service with the provided registry
 	return &AppService{
-		registry: registry,
-		appIP: 	appIP,
-		vnfIP: 	vnfIP,
-		eventBus: eb,
+		registry:   registry,
+		appIP:      appIP,
+		vnfIP:      vnfIP,
+		eventBus:   eb,
+		appFactory: appFactory,
 	}, nil
 }

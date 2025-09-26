@@ -72,7 +72,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// All is well
-	// TODO: Announce creation to MQTT
 	r.Bus.Publish(events.Event{
 		Name:    events.EventAppPreUpdated,
 		Payload: &app,

@@ -5,9 +5,16 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	AppStatusActive          string = "ACTIVE"
+	AppStatusDeletionPending string = "DELETION_PENDING"
+)
+
 type Application struct {
 	ID        uuid.UUID   `gorm:"primaryKey"` // Surrogate key
-	GlobalID  string      `gorm:"uniqueIndex:app_global_id"`
+	GlobalID  string
+	Status    string      `gorm:"index:status,default:ACTIVE"`
+	Etag	  int
 	Groups    []AppGroup  `gorm:"foreignKey:app_id"`
 }
 
