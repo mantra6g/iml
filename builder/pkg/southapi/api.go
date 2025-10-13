@@ -11,6 +11,7 @@ import (
 )
 
 type SouthboundAPIController struct {
+	ClusterCIDR   iplib.Net6
 	AppRange      iplib.Net6
 	NFRange       iplib.Net6
 	LastAppSubnet *iplib.Net6
@@ -20,6 +21,7 @@ type SouthboundAPIController struct {
 
 func InitializeSouthboundAPI(cache *cache.Service) (*http.Server, error) {
 	controller := &SouthboundAPIController{
+		ClusterCIDR:   iplib.Net6FromStr("fd00::/15"),
 		AppRange:      iplib.Net6FromStr("fd00::/16"),
 		NFRange:       iplib.Net6FromStr("fd01::/16"),
 		LastAppSubnet: nil,
@@ -65,8 +67,11 @@ func (c *SouthboundAPIController) handleSubnetRequest(w http.ResponseWriter, r *
 	}
 
 	response := SubnetResponse{
+		ClusterCIDR: c.ClusterCIDR.IPNet,
 		AppSubnet: appnet.IPNet,
 		NFSubnet:  nfnet.IPNet,
+		NFRouterAppIP: appnet.LastAddress(),
+		NFRouterVNFIP: nfnet.LastAddress(),
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

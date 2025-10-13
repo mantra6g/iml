@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"iml-daemon/env"
 	"iml-daemon/services/apps"
 	"iml-daemon/services/vnfs"
 	"net/http"
@@ -51,8 +52,21 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 		return
 	}
 
+	globalConfig, err := env.Config()
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	configResponse := &AppInstanceConfigResponse{
+		IPNet:       appDetails.IP,
+		IfaceName:   appDetails.IfaceName,
+		ClusterCIDR: globalConfig.ClusterCIDR.String(),
+		GatewayIP:   globalConfig.NFRouterAppIP.String(),
+	}
+
 	// Finally, return the container details including the allocated IP.
-	if err := json.NewEncoder(response).Encode(appDetails); err != nil {
+	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -123,8 +137,22 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 		return
 	}
 
+	globalConfig, err := env.Config()
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	configResponse := &VnfInstanceConfigResponse{
+		SID:         vnfDetails.Group.SID,
+		Subnet:      globalConfig.NFSubnet.String(),
+		IfaceName:   vnfDetails.IfaceName,
+		ClusterCIDR: globalConfig.ClusterCIDR.String(),
+		GatewayIP:   globalConfig.NFRouterVNFIP.String(),
+	}
+
 	// Finally, return the VNF details including the allocated IP.
-	if err := json.NewEncoder(response).Encode(vnfDetails); err != nil {
+	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
