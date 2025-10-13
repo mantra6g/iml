@@ -21,14 +21,10 @@ type AppConfigRequest struct {
 }
 
 type AppConfigResponse struct {
-	IP       string `json:"ip"`
-	MacAddress  string `json:"mac_address"`
-	PeerName string `json:"peer_name"`
-	Route    struct {
-		Destination string `json:"destination"`
-		GatewayIP   string `json:"gateway_ip"`
-		GatewayMac  string `json:"gateway_mac"`
-	} `json:"route"`
+	IPNet       string `json:"ip_net"`
+	IfaceName   string `json:"iface_name"`
+	ClusterCIDR string `json:"cluster_cidr"`
+	GatewayIP   string `json:"gateway_ip"`
 }
 
 type NFConfigRequest struct {
@@ -37,14 +33,11 @@ type NFConfigRequest struct {
 }
 
 type NFConfigResponse struct {
-	SID      string `json:"sid"`
-	MacAddress  string `json:"mac_address"`
-	PeerName string `json:"peer_name"`
-	Route    struct {
-		Destination string `json:"destination"`
-		GatewayIP   string `json:"gateway_ip"`
-		GatewayMac  string `json:"gateway_mac"`
-	} `json:"route"`
+	SID         string `json:"sid"`
+	Subnet      string `json:"subnet"`
+	IfaceName   string `json:"iface_name"`
+	ClusterCIDR string `json:"cluster_cidr"`
+	GatewayIP   string `json:"gateway_ip"`
 }
 
 type AppTeardownRequest struct {

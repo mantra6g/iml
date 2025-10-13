@@ -14,11 +14,20 @@ const API_URL   = "http://" + IML_ADDR + ":" + API_PORT
 const MQTT_URL  = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
 
 type GlobalConfig struct {
-	AppSubnet  *net.IPNet
-	NFSubnet   *net.IPNet
-	NFRouterAppIP string
-	NFRouterVNFIP string
+	ClusterCIDR *net.IPNet
+	AppSubnet   *net.IPNet
+	NFSubnet    *net.IPNet
+	NFRouterAppIP *net.IP
+	NFRouterVNFIP *net.IP
 	NodeID		    string
+}
+
+type controllerResponse struct {
+	ClusterCIDR   net.IPNet `json:"cluster_cidr"`
+	AppSubnet     net.IPNet `json:"app_subnet"`
+	NFSubnet      net.IPNet `json:"nf_subnet"`
+	NFRouterAppIP net.IP    `json:"nf_router_app_ip"`
+	NFRouterVNFIP net.IP    `json:"nf_router_vnf_ip"`
 }
 
 // Singleton instance of GlobalConfig
@@ -35,16 +44,16 @@ func (e *GlobalConfig) getSubnetFromIML() error {
 		return fmt.Errorf("IML returned status code %d", resp.StatusCode)
 	}
 
-	var subnetResponse struct {
-		AppSubnet net.IPNet `json:"app_subnet"`
-		NFSubnet  net.IPNet `json:"nf_subnet"`
-	}
+	var subnetResponse controllerResponse
 	if err := json.NewDecoder(resp.Body).Decode(&subnetResponse); err != nil {
 		return fmt.Errorf("failed to decode IML response: %w", err)
 	}
 
 	e.AppSubnet = &subnetResponse.AppSubnet
 	e.NFSubnet = &subnetResponse.NFSubnet
+	e.ClusterCIDR = &subnetResponse.ClusterCIDR
+	e.NFRouterAppIP = &subnetResponse.NFRouterAppIP
+	e.NFRouterVNFIP = &subnetResponse.NFRouterVNFIP
 	return nil
 }
 

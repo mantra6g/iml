@@ -15,7 +15,9 @@ import (
 	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
@@ -82,28 +84,21 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 	logger.DebugLogger().Printf("Deploying application function with config: %+v\n", netConfig)
 
 	// Parse the IP address from the response
-	ipNet, err := netlink.ParseIPNet(netConfig.IP)
+	ipNet, err := netlink.ParseIPNet(netConfig.IPNet)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.IP)
+		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.IPNet)
 	}
 
-	// TODO: Check if a MAC address is needed from IML
-	// Parse the MAC address from the response
-	// macAddr, err := net.ParseMAC(netConfig.MacAddress)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to parse MAC address: %s", netConfig.MacAddress)
-	// }
-
 	// Parse the destination network from the response
-	dstNet, err := netlink.ParseIPNet(netConfig.Route.Destination)
+	dstNet, err := netlink.ParseIPNet(netConfig.ClusterCIDR)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.Route.Destination)
+		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.ClusterCIDR)
 	}
 
 	// Parse the gateway IP from the response
-	gwIP := net.ParseIP(netConfig.Route.GatewayIP)
+	gwIP := net.ParseIP(netConfig.GatewayIP)
 	if gwIP == nil {
-		return nil, fmt.Errorf("failed to parse gateway IP: %s", netConfig.Route.GatewayIP)
+		return nil, fmt.Errorf("failed to parse gateway IP: %s", netConfig.GatewayIP)
 	}
 
 	// Get the host's network namespace
@@ -121,7 +116,7 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 			Name: "iml0",
 			MTU:  1500,
 		},
-		PeerName:         netConfig.PeerName,
+		PeerName:         netConfig.IfaceName,
 		PeerMTU:          1500,
 	}
 
@@ -199,29 +194,34 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (types.Result, error) {
 	logger.DebugLogger().Printf("Deploying network function with config: %+v\n", netConfig)
 
-	// Parse the SID from the response
+	// Parse the IP address from the response
 	sid, err := netlink.ParseIPNet(netConfig.SID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse SID: %s", netConfig.SID)
+		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.SID)
 	}
 
-	// TODO: Check if a MAC address is needed from IML
-	// Parse the MAC address from the response
-	// macAddr, err := net.ParseMAC(netConfig.MacAddress)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to parse MAC address: %s", netConfig.MacAddress)
-	// }
+	// Parse the subnet from the response
+	subnet, err := netlink.ParseIPNet(netConfig.Subnet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse subnet: %s", netConfig.Subnet)
+	}
+
+	// Get the IP of the interface
+	ifaceIP := &net.IPNet{
+		IP:   sid.IP,
+		Mask: subnet.Mask,
+	}
 
 	// Parse the destination network from the response
-	dstNet, err := netlink.ParseIPNet(netConfig.Route.Destination)
+	dstNet, err := netlink.ParseIPNet(netConfig.ClusterCIDR)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.Route.Destination)
+		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.ClusterCIDR)
 	}
 
 	// Parse the gateway IP from the response
-	gwIP := net.ParseIP(netConfig.Route.GatewayIP)
+	gwIP := net.ParseIP(netConfig.GatewayIP)
 	if gwIP == nil {
-		return nil, fmt.Errorf("failed to parse gateway IP: %s", netConfig.Route.GatewayIP)
+		return nil, fmt.Errorf("failed to parse gateway IP: %s", netConfig.GatewayIP)
 	}
 
 	// Get the host's network namespace
@@ -239,8 +239,8 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 			Name: "iml0",
 			MTU:  1500,
 		},
-		PeerName:         netConfig.PeerName,
-		PeerMTU:          1500,
+		PeerName: netConfig.IfaceName,
+		PeerMTU:  1500,
 	}
 
 	// Change to the container namespace
@@ -267,23 +267,43 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.Name, err)
 		}
 		// Set the peer interface's IP address
-		if err := netlink.AddrAdd(containerLink, &netlink.Addr{IPNet: sid}); err != nil {
+		// ip -6 addr add <IP>/<PREFIXLEN> dev iml0 anycast
+		if err := netlink.AddrAdd(containerLink, &netlink.Addr{
+			IPNet: ifaceIP,
+			Flags: unix.IFA_ANYCAST,
+		}); err != nil {
 			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.Name, err)
 		}
-
-		encap := &netlink.Seg6LocalEncap{
-			Action: netlink.SEG6_LOCAL_ACTION_END,
-		}
-
-		route := &netlink.Route{
-			Dst:   dstNet,
-			Gw:    gwIP,
-			Src:   sid.IP,
+		// Create route to the destination network
+		// ip -6 route add <DESTINATION> via <GATEWAY> src <IP>
+		routeLink := &netlink.Route{
+			Dst: dstNet,
+			Gw:  gwIP,
+			Src: ifaceIP.IP,
 			Scope: netlink.SCOPE_UNIVERSE,
-			Encap: &netlink.SEG6Encap{
-
+		}
+		// Add the route inside the container's network namespace
+		if err := netlink.RouteChange(routeLink); err != nil {
+			return fmt.Errorf("failed to add route: %w", err)
+		}
+		// Get the loopback interface
+		lo, err := netlink.LinkByName("lo")
+		if err != nil {
+			return fmt.Errorf("failed to get loopback interface: %w", err)
+		}
+		// ip -6 route add <SID> dev lo encap seg6local action End
+		srv6EndRoute := &netlink.Route{
+			Dst:      sid,
+			LinkIndex: lo.Attrs().Index,
+			Scope: netlink.SCOPE_UNIVERSE,
+			Encap: &netlink.SEG6LocalEncap{
+				Action: nl.SEG6_LOCAL_ACTION_END,
 			},
 		}
+		if err := netlink.RouteAdd(srv6EndRoute); err != nil {
+			return fmt.Errorf("failed to add SRv6 End route: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
@@ -300,7 +320,7 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		IPs: []*current.IPConfig{
 			{
 				Interface: &intfIndex,
-				Address:   *ipNet,
+				Address:   *ifaceIP,
 			},
 		},
 		Routes: []*types.Route{
@@ -389,7 +409,7 @@ func getNFConfigFromIML(configRequest NFConfigRequest) (*NFConfigResponse, error
 	return &configResponse, nil
 }
 
-func tearDownNetworkFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) error {
+func tearDownNetworkFunction(cniArgs *skel.CmdArgs) error {
 	logger.InfoLogger().Printf("Tearing down network function for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 
 	// Notify IML of the network function teardown
@@ -430,7 +450,7 @@ func tearDownNetworkFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) err
 	return nil
 }
 
-func tearDownApplicationFunction(netConfig *IMLCNIConfig, cniArgs *skel.CmdArgs) error {
+func tearDownApplicationFunction(cniArgs *skel.CmdArgs) error {
 	logger.InfoLogger().Printf("Tearing down application function for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 
 	// Notify IML of the application function teardown
@@ -525,13 +545,13 @@ func cmdDel(args *skel.CmdArgs) error {
 	switch cniConf.Args.CNI.AppType {
 		case "network_function":
 			logger.InfoLogger().Printf("Tearing down network function for container %s\n", args.ContainerID)
-			if err := tearDownNetworkFunction(&cniConf, args); err != nil {
+			if err := tearDownNetworkFunction(args); err != nil {
 				logger.ErrorLogger().Printf("Failed to tear down network function: %v\n", err)
 				return fmt.Errorf("failed to tear down network function: %w", err)
 			}
 		case "application_function":
 			logger.InfoLogger().Printf("Tearing down application function for container %s\n", args.ContainerID)
-			if err := tearDownApplicationFunction(&cniConf, args); err != nil {
+			if err := tearDownApplicationFunction(args); err != nil {
 				logger.ErrorLogger().Printf("Failed to tear down application function: %v\n", err)
 				return fmt.Errorf("failed to tear down application function: %w", err)
 			}
