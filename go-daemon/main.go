@@ -3,19 +3,20 @@ package main
 import (
 	"context"
 	"iml-daemon/api"
+	"iml-daemon/apps"
 	"iml-daemon/db"
 	"iml-daemon/env"
 	"iml-daemon/helpers"
 	"iml-daemon/logger"
 	"iml-daemon/mqtt"
 	appServices "iml-daemon/services/apps"
-	vnfServices "iml-daemon/services/vnfs"
 	"iml-daemon/services/chains"
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
+	"iml-daemon/services/iml/subscriptions"
 	"iml-daemon/services/routecalc"
 	"iml-daemon/services/router"
-	"iml-daemon/apps"
+	vnfServices "iml-daemon/services/vnfs"
 	"iml-daemon/vnfs"
 	"os"
 	"os/signal"
@@ -64,20 +65,26 @@ func main() {
 		panic("Failed to create MQTT client: " + err.Error())
 	}
 
+	subscriptionManager := subscriptions.NewSubscriptionManager(mqttClient, registry)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create SubscriptionManager: %v", err)
+		panic("Failed to create SubscriptionManager: " + err.Error())
+	}
+
 	// Initialize the IML Client
-	imlClient, err := iml.NewClient(eb, mqttClient, registry)
+	imlClient, err := iml.NewClient(eb, subscriptionManager)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize IML client: %v", err)
 		panic("Failed to initialize IML client: " + err.Error())
 	}
 
 	// Create app and vnf instance factories
-	appFactory, err := apps.NewInstanceFactory(registry, eb)
+	appFactory, err := apps.NewInstanceFactory(registry, eb, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create AppInstanceFactory: %v", err)
 		panic("Failed to create AppInstanceFactory: " + err.Error())
 	}
-	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, vnfIP)
+	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, vnfIP, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create VnfInstanceFactory: %v", err)
 		panic("Failed to create VnfInstanceFactory: " + err.Error())

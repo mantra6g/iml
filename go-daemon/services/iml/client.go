@@ -14,6 +14,7 @@ import (
 	"iml-daemon/models"
 	"iml-daemon/mqtt"
 	"iml-daemon/services/events"
+	"iml-daemon/services/iml/subscriptions"
 	"net/http"
 )
 
@@ -22,26 +23,20 @@ type Client struct {
 	mqtt *mqtt.Client
 	repo *db.Registry
 
-	graph *DependencyGraph
+	manager *subscriptions.SubscriptionManager
 }
 
-func NewClient(eb *events.EventBus, mqttClient *mqtt.Client, db *db.Registry) (*Client, error) {
+func NewClient(eb *events.EventBus, manager *subscriptions.SubscriptionManager) (*Client, error) {
 	if eb == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
-	if mqttClient == nil {
-		return nil, fmt.Errorf("MQTT client is required")
-	}
-	if db == nil {
-		return nil, fmt.Errorf("database registry is required")
+	if manager == nil {
+		return nil, fmt.Errorf("subscription manager is required")
 	}
 
 	client := &Client{
-		eb:   eb,
-		mqtt: mqttClient,
-		repo: db,
-
-		graph: NewDependencyGraph(),
+		eb:      eb,
+		manager: manager,
 	}
 
 	client.eb.Subscribe(events.EventAppGroupCreated, client.handleLocalAppGroupCreated)
@@ -98,12 +93,59 @@ func (c *Client) GetApplication(id string) (*models.Application, error) {
 		return nil, fmt.Errorf("failed to save application %s: %v", id, err)
 	}
 
-	err = c.temporarilySubscribeToAppUpdates(id)
+	err = c.manager.AddDependency(&subscriptions.TemporaryAppDependency{AppID: app.GlobalID})
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to app updates: %v", err)
 	}
 
 	return app, nil
+}
+
+func (c *Client) GetNetworkFunction(id string) (*models.VirtualNetworkFunction, error) {
+	// First, check if the network function already exists locally
+	// If the network function exists, and it is active, then it means that
+	// it is already synchronized with IML via MQTT, so we can return it directly.
+	// If the network function does not exist locally or is not active, then we need to
+	// pull it from IML again to check if a new one with the same ID has been created.
+	nf, err := c.repo.FindActiveNetworkFunctionByGlobalID(id)
+	if err == nil {
+		// Network function already exists locally and is active
+		return nf, nil
+	}
+
+	// If not, then retrieve it from IML
+	resp, err := http.Get(env.API_URL + "/api/v1/nfs/" + id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact IML: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("network function %s not found in IML", id)
+	}
+	defer resp.Body.Close()
+
+	var nfDefinition mqtt.NetworkFunctionDefinition
+	if err := json.NewDecoder(resp.Body).Decode(&nfDefinition); err != nil {
+		return nil, fmt.Errorf("failed to decode VNF response: %v", err)
+	}
+	if nfDefinition.Status != "active" {
+		return nil, fmt.Errorf("network function %s is not active in IML", id)
+	}
+
+	// If it is active, save its current state locally and temporarily subscribe to its updates.
+	nf = &models.VirtualNetworkFunction{
+		GlobalID: nfDefinition.ID,
+		Status:   models.VNFStatusActive,
+	}
+	if err := c.repo.SaveVnf(nf); err != nil {
+		return nil, fmt.Errorf("failed to save network function %s: %v", id, err)
+	}
+
+	err = c.manager.AddDependency(&subscriptions.TemporaryVnfDependency{VnfID: nf.GlobalID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to VNF updates: %v", err)
+	}
+
+	return nf, nil
 }
 
 // // PullApplication retrieves the application details from IML and subscribes to its updates via MQTT.
@@ -262,14 +304,3 @@ func (c *Client) GetApplication(id string) (*models.Application, error) {
 // 	// TODO: Fix to return something
 // 	return nil, nil
 // }
-
-func (c *Client) temporarilySubscribeToAppUpdates(appID string) error {
-	
-	err := c.graph.AddDependent(appID, &TemporaryAppSync{
-		AppID: appID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to app updates: %v", err)
-	}
-	return nil
-}

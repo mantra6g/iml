@@ -2,20 +2,27 @@ package subscriptions
 
 import (
 	"fmt"
+	"iml-daemon/db"
+	"iml-daemon/logger"
+	"iml-daemon/mqtt"
 	"sync"
 )
 
 type SubscriptionManager struct {
 	subscriptions map[SubscriptionKey]Subscription
 	dependencies  map[DependencyKey]Dependency
+	mqttClient    *mqtt.Client
+	repo          *db.Registry
 
 	_mutex sync.RWMutex
 }
 
-func NewSubscriptionManager() *SubscriptionManager {
+func NewSubscriptionManager(mqttClient *mqtt.Client, repo *db.Registry) *SubscriptionManager {
 	return &SubscriptionManager{
 		subscriptions: make(map[SubscriptionKey]Subscription),
 		dependencies:  make(map[DependencyKey]Dependency),
+		mqttClient:    mqttClient,
+		repo:         repo,
 	}
 }
 
@@ -54,9 +61,18 @@ func (mgr *SubscriptionManager) removeSubscription(sub Subscription) error {
 	key := sub.Key()
 	_, exists := mgr.GetSubscription(key)
 	if !exists {
-		return fmt.Errorf("SubscriptionManager.removeSubscription: subscription %v not found", key)
+		logger.DebugLogger().Printf("SubscriptionManager.removeSubscription: subscription %v not found", key)
+		return nil
 	}
 	return mgr.executeRemoveSubscription(key)
+}
+
+func (mgr *SubscriptionManager) onSubscriptionEnded(sub Subscription) error {
+	err := mgr.executeRemoveDependency(sub.Dependency().Key())
+	if err != nil {
+		return fmt.Errorf("SubscriptionManager.onSubscriptionEnded: failed to remove dependency for subscription %v: %w", sub.Key(), err)
+	}
+	return nil
 }
 
 func (mgr *SubscriptionManager) executeAddDependency(key DependencyKey, dependency Dependency) error {
@@ -75,7 +91,7 @@ func (mgr *SubscriptionManager) executeAddDependency(key DependencyKey, dependen
 }
 
 func (mgr *SubscriptionManager) executeAddSubscription(key SubscriptionKey, sub Subscription) error {
-	if err := sub.Start(); err != nil {
+	if err := sub.Start(mgr); err != nil {
 		return fmt.Errorf("SubscriptionManager.addSubscription: failed to start subscription %v: %w", key, err)
 	}
 	mgr._mutex.Lock()
@@ -87,7 +103,8 @@ func (mgr *SubscriptionManager) executeAddSubscription(key SubscriptionKey, sub 
 func (mgr *SubscriptionManager) executeRemoveDependency(key DependencyKey) error {
 	dep, exists := mgr.GetDependency(key)
 	if !exists {
-		return fmt.Errorf("SubscriptionManager.removeDependency: dependency %v not found", key)
+		logger.DebugLogger().Printf("SubscriptionManager.removeDependency: dependency %v not found", key)
+		return nil
 	}
 	if err := dep.PreRemove(mgr); err != nil {
 		return fmt.Errorf("SubscriptionManager.removeDependency: failed to pre-remove dependency %v: %w", key, err)
@@ -106,7 +123,7 @@ func (mgr *SubscriptionManager) executeRemoveSubscription(key SubscriptionKey) e
 	if !exists {
 		return fmt.Errorf("SubscriptionManager.removeSubscription: subscription %v not found", key)
 	}
-	if err := sub.Stop(); err != nil {
+	if err := sub.Stop(mgr); err != nil {
 		return fmt.Errorf("SubscriptionManager.removeSubscription: failed to stop subscription %v: %w", key, err)
 	}
 	mgr._mutex.Lock()

@@ -2,7 +2,6 @@ package mqtt
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"iml-daemon/env"
 	"iml-daemon/logger"
@@ -12,11 +11,30 @@ import (
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/autopaho/queue/memory"
 	"github.com/eclipse/paho.golang/paho"
+	diff "github.com/r3labs/diff"
 )
 
+type Topic string
+
+// TopicData holds information about an exact topic.
+//
+// For example, if you subscribe to "apps/+/definition", there will be multiple topics
+// like "apps/1/definition", "apps/2/definition", etc. Each of these exact topics
+// will have its own TopicData instance.
+type TopicData struct {
+	lastMessage Message
+}
+
+
+type TopicUpdate struct {
+	NewMessage Message
+	ChangeLog  diff.Changelog
+}
+
 type Client struct {
-	conn *autopaho.ConnectionManager
-	topicCallbacks map[string][]func(*paho.Publish)
+	conn   *autopaho.ConnectionManager
+	topics map[Topic]TopicData
+	subs   map[Topic]Subscription
 }
 
 func NewClient(ctx context.Context) (*Client, error) {
@@ -31,16 +49,28 @@ func NewClient(ctx context.Context) (*Client, error) {
 	}
 
 	client := &Client{
-		topicCallbacks: make(map[string][]func(*paho.Publish)),
+		topics: make(map[Topic]TopicData),
+		subs:   make(map[Topic]Subscription),
 	}
 
+	router := paho.NewStandardRouter()
+	router.RegisterHandler("apps/+/definition", client.handleAppDefinitionUpdateMessage)
+	router.RegisterHandler("apps/+/services", client.handleAppServicesUpdateMessage)
+	router.RegisterHandler("nfs/+/definition", client.handleVNFDefinitionUpdateMessage)
+	router.RegisterHandler("chains/+/definition", client.handleServiceChainDefinitionUpdateMessage)
+	router.RegisterHandler("apps/+/nodes/+/groups/+", client.handleAppInstancesMessage)
+	router.RegisterHandler("nfs/+/nodes/+/groups/+", client.handleVNFInstancesMessage)
+
 	clientConfig := autopaho.ClientConfig{
-		ServerUrls:  []*url.URL{u},
-		Queue: memory.New(),
+		ServerUrls: []*url.URL{u},
+		Queue:      memory.New(),
 		ClientConfig: paho.ClientConfig{
 			ClientID: hostname,
 			OnPublishReceived: []func(paho.PublishReceived) (bool, error){
-				client.messageHandler,
+				func(pr paho.PublishReceived) (bool, error) {
+					router.Route(pr.Packet.Packet())
+					return true, nil
+				},
 			},
 		},
 	}
@@ -57,59 +87,33 @@ func NewClient(ctx context.Context) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) SubscribeToAppUpdates(id string, callback func(ApplicationDefinition)) error {
-	return c.SubscribeToTopic("apps/"+id+"/definition", func(p *paho.Publish) {
-		var appDef ApplicationDefinition
-		if err := json.Unmarshal(p.Payload, &appDef); err != nil {
-			logger.ErrorLogger().Printf("Failed to unmarshal app definition: %v", err)
-			return
-		}
-		callback(appDef)
-	})
-}
-
-func (c *Client) SubscribeToAppServices(id string, callback func(ApplicationServiceChains)) error {
-	return c.SubscribeToTopic("apps/"+id+"/services", func(p *paho.Publish) {
-		var appServices ApplicationServiceChains
-		if err := json.Unmarshal(p.Payload, &appServices); err != nil {
-			logger.ErrorLogger().Printf("Failed to unmarshal app services: %v", err)
-			return
-		}
-		callback(appServices)
-	})
-}
-
-func (c *Client) SubscribeToVNFUpdates(id string, callback func(NetworkFunctionDefinition)) error {
-	return c.SubscribeToTopic("nfs/"+id+"/definition", func(p *paho.Publish) {
-		var nfDef NetworkFunctionDefinition
-		if err := json.Unmarshal(p.Payload, &nfDef); err != nil {
-			logger.ErrorLogger().Printf("Failed to unmarshal VNF definition: %v", err)
-			return
-		}
-		callback(nfDef)
-	})
-}
-
-func (c *Client) SubscribeToServiceChainUpdates(id string, callback func(ServiceChainDefinition)) error {
-	return c.SubscribeToTopic("chains/"+id+"/definition", func(p *paho.Publish) {
-		var scDef ServiceChainDefinition
-		if err := json.Unmarshal(p.Payload, &scDef); err != nil {
-			logger.ErrorLogger().Printf("Failed to unmarshal service chain definition: %v", err)
-			return
-		}
-		callback(scDef)
-	})
-}
-
-func (c *Client) SubscribeToTopic(topic string, callback func(*paho.Publish)) error {
+func (c *Client) Add(sub Subscription) (Topic, error) {
+	topic := sub.Topic()
 	_, err := c.conn.Subscribe(context.Background(), &paho.Subscribe{
 		Subscriptions: []paho.SubscribeOptions{
-			{Topic: topic, QoS: 1},
+			{Topic: string(topic), QoS: 1},
 		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to subscribe to topic %s: %v", topic, err)
+	}
+	c.subs[topic] = sub
+	return topic, nil
+}
+
+func (c *Client) Remove(subscriptionTopic Topic) error {
+	_, ok := c.subs[subscriptionTopic]
+	if !ok {
+		logger.DebugLogger().Printf("No subscription found for topic %s, skipping...", subscriptionTopic)
+		return nil
+	}
+	_, err := c.conn.Unsubscribe(context.Background(), &paho.Unsubscribe{
+		Topics: []string{string(subscriptionTopic)},
 	})
 	if err != nil {
 		return err
 	}
-	c.topicCallbacks[topic] = append(c.topicCallbacks[topic], callback)
+	// TODO: Remove all TopicData instances related to this subscription
+	delete(c.subs, subscriptionTopic)
 	return nil
 }

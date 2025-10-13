@@ -143,6 +143,30 @@ func (r *Registry) FindActiveNetworkServiceChainByGlobalID(globalChainID string)
 	return &chain, nil
 }
 
+func (r *Registry) FindActiveNodeByGlobalID(globalNodeID string) (*models.Worker, error) {
+	var node models.Worker
+	if err := r.dbHandle.First(&node, "global_id = ? AND status = ?", globalNodeID, models.WorkerStatusActive).Error; err != nil {
+		return nil, fmt.Errorf("node with global ID %s not found: %w", globalNodeID, err)
+	}
+	return &node, nil
+}
+
+func (r *Registry) FindRemoteAppGroupByNodeAndExternalID(nodeID string, groupID string) (*models.RemoteAppGroup, error) {
+	var group models.RemoteAppGroup
+	if err := r.dbHandle.First(&group, "node_id = ? AND external_group_id = ?", nodeID, groupID).Error; err != nil {
+		return nil, fmt.Errorf("remote app group with node ID %s and external ID %s not found: %w", nodeID, groupID, err)
+	}
+	return &group, nil
+}
+
+func (r *Registry) FindRemoteVnfGroupByNodeAndExternalID(nodeID string, groupID string) (*models.RemoteVnfGroup, error) {
+	var group models.RemoteVnfGroup
+	if err := r.dbHandle.First(&group, "node_id = ? AND external_group_id = ?", nodeID, groupID).Error; err != nil {
+		return nil, fmt.Errorf("remote VNF group with node ID %s and external ID %s not found: %w", nodeID, groupID, err)
+	}
+	return &group, nil
+}
+
 func (r *Registry) SaveApp(app *models.Application) error {
 	if err := r.dbHandle.Create(app).Error; err != nil {
 		return fmt.Errorf("failed to save application: %w", err)
@@ -206,6 +230,15 @@ func (r *Registry) SaveRoute(route *models.Route) error {
 	return nil
 }
 
+func (r *Registry) SaveRemoteAppInstances(instances []*models.RemoteAppInstance) error {
+	for _, instance := range instances {
+		if err := r.dbHandle.Create(instance).Error; err != nil {
+			return fmt.Errorf("failed to save remote app instance: %w", err)
+		}
+	}
+	return nil
+}
+
 func (r *Registry) RemoveAppInstanceByContainerID(containerID string) error {
 	if err := r.dbHandle.Delete(&models.AppInstance{}, "container_id = ?", containerID).Error; err != nil {
 		return fmt.Errorf("failed to remove app instance with container ID %s: %w", containerID, err)
@@ -255,6 +288,16 @@ func (r *Registry) RemoveAllRoutes() error {
 	return nil
 }
 
+func (r *Registry) RemoveRemoteAppGroupsByID(ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := r.dbHandle.Delete(&models.RemoteAppGroup{}, "id IN ?", ids).Error; err != nil {
+		return fmt.Errorf("failed to remove remote app groups by IDs %v: %w", ids, err)
+	}
+	return nil
+}
+
 func (r *Registry) SaveRoutes(routes []*models.Route) error {
 	for _, route := range routes {
 		if err := r.SaveRoute(route); err != nil {
@@ -269,6 +312,79 @@ func (r *Registry) SaveRouteStages(routeStages []*models.RouteStage) error {
 		if err := r.dbHandle.Create(stage).Error; err != nil {
 			return fmt.Errorf("failed to save route stage: %w", err)
 		}
+	}
+	return nil
+}
+
+func (r *Registry) SaveRemoteAppGroup(group *models.RemoteAppGroup) error {
+	if err := r.dbHandle.Create(group).Error; err != nil {
+		return fmt.Errorf("failed to save remote app group: %w", err)
+	}
+	return nil
+}
+
+func (r *Registry) SaveRemoteVnfGroup(group *models.RemoteVnfGroup) error {
+	if err := r.dbHandle.Create(group).Error; err != nil {
+		return fmt.Errorf("failed to save remote VNF group: %w", err)
+	}
+	return nil
+}
+
+func (r *Registry) SaveNode(node *models.Worker) error {
+	if err := r.dbHandle.Create(node).Error; err != nil {
+		return fmt.Errorf("failed to save node: %w", err)
+	}
+	return nil
+}
+
+func (r *Registry) MarkAppAsDeleted(globalID string) error {
+	if err := r.dbHandle.Model(&models.Application{}).Where("global_id = ? AND status = ?", globalID, models.AppStatusActive).Update("status", models.AppStatusDeletionPending).Error; err != nil {
+		return fmt.Errorf("failed to mark application %s as deleted: %w", globalID, err)
+	}
+	return nil
+}
+
+func (r *Registry) MarkVnfAsDeleted(globalID string) error {
+	if err := r.dbHandle.Model(&models.VirtualNetworkFunction{}).Where("global_id = ? AND status = ?", globalID, models.VNFStatusActive).Update("status", models.VNFStatusDeletionPending).Error; err != nil {
+		return fmt.Errorf("failed to mark VNF %s as deleted: %w", globalID, err)
+	}
+	return nil
+}
+
+func (r *Registry) MarkServiceChainAsDeleted(globalID string) error {
+	if err := r.dbHandle.Model(&models.ServiceChain{}).Where("global_id = ? AND status = ?", globalID, models.ServiceChainStatusActive).Update("status", models.ServiceChainStatusDeletionPending).Error; err != nil {
+		return fmt.Errorf("failed to mark service chain %s as deleted: %w", globalID, err)
+	}
+	return nil
+}
+
+func (r *Registry) MarkNodeAsDeleted(globalID string) error {
+	if err := r.dbHandle.Model(&models.Worker{}).Where("global_id = ? AND status = ?", globalID, models.WorkerStatusActive).Update("status", models.WorkerStatusInactive).Error; err != nil {
+		return fmt.Errorf("failed to mark node %s as deleted: %w", globalID, err)
+	}
+	return nil
+}
+
+func (r *Registry) RemoveRemoteAppInstancesByIP(ips []string, groupID uuid.UUID) error {
+	if len(ips) == 0 {
+		return nil
+	}
+	if err := r.dbHandle.Delete(&models.RemoteAppInstance{}, "group_id = ? AND ip IN ?", groupID, ips).Error; err != nil {
+		return fmt.Errorf("failed to remove remote app instances by IPs %v: %w", ips, err)
+	}
+	return nil
+}
+
+func (r *Registry) RemoveRemoteAppGroupsByGlobalAppID(globalAppID string) error {
+	if err := r.dbHandle.Delete(&models.RemoteAppGroup{}, "app_id = ?", globalAppID).Error; err != nil {
+		return fmt.Errorf("failed to remove remote app groups for App ID %s: %w", globalAppID, err)
+	}
+	return nil
+}
+
+func (r *Registry) RemoveRemoteVnfGroupsByGlobalVnfID(globalVnfID string) error {
+	if err := r.dbHandle.Delete(&models.RemoteVnfGroup{}, "vnf_id = ?", globalVnfID).Error; err != nil {
+		return fmt.Errorf("failed to remove remote VNF groups for VNF ID %s: %w", globalVnfID, err)
 	}
 	return nil
 }

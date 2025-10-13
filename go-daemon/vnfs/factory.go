@@ -6,15 +6,17 @@ import (
 	"iml-daemon/helpers"
 	"iml-daemon/models"
 	"iml-daemon/services/events"
+	"iml-daemon/services/iml"
 )
 
 type InstanceFactory struct {
 	repo        *db.Registry
 	bus         *events.EventBus
 	ipAllocator *helpers.IPAllocator
+	imlClient   *iml.Client
 }
 
-func NewInstanceFactory(repo *db.Registry, bus *events.EventBus, ipAllocator *helpers.IPAllocator) (*InstanceFactory, error) {
+func NewInstanceFactory(repo *db.Registry, bus *events.EventBus, ipAllocator *helpers.IPAllocator, imlClient *iml.Client) (*InstanceFactory, error) {
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
@@ -29,13 +31,14 @@ func NewInstanceFactory(repo *db.Registry, bus *events.EventBus, ipAllocator *he
 		repo:        repo,
 		bus:         bus,
 		ipAllocator: ipAllocator,
+		imlClient:   imlClient,
 	}, nil
 }
 
 func (f *InstanceFactory) NewLocalInstance(nfUID string, containerID string, ifaceName string) (*models.VnfInstance, error) {
-	vnf, err := f.repo.FindActiveNetworkFunctionByGlobalID(nfUID)
+	vnf, err := f.imlClient.GetNetworkFunction(nfUID)
 	if err != nil {
-		return nil, fmt.Errorf("network function %s not found: %v", nfUID, err)
+		return nil, fmt.Errorf("failed to get VNF %s: %v", nfUID, err)
 	}
 
 	vnfGroup, _ := f.repo.FindLocalVnfGroupByVnfID(nfUID)

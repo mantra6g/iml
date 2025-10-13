@@ -5,15 +5,17 @@ import (
 	"iml-daemon/db"
 	"iml-daemon/models"
 	"iml-daemon/services/events"
+	"iml-daemon/services/iml"
 	"net"
 )
 
 type InstanceFactory struct {
 	repo *db.Registry
 	bus  *events.EventBus
+	imlClient *iml.Client
 }
 
-func NewInstanceFactory(repo *db.Registry, bus *events.EventBus) (*InstanceFactory, error) {
+func NewInstanceFactory(repo *db.Registry, bus *events.EventBus, imlClient *iml.Client) (*InstanceFactory, error) {
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
@@ -24,13 +26,14 @@ func NewInstanceFactory(repo *db.Registry, bus *events.EventBus) (*InstanceFacto
 	return &InstanceFactory{
 		repo: repo,
 		bus:  bus,
+		imlClient: imlClient,
 	}, nil
 }
 
 func (f *InstanceFactory) NewLocalInstance(appUID string, instanceIP *net.IPNet, containerID string, ifaceName string) (*models.AppInstance, error) {
-	app, err := f.repo.FindActiveAppByGlobalID(appUID)
+	app, err := f.imlClient.GetApplication(appUID)
 	if err != nil {
-		return nil, fmt.Errorf("application %s not found: %v", appUID, err)
+		return nil, fmt.Errorf("failed to get application %s: %v", appUID, err)
 	}
 
 	appGroup, _ := f.repo.FindLocalAppGroupByGlobalID(appUID)
