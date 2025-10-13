@@ -24,6 +24,10 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 		&models.ServiceChainVnfs{},
 		&models.RouteStage{},
 		&models.Route{},
+		&models.Worker{},
+		&models.RemoteAppGroup{},
+		&models.RemoteAppInstance{},
+		&models.RemoteVnfGroup{},
 	)
 
 	// Setup many-to-many relationship for Route and Segment

@@ -18,6 +18,7 @@ type GlobalConfig struct {
 	NFSubnet   *net.IPNet
 	NFRouterAppIP string
 	NFRouterVNFIP string
+	NodeID		    string
 }
 
 // Singleton instance of GlobalConfig
@@ -51,7 +52,13 @@ func (e *GlobalConfig) getSubnetFromIML() error {
 func RequestConfigFromIML() (*GlobalConfig, error) {
 	env := &GlobalConfig{}
 
-	err := env.getSubnetFromIML()
+	nodeID, err := K8sGetNodeID()
+	if err != nil {
+		return nil, fmt.Errorf("error getting node ID: %w", err)
+	}
+	env.NodeID = nodeID
+
+	err = env.getSubnetFromIML()
 	if err != nil {
 		return nil, fmt.Errorf("error getting subnet from IML: %w", err)
 	}

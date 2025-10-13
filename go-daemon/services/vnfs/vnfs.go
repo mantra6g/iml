@@ -20,14 +20,6 @@ func (svc *VnfService) RegisterLocalVnfInstance(request *VnfInstanceRegistration
 		return vnfInstance, nil
 	}
 
-	// Get the VNF definition
-	vnf, _ := svc.getVNFDefinition(request.VnfID)
-	if vnf == nil {
-		return nil, services.Errorf(
-			http.StatusNotFound,
-			"VNF %s not found", request.VnfID)
-	}
-
 	// Generate an interface name for the VNF instance
 	ifaceName, err := helpers.GenerateUniqueInterfaceName(request.ContainerID)
 	if err != nil {
@@ -44,17 +36,6 @@ func (svc *VnfService) RegisterLocalVnfInstance(request *VnfInstanceRegistration
 	}
 
 	return instance, nil
-}
-
-func (svc *VnfService) getVNFDefinition(id string) (*models.VirtualNetworkFunction, error) {
-	// First, check if the VNF is already in the local registry
-	vnf, err := svc.registry.FindActiveNetworkFunctionByGlobalID(id)
-	if err == nil {
-		return vnf, nil
-	}
-
-	// If not, then subscribe to it from IML.
-	return svc.imlClient.PullNetworkFunction(id)
 }
 
 func (r *VnfService) TeardownVnfInstance(request *VnfInstanceTeardownRequest) services.Error {

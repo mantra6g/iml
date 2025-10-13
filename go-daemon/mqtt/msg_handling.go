@@ -1,235 +1,386 @@
 package mqtt
 
 import (
+	"encoding/json"
 	"iml-daemon/logger"
-	"strings"
 
 	"github.com/eclipse/paho.golang/paho"
+	diff "github.com/r3labs/diff"
 )
 
+func (c *Client) handleAppDefinitionUpdateMessage(pkt *paho.Publish) {
+	logger.DebugLogger().Printf("Handling APP definition message on topic %s: %s\n", pkt.Topic, string(pkt.Payload))
 
-type TopicType int
-const (
-	TOPIC_TYPE_DEFINITION TopicType = iota
-	TOPIC_TYPE_SERVICES
-	//TOPIC_TYPE_INSTANCES
+	topicObj, err := ParseApplicationDefinitionTopic(pkt.Topic)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to parse APP definition topic %s: %v\n", pkt.Topic, err)
+		return
+	}
 
-	TOPIC_TYPE_UNKNOWN
-)
+	sub, exists := c.subs[topicObj.SubscriptionTopic()]
+	if !exists {
+		logger.ErrorLogger().Printf("possible bug: message arrived to topic %s but no subscription found\n", pkt.Topic)
+		return
+	}
 
-type TopicObject int
-const (
-	TOPIC_OBJECT_APP TopicObject = iota
-	TOPIC_OBJECT_VNF
-	TOPIC_OBJECT_SERVICE_CHAIN
+	topicData, exists := c.topics[topicObj.DataTopic()]
+	if !exists {
+		topicData = TopicData{
+			lastMessage: nil,
+		}
+		c.topics[topicObj.DataTopic()] = topicData
+		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", pkt.Topic)
+	}
 
-	TOPIC_OBJECT_UNKNOWN
-)
+	var newMsg ApplicationDefinition
+	err = json.Unmarshal(pkt.Payload, &newMsg)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to unmarshal APP definition message on topic %s: %v\n", pkt.Topic, err)
+		return
+	}
 
-func (c *Client) messageHandler(data paho.PublishReceived) (bool, error) {
-	logger.DebugLogger().Printf("Received message on topic %s: %s\n", data.Packet.Topic, string(data.Packet.Payload))
+	if topicData.lastMessage != nil && newMsg.Seq <= topicData.lastMessage.GetSeq() {
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate APP definition message on topic %s: last seq %d, new seq %d\n", pkt.Topic, topicData.lastMessage.GetSeq(), newMsg.Seq)
+		return
+	}
 
+	changelog := diff.Changelog{}
+	if topicData.lastMessage != nil {
+		changelog, err = diff.Diff(topicData.lastMessage, newMsg)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new APP definition message on topic %s: %v\n", pkt.Topic, err)
+		}
+	}
 
-	switch parseTopicType(data.Packet.Topic) {
-	// Handle different topics here
-	case TOPIC_TYPE_DEFINITION:
-		return c.handleDefinitionMessage(data)
-	case TOPIC_TYPE_SERVICES:
-		return c.handleServicesMessage(data)
-	//case TOPIC_TYPE_INSTANCES:
-		// return handleInstancesMessage(data)
+	switch newMsg.Status {
+	case "deleted":
+		go sub.onDelete(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = nil
+		delete(c.topics, topicObj.DataTopic()) // Remove the topic data since the object is deleted
+	case "active":
+		go sub.onUpdate(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = &newMsg
 	default:
-		logger.DebugLogger().Printf("No handler for topic %s\n", data.Packet.Topic)
+		logger.ErrorLogger().Printf("unknown status '%s' in APP definition message on topic %s\n", newMsg.Status, pkt.Topic)
 	}
-
-	return true, nil
 }
 
-// Takes in a topic string and returns the TopicType
-//
-// E.g., "apps/{id}/definition" -> TOPIC_TYPE_DEFINITION
-//
-// In case the topic does not match any known patterns, returns TOPIC_TYPE_UNKNOWN
-func parseTopicType(topic string) TopicType {
-	parts := strings.Split(topic, "/")
+func (c *Client) handleVNFDefinitionUpdateMessage(pkt *paho.Publish) {
+	logger.DebugLogger().Printf("Handling VNF definition message on topic %s: %s\n", pkt.Topic, string(pkt.Payload))
 
-	// TODO: Add handling for other topics like
-	// nodes/{node_id}/apps/{app_id}/instances
-	if len(parts) != 3 {
-		return TOPIC_TYPE_UNKNOWN
+	topicObj, err := ParseVNFDefinitionTopic(pkt.Topic)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to parse VNF definition topic %s: %v\n", pkt.Topic, err)
+		return
 	}
 
-	switch parts[2] {
-	case "definition":
-		return TOPIC_TYPE_DEFINITION
-	case "services":
-		return TOPIC_TYPE_SERVICES
-	//case "instances":
-		// return TOPIC_TYPE_INSTANCES
+	sub, exists := c.subs[topicObj.SubscriptionTopic()]
+	if !exists {
+		logger.ErrorLogger().Printf("possible bug: message arrived to topic %s but no subscription found\n", pkt.Topic)
+		return
+	}
+
+	topicData, exists := c.topics[topicObj.DataTopic()]
+	if !exists {
+		topicData = TopicData{
+			lastMessage: nil,
+		}
+		c.topics[topicObj.DataTopic()] = topicData
+		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", pkt.Topic)
+	}
+
+	var newMsg NetworkFunctionDefinition
+	err = json.Unmarshal(pkt.Payload, &newMsg)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to unmarshal VNF definition message on topic %s: %v\n", pkt.Topic, err)
+		return
+	}
+
+	if topicData.lastMessage != nil && newMsg.Seq <= topicData.lastMessage.GetSeq() {
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate VNF definition message on topic %s: last seq %d, new seq %d\n", pkt.Topic, topicData.lastMessage.GetSeq(), newMsg.Seq)
+		return
+	}
+
+	changelog := diff.Changelog{}
+	if topicData.lastMessage != nil {
+		changelog, err = diff.Diff(topicData.lastMessage, newMsg)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new VNF definition message on topic %s: %v\n", pkt.Topic, err)
+		}
+	}
+
+	switch newMsg.Status {
+	case "deleted":
+		go sub.onDelete(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = nil
+		delete(c.topics, topicObj.DataTopic()) // Remove the topic data since the object is deleted
+	case "active":
+		go sub.onUpdate(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = &newMsg
 	default:
-		return TOPIC_TYPE_UNKNOWN
+		logger.ErrorLogger().Printf("unknown status '%s' in VNF definition message on topic %s\n", newMsg.Status, pkt.Topic)
 	}
 }
 
-// Takes in a topic string and returns a TopicObject
-//
-// E.g., "apps/{id}/definition" -> TOPIC_OBJECT_APP
-//
-// In case the topic does not match any known patterns, returns TOPIC_OBJECT_UNKNOWN
-func parseTopicObject(topic string) TopicObject {
-	parts := strings.Split(topic, "/")
+func (c *Client) handleAppServicesUpdateMessage(pkt *paho.Publish) {
+	logger.DebugLogger().Printf("Handling APP services message on topic %s: %s\n", pkt.Topic, string(pkt.Payload))
 
-	if len(parts) != 3 {
-		return TOPIC_OBJECT_UNKNOWN
+	topicObj, err := ParseApplicationServicesTopic(pkt.Topic)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to parse APP services topic %s: %v\n", pkt.Topic, err)
+		return
 	}
 
-	switch parts[0] {
-	case "apps":
-		return TOPIC_OBJECT_APP
-	case "vnfs":
-		return TOPIC_OBJECT_VNF
-	case "chains":
-		return TOPIC_OBJECT_SERVICE_CHAIN
+	sub, exists := c.subs[topicObj.SubscriptionTopic()]
+	if !exists {
+		logger.ErrorLogger().Printf("possible bug: message arrived to topic %s but no subscription found\n", pkt.Topic)
+		return
+	}
+
+	topicData, exists := c.topics[topicObj.DataTopic()]
+	if !exists {
+		topicData = TopicData{
+			lastMessage: nil,
+		}
+		c.topics[topicObj.DataTopic()] = topicData
+		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", pkt.Topic)
+	}
+
+	var newMsg ApplicationServiceChains
+	err = json.Unmarshal(pkt.Payload, &newMsg)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to unmarshal APP services message on topic %s: %v\n", pkt.Topic, err)
+		return
+	}
+
+	if topicData.lastMessage != nil && newMsg.Seq <= topicData.lastMessage.GetSeq() {
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate APP services message on topic %s: last seq %d, new seq %d\n", pkt.Topic, topicData.lastMessage.GetSeq(), newMsg.Seq)
+		return
+	}
+
+	changelog := diff.Changelog{}
+	if topicData.lastMessage != nil {
+		changelog, err = diff.Diff(topicData.lastMessage, newMsg)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new APP services message on topic %s: %v\n", pkt.Topic, err)
+		}
+	}
+
+	switch newMsg.Status {
+	case "deleted":
+		go sub.onDelete(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = nil
+	case "active":
+		go sub.onUpdate(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = &newMsg
 	default:
-		return TOPIC_OBJECT_UNKNOWN
+		logger.ErrorLogger().Printf("unknown status '%s' in APP services message on topic %s\n", newMsg.Status, pkt.Topic)
 	}
 }
 
+func (c *Client) handleAppInstancesMessage(pkt *paho.Publish) {
+	logger.DebugLogger().Printf("Handling APP instances message on topic %s: %s\n", pkt.Topic, string(pkt.Payload))
 
+	topicObj, err := ParseRemoteAppGroupInstancesTopic(pkt.Topic)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to parse APP instances topic %s: %v\n", pkt.Topic, err)
+		return
+	}
 
-// Takes in the data from a definition message
-func (c *Client) handleDefinitionMessage(data paho.PublishReceived) (bool, error) {
+	sub, exists := c.subs[topicObj.SubscriptionTopic()]
+	if !exists {
+		logger.ErrorLogger().Printf("possible bug: message arrived to topic %s but no subscription found\n", pkt.Topic)
+		return
+	}
 
-	switch parseTopicObject(data.Packet.Topic) {
-	case TOPIC_OBJECT_APP:
-		return c.handleAppDefinitionUpdateMessage(data)
-	case TOPIC_OBJECT_VNF:
-		return c.handleVNFDefinitionUpdateMessage(data)
-	case TOPIC_OBJECT_SERVICE_CHAIN:
-		return c.handleServiceChainDefinitionUpdateMessage(data)
+	topicData, exists := c.topics[topicObj.DataTopic()]
+	if !exists {
+		topicData = TopicData{
+			lastMessage: nil,
+		}
+		c.topics[topicObj.DataTopic()] = topicData
+		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", pkt.Topic)
+	}
+
+	var newMsg AppInstances
+	err = json.Unmarshal(pkt.Payload, &newMsg)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to unmarshal APP instances message on topic %s: %v\n", pkt.Topic, err)
+		return
+	}
+
+	if topicData.lastMessage != nil && newMsg.Seq <= topicData.lastMessage.GetSeq() {
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate APP instances message on topic %s: last seq %d, new seq %d\n", pkt.Topic, topicData.lastMessage.GetSeq(), newMsg.Seq)
+		return
+	}
+
+	changelog := diff.Changelog{}
+	if topicData.lastMessage != nil {
+		changelog, err = diff.Diff(topicData.lastMessage, newMsg)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new APP instances message on topic %s: %v\n", pkt.Topic, err)
+		}
+	}
+
+	switch newMsg.Status {
+	case "deleted":
+		go sub.onDelete(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = nil
+	case "active":
+		// TODO: Add support for requeueing updates if needed
+		// For now, we just send the update immediately
+		go sub.onUpdate(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = &newMsg
 	default:
-		logger.DebugLogger().Printf("Unknown object type in topic: %s\n", data.Packet.Topic)
+		logger.ErrorLogger().Printf("unknown status '%s' in APP instances message on topic %s\n", newMsg.Status, pkt.Topic)
 	}
-	return true, nil
 }
 
-func (c *Client) handleServicesMessage(data paho.PublishReceived) (bool, error) {
+func (c *Client) handleVNFInstancesMessage(pkt *paho.Publish) {
+	logger.DebugLogger().Printf("Handling VNF instances message on topic %s: %s\n", pkt.Topic, string(pkt.Payload))
 
-	switch parseTopicObject(data.Packet.Topic) {
-	case TOPIC_OBJECT_APP:
-		return c.handleAppServicesUpdateMessage(data)
+	topicObj, err := ParseRemoteVNFGroupInstancesTopic(pkt.Topic)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to parse VNF instances topic %s: %v\n", pkt.Topic, err)
+		return
+	}
+
+	sub, exists := c.subs[topicObj.SubscriptionTopic()]
+	if !exists {
+		logger.ErrorLogger().Printf("possible bug: message arrived to topic %s but no subscription found\n", pkt.Topic)
+		return
+	}
+
+	topicData, exists := c.topics[topicObj.DataTopic()]
+	if !exists {
+		topicData = TopicData{
+			lastMessage: nil,
+		}
+		c.topics[topicObj.DataTopic()] = topicData
+		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", pkt.Topic)
+	}
+
+	var newMsg VnfInstances
+	err = json.Unmarshal(pkt.Payload, &newMsg)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to unmarshal VNF instances message on topic %s: %v\n", pkt.Topic, err)
+		return
+	}
+
+	if topicData.lastMessage != nil && newMsg.Seq <= topicData.lastMessage.GetSeq() {
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate VNF instances message on topic %s: last seq %d, new seq %d\n", pkt.Topic, topicData.lastMessage.GetSeq(), newMsg.Seq)
+		return
+	}
+
+	changelog := diff.Changelog{}
+	if topicData.lastMessage != nil {
+		changelog, err = diff.Diff(topicData.lastMessage, newMsg)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new VNF instances message on topic %s: %v\n", pkt.Topic, err)
+		}
+	}
+
+	switch newMsg.Status {
+	case "deleted":
+		go sub.onDelete(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = nil
+	case "active":
+		go sub.onUpdate(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = &newMsg
 	default:
-		logger.DebugLogger().Printf("Unknown object type in topic: %s\n", data.Packet.Topic)
+		logger.ErrorLogger().Printf("unknown status '%s' in VNF instances message on topic %s\n", newMsg.Status, pkt.Topic)
 	}
-	return true, nil
 }
 
-// func handleInstancesMessage(data paho.PublishReceived) {
-// 	switch parseTopicObject(data.Packet.Topic) {
-// 	case TOPIC_OBJECT_APP:
-// 		// Handle APP instances update
-// 	case TOPIC_OBJECT_VNF:
-// 		// Handle VNF instances update
-// 	case TOPIC_OBJECT_SERVICE_CHAIN:
-// 		// Handle Service Chain instances update
-// 	default:
-// 		logger.DebugLogger().Printf("Unknown object type in topic: %s\n", data.Packet.Topic)
-// 		return
-// 	}
-// }
+func (c *Client) handleServiceChainDefinitionUpdateMessage(pkt *paho.Publish) {
+	logger.DebugLogger().Printf("Handling Service Chain definition message on topic %s: %s\n", pkt.Topic, string(pkt.Payload))
 
-func (c *Client) handleAppDefinitionUpdateMessage(data paho.PublishReceived) (bool, error) {
-	logger.DebugLogger().Printf("Handling APP definition message on topic %s: %s\n", data.Packet.Topic, string(data.Packet.Payload))
-
-	// Search for all callbacks and call them
-	ExactMatchCallbacks, existsExactMatch := c.topicCallbacks[data.Packet.Topic]
-	WildcardMatchCallbacks, existsWildcardMatch := c.topicCallbacks["apps/+/definition"]
-	if !existsExactMatch && !existsWildcardMatch {
-		logger.DebugLogger().Printf("No callback registered for topic %s\n", data.Packet.Topic)
-		return true, nil
+	topicObj, err := ParseServiceChainDefinitionTopic(pkt.Topic)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to parse Service Chain definition topic %s: %v\n", pkt.Topic, err)
+		return
 	}
 
-	if existsExactMatch {
-		for _, callback := range ExactMatchCallbacks {
-			callback(data.Packet)
+	sub, exists := c.subs[topicObj.SubscriptionTopic()]
+	if !exists {
+		logger.ErrorLogger().Printf("possible bug: message arrived to topic %s but no subscription found\n", pkt.Topic)
+		return
+	}
+
+	topicData, exists := c.topics[topicObj.DataTopic()]
+	if !exists {
+		topicData = TopicData{
+			lastMessage: nil,
+		}
+		c.topics[topicObj.DataTopic()] = topicData
+		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", pkt.Topic)
+	}
+
+	var newMsg ServiceChainDefinition
+	err = json.Unmarshal(pkt.Payload, &newMsg)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to unmarshal Service Chain definition message on topic %s: %v\n", pkt.Topic, err)
+		return
+	}
+
+	if topicData.lastMessage != nil && newMsg.Seq <= topicData.lastMessage.GetSeq() {
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate Service Chain definition message on topic %s: last seq %d, new seq %d\n", pkt.Topic, topicData.lastMessage.GetSeq(), newMsg.Seq)
+		return
+	}
+
+	changelog := diff.Changelog{}
+	if topicData.lastMessage != nil {
+		changelog, err = diff.Diff(topicData.lastMessage, newMsg)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new Service Chain definition message on topic %s: %v\n", pkt.Topic, err)
 		}
 	}
-	if existsWildcardMatch {
-		for _, callback := range WildcardMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	return true, nil
-}
 
-func (c *Client) handleAppServicesUpdateMessage(data paho.PublishReceived) (bool, error) {
-	logger.DebugLogger().Printf("Handling APP services message on topic %s: %s\n", data.Packet.Topic, string(data.Packet.Payload))
-
-	// Search for all callbacks and call them
-	ExactMatchCallbacks, existsExactMatch := c.topicCallbacks[data.Packet.Topic]
-	WildcardMatchCallbacks, existsWildcardMatch := c.topicCallbacks["apps/+/services"]
-	if !existsExactMatch && !existsWildcardMatch {
-		logger.DebugLogger().Printf("No callback registered for topic %s\n", data.Packet.Topic)
-		return true, nil
+	switch newMsg.Status {
+	case "deleted":
+		go sub.onDelete(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = nil
+		delete(c.topics, topicObj.DataTopic()) // Remove the topic data since the object is deleted
+	case "active":
+		go sub.onUpdate(TopicUpdate{
+			NewMessage: &newMsg,
+			ChangeLog:  changelog,
+		})
+		topicData.lastMessage = &newMsg
+	default:
+		logger.ErrorLogger().Printf("unknown status '%s' in Service Chain definition message on topic %s\n", newMsg.Status, pkt.Topic)
 	}
-
-	if existsExactMatch {
-		for _, callback := range ExactMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	if existsWildcardMatch {
-		for _, callback := range WildcardMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	return true, nil
-}
-
-func (c *Client) handleVNFDefinitionUpdateMessage(data paho.PublishReceived) (bool, error) {
-	logger.DebugLogger().Printf("Handling VNF definition message on topic %s: %s\n", data.Packet.Topic, string(data.Packet.Payload))
-
-	// Search for all callbacks and call them
-	ExactMatchCallbacks, existsExactMatch := c.topicCallbacks[data.Packet.Topic]
-	WildcardMatchCallbacks, existsWildcardMatch := c.topicCallbacks["nfs/+/definition"]
-	if !existsExactMatch && !existsWildcardMatch {
-		logger.DebugLogger().Printf("No callback registered for topic %s\n", data.Packet.Topic)
-		return true, nil
-	}
-
-	if existsExactMatch {
-		for _, callback := range ExactMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	if existsWildcardMatch {
-		for _, callback := range WildcardMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	return true, nil
-}
-
-func (c *Client) handleServiceChainDefinitionUpdateMessage(data paho.PublishReceived) (bool, error) {
-	logger.DebugLogger().Printf("Handling Service Chain definition message on topic %s: %s\n", data.Packet.Topic, string(data.Packet.Payload))
-
-	// Search for all callbacks and call them
-	ExactMatchCallbacks, existsExactMatch := c.topicCallbacks[data.Packet.Topic]
-	WildcardMatchCallbacks, existsWildcardMatch := c.topicCallbacks["chains/+/definition"]
-	if !existsExactMatch && !existsWildcardMatch {
-		logger.DebugLogger().Printf("No callback registered for topic %s\n", data.Packet.Topic)
-		return true, nil
-	}
-
-	if existsExactMatch {
-		for _, callback := range ExactMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	if existsWildcardMatch {
-		for _, callback := range WildcardMatchCallbacks {
-			callback(data.Packet)
-		}
-	}
-	return true, nil
 }

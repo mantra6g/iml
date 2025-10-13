@@ -19,6 +19,7 @@ const (
 	RemoteVnfGroupsDep
 	AppServicesDep
 	ServiceChainDep
+	NodeDep
 )
 
 type DependencyKey struct {
@@ -406,3 +407,32 @@ func (d *ServiceChainDependency) PreRemove(mgr *SubscriptionManager) error  {
 	return nil
 }
 func (d *ServiceChainDependency) PostRemove(mgr *SubscriptionManager) error { return nil }
+
+
+
+
+type NodeDependency struct {
+	DependencyBase
+	NodeID string
+}
+func (d *NodeDependency) Key() DependencyKey {
+	return DependencyKey{ID: d.NodeID, Type: LocalAppDep}
+}
+func (d *NodeDependency) PreAdd(mgr *SubscriptionManager) error     { return nil }
+func (d *NodeDependency) PostAdd(mgr *SubscriptionManager) error		{
+	err := mgr.addSubscription(&NodeSubscription{NodeID: d.NodeID})
+	if err != nil {
+		return fmt.Errorf("NodeDependency.PostAdd: failed to add NodeSubscription for NodeID %s: %w", d.NodeID, err)
+	}
+	return nil
+}
+func (d *NodeDependency) PreRemove(mgr *SubscriptionManager) error  {
+	err := mgr.removeSubscription(&NodeSubscription{NodeID: d.NodeID})
+	if err != nil {
+		return fmt.Errorf("NodeDependency.PreRemove: failed to remove NodeSubscription for NodeID %s: %w", d.NodeID, err)
+	}
+	return nil
+}
+func (d *NodeDependency) PostRemove(mgr *SubscriptionManager) error {
+	return nil
+}

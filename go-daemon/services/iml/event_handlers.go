@@ -4,6 +4,7 @@ import (
 	"iml-daemon/logger"
 	"iml-daemon/models"
 	"iml-daemon/services/events"
+	"iml-daemon/services/iml/subscriptions"
 )
 
 func (c *Client) handleLocalAppGroupCreated(event events.Event) {
@@ -13,9 +14,12 @@ func (c *Client) handleLocalAppGroupCreated(event events.Event) {
 		return
 	}
 
-	c.graph.Subscribe(appGroup.ID.String(), &LocalAppGroup{
+	err := c.manager.AddDependency(&subscriptions.LocalAppDependency{
 		AppID: appGroup.AppID.String(),
 	})
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalAppGroupCreated: error adding local app group dependency: %v", err)
+	}
 }
 
 func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
@@ -25,9 +29,12 @@ func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
 		return
 	}
 
-	c.graph.RemoveDependent(appGroup.ID.String(), &LocalAppGroup{
+	err := c.manager.RemoveDependency(&subscriptions.LocalAppDependency{
 		AppID: appGroup.AppID.String(),
 	})
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalAppGroupRemoved: error removing local app group dependency: %v", err)
+	}
 }
 
 func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
@@ -37,9 +44,12 @@ func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
 		return
 	}
 
-	c.graph.AddDependent(vnfGroup.ID.String(), &LocalVnfGroup{
+	err := c.manager.AddDependency(&subscriptions.LocalVnfDependency{
 		VnfID: vnfGroup.VnfID.String(),
 	})
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupCreated: error adding local vnf group dependency: %v", err)
+	}
 }
 
 func (c *Client) handleLocalVnfGroupRemoved(event events.Event) {
@@ -49,7 +59,10 @@ func (c *Client) handleLocalVnfGroupRemoved(event events.Event) {
 		return
 	}
 
-	c.graph.RemoveDependent(vnfGroup.ID.String(), &LocalVnfGroup{
+	err := c.manager.RemoveDependency(&subscriptions.LocalVnfDependency{
 		VnfID: vnfGroup.VnfID.String(),
 	})
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupRemoved: error removing local vnf group dependency: %v", err)
+	}
 }
