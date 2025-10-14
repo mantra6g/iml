@@ -14,7 +14,7 @@ type VirtualNetworkFunction struct {
 	ID       uuid.UUID  `gorm:"primaryKey"`
 	GlobalID string
 	Status   string     `gorm:"index:status,default:ACTIVE"`
-	Etag	 int
+	Etag	   int
 	Groups   []VnfGroup `gorm:"foreignKey:vnf_id"`
 }
 

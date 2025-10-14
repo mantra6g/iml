@@ -10,7 +10,7 @@ type RemoteAppGroup struct {
 	NodeID          uuid.UUID
 	AppID           uuid.UUID
 	ExternalGroupID string
-	Instances       []RemoteAppInstance `gorm:"foreignKey:GroupID;references:GroupID;constraint:OnDelete:CASCADE"`
+	Instances       []RemoteAppInstance `gorm:"foreignKey:group_id;references:group_id;constraint:OnDelete:CASCADE"`
 }
 
 func (RemoteAppGroup) BeforeCreate(tx *gorm.DB) (err error) {
