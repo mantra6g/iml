@@ -21,7 +21,7 @@ func K8sGetNodeID() (string, error) {
 	}
 	
 	// Step 3: Get pod name and namespace from env vars
-	podName := os.Getenv("HOSTNAME") // Kubernetes sets this to the pod name by default
+	podName := os.Getenv("POD_NAME") // Kubernetes sets this to the pod name by default
 	namespace := os.Getenv("POD_NAMESPACE")
 	if namespace == "" {
 		// If you didn’t set POD_NAMESPACE explicitly, use the default service account namespace

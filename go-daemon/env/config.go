@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-const IML_ADDR  = "updates-service.desire6g-system.svc.cluster.local"
+const IML_ADDR  = "iml-updates-service.desire6g-system.svc.cluster.local"
 const API_PORT  = "1810"
 const MQTT_PORT = "1816" 
 const API_URL   = "http://" + IML_ADDR + ":" + API_PORT
@@ -34,7 +34,7 @@ type controllerResponse struct {
 var globalConfig *GlobalConfig
 
 func (e *GlobalConfig) getSubnetFromIML() error {
-	resp, err := http.Get(IML_ADDR + "/api/v1/nodemanager/subnet")
+	resp, err := http.Get(API_URL + "/api/v1/nodemanager/subnet")
 	if err != nil {
 		return fmt.Errorf("failed contacting IML: %w", err)
 	}

@@ -19,7 +19,7 @@ type ServiceChain struct {
 	DstAppID uuid.UUID
 	SrcApp   Application `gorm:"foreignKey:src_app_id"`
 	DstApp   Application `gorm:"foreignKey:dst_app_id"`
-	Elements []ServiceChainVnfs `gorm:"foreignKey:network_service_chain_id"`
+	Elements []ServiceChainVnfs `gorm:"foreignKey:chain_id"`
 }
 
 func (ServiceChain) BeforeCreate(tx *gorm.DB) (err error) {

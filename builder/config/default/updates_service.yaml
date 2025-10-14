@@ -11,12 +11,12 @@ spec:
   ports:
   - name: http
     protocol: TCP
-    port: 80
-    targetPort: 1810
+    port: 1810
+    targetPort: 3267
   - name: mqtt
     protocol: TCP
-    port: 1883
-    targetPort: 1816
+    port: 1816
+    targetPort: 1883
   selector:
     control-plane: controller-manager
     app.kubernetes.io/name: builder

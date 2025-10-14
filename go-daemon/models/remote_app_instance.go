@@ -8,6 +8,7 @@ import (
 type RemoteAppInstance struct {
 	ID      uuid.UUID `gorm:"primaryKey"`
 	GroupID uuid.UUID
+	Group   RemoteAppGroup `gorm:"foreignKey:group_id"`
 	IP      string // in "IP/prefix" format
 }
 
