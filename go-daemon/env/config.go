@@ -17,8 +17,8 @@ type GlobalConfig struct {
 	ClusterCIDR *net.IPNet
 	AppSubnet   *net.IPNet
 	NFSubnet    *net.IPNet
-	NFRouterAppIP *net.IP
-	NFRouterVNFIP *net.IP
+	NFRouterAppIP *net.IPNet
+	NFRouterVNFIP *net.IPNet
 	NodeID		    string
 }
 
@@ -52,8 +52,14 @@ func (e *GlobalConfig) getSubnetFromIML() error {
 	e.AppSubnet = &subnetResponse.AppSubnet
 	e.NFSubnet = &subnetResponse.NFSubnet
 	e.ClusterCIDR = &subnetResponse.ClusterCIDR
-	e.NFRouterAppIP = &subnetResponse.NFRouterAppIP
-	e.NFRouterVNFIP = &subnetResponse.NFRouterVNFIP
+	e.NFRouterAppIP = &net.IPNet{
+		IP: subnetResponse.NFRouterAppIP,
+		Mask: e.AppSubnet.Mask,
+	}
+	e.NFRouterVNFIP = &net.IPNet{
+		IP: subnetResponse.NFRouterVNFIP,
+		Mask: e.NFSubnet.Mask,
+	}
 	return nil
 }
 
@@ -72,6 +78,7 @@ func RequestConfigFromIML() (*GlobalConfig, error) {
 		return nil, fmt.Errorf("error getting subnet from IML: %w", err)
 	}
 
+	globalConfig = env
 	return env, nil
 }
 

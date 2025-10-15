@@ -70,9 +70,9 @@ func (c *SouthboundAPIController) handleSubnetRequest(w http.ResponseWriter, r *
 		ClusterCIDR: c.ClusterCIDR.IPNet,
 		AppSubnet: appnet.IPNet,
 		NFSubnet:  nfnet.IPNet,
-		NFRouterAppIP: appnet.LastAddress(),
-		NFRouterVNFIP: nfnet.LastAddress(),
-	}
+		NFRouterAppIP: appnet.FirstAddress(),
+		NFRouterVNFIP: nfnet.FirstAddress(),
+	}	
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -12,14 +12,17 @@ type NFRouter struct {
 	link netlink.Link
 }
 
-func newNFRouter(appIP string, vnfIP string) (*NFRouter, error) {
-	// Ensure the nfrouter interface does not exist
-	nfrouter, err := netlink.LinkByName("nfrouter")
+func newNFRouter(appIP *net.IPNet, vnfIP *net.IPNet) (*NFRouter, error) {
+	// If the nfrouter interface already exists, remove it
+	nfrouter, _ := netlink.LinkByName("nfrouter")
 	if nfrouter != nil {
-		return nil, fmt.Errorf("NFRouter interface already exists: %w", err)
+		if err := netlink.LinkDel(nfrouter); err != nil {
+			return nil, fmt.Errorf("failed to delete existing nfrouter interface: %w", err)
+		}
 	}
 
 	// Create the nfrouter bridge
+	// ip link add name nfrouter type bridge
 	nfrouter = &netlink.Bridge{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: "nfrouter",
@@ -31,7 +34,7 @@ func newNFRouter(appIP string, vnfIP string) (*NFRouter, error) {
 	}
 
 	// Set the APP domain address on the nfrouter
-	addr, err := netlink.ParseAddr(appIP)
+	addr, err := netlink.ParseAddr(appIP.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse application domain address: %w", err)
 	}
@@ -40,7 +43,7 @@ func newNFRouter(appIP string, vnfIP string) (*NFRouter, error) {
 	}
 
 	// Set the VNF domain address on the nfrouter
-	vnfAddr, err := netlink.ParseAddr(vnfIP)
+	vnfAddr, err := netlink.ParseAddr(vnfIP.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse VNF domain address: %w", err)
 	}

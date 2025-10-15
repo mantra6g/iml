@@ -39,7 +39,7 @@ func New(registry *db.Registry, eventBus *events.EventBus) (*RouterService, erro
 		return nil, fmt.Errorf("failed to get global config: %w", err)
 	}
 
-	nfrInstance, err := newNFRouter(config.NFRouterAppIP.String(), config.NFRouterVNFIP.String())
+	nfrInstance, err := newNFRouter(config.NFRouterAppIP, config.NFRouterVNFIP)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to configure NFRouter: %v", err)
 		return nil, fmt.Errorf("failed to configure NFRouter: %w", err)

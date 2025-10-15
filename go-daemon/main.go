@@ -40,6 +40,7 @@ func main() {
 		logger.ErrorLogger().Printf("Failed to initialize IP allocator: %v", err)
 		panic("Failed to initialize IP allocator: " + err.Error())
 	}
+	appIP.Next() // Skip the first IP, which is reserved for the nfrouter
 
 	// Initialize the IP allocator for the VNFs
 	vnfIP, err := helpers.NewIPAllocator(config.NFSubnet)
@@ -47,6 +48,7 @@ func main() {
 		logger.ErrorLogger().Printf("Failed to initialize IP allocator: %v", err)
 		panic("Failed to initialize IP allocator: " + err.Error())
 	}
+	vnfIP.Next() // Skip the first IP, which is reserved for the nfrouter
 
 	// Initialize the registry
 	registry, err := db.InitializeInMemoryRegistry()
@@ -66,13 +68,9 @@ func main() {
 	}
 
 	subscriptionManager := subscriptions.NewSubscriptionManager(mqttClient, registry)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to create SubscriptionManager: %v", err)
-		panic("Failed to create SubscriptionManager: " + err.Error())
-	}
 
 	// Initialize the IML Client
-	imlClient, err := iml.NewClient(eb, subscriptionManager)
+	imlClient, err := iml.NewClient(eb, registry, subscriptionManager)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize IML client: %v", err)
 		panic("Failed to initialize IML client: " + err.Error())

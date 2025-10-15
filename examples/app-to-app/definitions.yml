@@ -1,0 +1,26 @@
+apiVersion: cache.desire6g.eu/v1alpha1
+kind: Application
+metadata:
+  name: nginx
+  namespace: default
+spec: {}
+---
+apiVersion: cache.desire6g.eu/v1alpha1
+kind: Application
+metadata:
+  name: mongodb
+  namespace: default
+spec: {}
+---
+apiVersion: cache.desire6g.eu/v1alpha1
+kind: ServiceChain
+metadata:
+  name: nginx-mongodb
+  namespace: default
+spec:
+  from:
+    name: nginx
+    namespace: default
+  to:
+    name: mongodb
+    namespace: default
