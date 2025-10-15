@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"iml-daemon/env"
+	"iml-daemon/logger"
 	"iml-daemon/services/apps"
 	"iml-daemon/services/vnfs"
 	"net/http"
@@ -20,9 +21,12 @@ type CNIController struct {
 var validate *validator.Validate
 
 func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWriter, request *http.Request) {
+	logger.InfoLogger().Println("received app instance registration request")
+
 	// First, parse the request body to get the application details
 	var instanceConfigDto AppInstanceConfigRequest
 	if err := json.NewDecoder(request.Body).Decode(&instanceConfigDto); err != nil {
+		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -30,6 +34,8 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	// Validate the request
 	err := validate.Struct(instanceConfigDto)
 	if err != nil {
+		errors := err.(validator.ValidationErrors)
+		logger.ErrorLogger().Printf("failed request validation with errors: %v", errors)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -48,12 +54,14 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	// If the application ID references a non-existent application, return an error.
 	appDetails, errResponse := c.appService.RegisterLocalAppInstance(instanceConfigRequest)
 	if errResponse != nil {
+		logger.ErrorLogger().Printf("failed to register app instance: %+v", errResponse)
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}
 
 	globalConfig, err := env.Config()
 	if err != nil {
+		logger.ErrorLogger().Printf("failed to get global config: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -62,11 +70,12 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 		IPNet:       appDetails.IP,
 		IfaceName:   appDetails.IfaceName,
 		ClusterCIDR: globalConfig.ClusterCIDR.String(),
-		GatewayIP:   globalConfig.NFRouterAppIP.String(),
+		GatewayIP:   globalConfig.NFRouterAppIP.IP.String(),
 	}
 
 	// Finally, return the container details including the allocated IP.
 	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
+		logger.ErrorLogger().Printf("failed to encode response: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -75,9 +84,12 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 }
 
 func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, request *http.Request) {
+	logger.InfoLogger().Println("received app instance teardown request")
+
 	// First, parse the request body to get the container ID
 	var teardownDto AppInstanceTeardownRequest
 	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
+		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -85,6 +97,7 @@ func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, 
 	// Validate the request
 	err := validate.Struct(teardownDto)
 	if err != nil {
+		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -97,6 +110,7 @@ func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, 
 	// Teardown the application instance
 	errResponse := c.appService.TeardownAppInstance(teardownRequest)
 	if errResponse != nil {
+		logger.ErrorLogger().Printf("failed to teardown app instance: %v", errResponse)
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}
@@ -106,9 +120,12 @@ func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, 
 }
 
 func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWriter, request *http.Request) {
+	logger.InfoLogger().Println("received VNF instance registration request")
+
 	// First, parse the request body to get the VNF details
 	var instanceConfigDto VnfInstanceConfigRequest
 	if err := json.NewDecoder(request.Body).Decode(&instanceConfigDto); err != nil {
+		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -116,6 +133,7 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 	// Validate the request
 	err := validate.Struct(instanceConfigDto)
 	if err != nil {
+		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -133,12 +151,14 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 	// If the VNF ID references a non-existent VNF, return an error.
 	vnfDetails, errResponse := c.vnfService.RegisterLocalVnfInstance(instanceConfigRequest)
 	if errResponse != nil {
+		logger.ErrorLogger().Printf("failed to register VNF instance: %v", errResponse)
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}
 
 	globalConfig, err := env.Config()
 	if err != nil {
+		logger.ErrorLogger().Printf("failed to get global config: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -148,11 +168,12 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 		Subnet:      globalConfig.NFSubnet.String(),
 		IfaceName:   vnfDetails.IfaceName,
 		ClusterCIDR: globalConfig.ClusterCIDR.String(),
-		GatewayIP:   globalConfig.NFRouterVNFIP.String(),
+		GatewayIP:   globalConfig.NFRouterVNFIP.IP.String(),
 	}
 
 	// Finally, return the VNF details including the allocated IP.
 	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
+		logger.ErrorLogger().Printf("failed to encode response: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -161,9 +182,12 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 }
 
 func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, request *http.Request) {
+	logger.InfoLogger().Println("received VNF instance teardown request")
+
 	// First, parse the request body to get the container ID
 	var teardownDto VnfInstanceTeardownRequest
 	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
+		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -171,6 +195,7 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 	// Validate the request
 	err := validate.Struct(teardownDto)
 	if err != nil {
+		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -183,6 +208,7 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 	// Teardown the VNF instance
 	errResponse := c.vnfService.TeardownVnfInstance(teardownRequest)
 	if errResponse != nil {
+		logger.ErrorLogger().Printf("failed to teardown VNF instance: %v", errResponse)
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}

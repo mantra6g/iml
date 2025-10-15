@@ -39,7 +39,8 @@ func getLogFile() io.Writer {
 
 func InfoLogger() *log.Logger {
 	infoonce.Do(func() {
-		output := getLogFile()
+		file := getLogFile()
+		output := io.MultiWriter(file, os.Stdout)
 		infologger = log.New(output, "INFO- ", log.Ldate|log.Ltime|log.Lshortfile)
 	})
 	return infologger
@@ -47,7 +48,8 @@ func InfoLogger() *log.Logger {
 
 func ErrorLogger() *log.Logger {
 	erroronce.Do(func() {
-		output := getLogFile()
+		file := getLogFile()
+		output := io.MultiWriter(file, os.Stdout)
 		errorlogger = log.New(output, "ERROR- ", log.Ldate|log.Ltime|log.Lshortfile)
 	})
 	return errorlogger
@@ -55,7 +57,8 @@ func ErrorLogger() *log.Logger {
 
 func DebugLogger() *log.Logger {
 	debugonce.Do(func() {
-		output := getLogFile()
+		file := getLogFile()
+		output := io.MultiWriter(file, os.Stdout)
 		if !debugMode {
 			output = io.Discard
 		}

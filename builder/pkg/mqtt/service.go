@@ -18,7 +18,9 @@ type MQTTService struct {
 
 func Initialize(bus *events.EventBus) (*MQTTService, error) {
 	// Create the new MQTT Server.
-	server := mqtt.New(nil)
+	server := mqtt.New(&mqtt.Options{
+		InlineClient: true,
+	})
 
 	// Allow all connections.
 	err := server.AddHook(new(auth.AllowHook), nil)

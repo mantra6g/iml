@@ -20,15 +20,17 @@ import (
 
 type Client struct {
 	eb   *events.EventBus
-	mqtt *mqtt.Client
 	repo *db.Registry
 
 	manager *subscriptions.SubscriptionManager
 }
 
-func NewClient(eb *events.EventBus, manager *subscriptions.SubscriptionManager) (*Client, error) {
+func NewClient(eb *events.EventBus, repo *db.Registry, manager *subscriptions.SubscriptionManager) (*Client, error) {
 	if eb == nil {
 		return nil, fmt.Errorf("event bus is required")
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("repository is required")
 	}
 	if manager == nil {
 		return nil, fmt.Errorf("subscription manager is required")
@@ -36,6 +38,7 @@ func NewClient(eb *events.EventBus, manager *subscriptions.SubscriptionManager) 
 
 	client := &Client{
 		eb:      eb,
+		repo:    repo,
 		manager: manager,
 	}
 

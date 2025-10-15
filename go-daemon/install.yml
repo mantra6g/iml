@@ -62,6 +62,10 @@ spec:
           image: tomasagata/iml-daemon:latest
           command:
             - ./iml-daemon
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
           resources:
             requests:
               cpu: 1000m

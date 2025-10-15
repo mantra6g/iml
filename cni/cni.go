@@ -373,8 +373,8 @@ func getAppConfigFromIML(payload AppConfigRequest) (*AppConfigResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("received non-200 response: %s", resp.Status)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("received non-2XX response: %s", resp.Status)
 	}
 	var configResponse AppConfigResponse
 	if err := json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
@@ -399,8 +399,8 @@ func getNFConfigFromIML(configRequest NFConfigRequest) (*NFConfigResponse, error
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("received non-200 response: %s", resp.Status)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("received non-2XX response: %s", resp.Status)
 	}
 	var configResponse NFConfigResponse
 	if err := json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
@@ -505,8 +505,8 @@ func notifyIMLOfAppTeardown(request AppTeardownRequest) error {
 		return fmt.Errorf("failed to make HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("received non-200 response: %s", resp.Status)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("received non-2XX response: %s", resp.Status)
 	}
 	logger.InfoLogger().Printf("Successfully notified IML of teardown for app with container id %s\n", request.ContainerID)
 	return nil
@@ -526,8 +526,8 @@ func notifyIMLOfNfTeardown(request NfTeardownRequest) error {
 		return fmt.Errorf("failed to make HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("received non-200 response: %s", resp.Status)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("received non-2XX response: %s", resp.Status)
 	}
 	logger.InfoLogger().Printf("Successfully notified IML of teardown for vnf with container id %s\n", request.ContainerID)
 	return nil
