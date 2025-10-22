@@ -1,6 +1,29 @@
 package mqtt
 
-import "fmt"
+import (
+	"fmt"
+	"iml-daemon/logger"
+	"regexp"
+)
+
+const (
+	UUID_REGEX_STR = "[0-9a-fA-F]{8}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{12}"
+	APP_DEFINITION_TOPIC_STR   = "apps/(" + UUID_REGEX_STR + ")/definition"
+	APP_SERVICES_TOPIC_STR     = "apps/(" + UUID_REGEX_STR + ")/services"
+	APP_INSTANCES_TOPIC_STR    = "apps/(" + UUID_REGEX_STR + ")/nodes/(" + UUID_REGEX_STR + ")/groups/(" + UUID_REGEX_STR + ")"
+	VNF_DEFINITION_TOPIC_STR   = "nfs/(" + UUID_REGEX_STR + ")/definition"
+	VNF_INSTANCES_TOPIC_STR    = "nfs/(" + UUID_REGEX_STR + ")/nodes/(" + UUID_REGEX_STR + ")/groups/(" + UUID_REGEX_STR + ")"
+	CHAIN_DEFINITION_TOPIC_STR = "chains/(" + UUID_REGEX_STR + ")/definition"
+)
+
+var (
+	appDefinitionTopicRegex = regexp.MustCompilePOSIX(APP_DEFINITION_TOPIC_STR)
+	appServicesTopicRegex   = regexp.MustCompilePOSIX(APP_SERVICES_TOPIC_STR)
+	appInstancesTopicRegex  = regexp.MustCompilePOSIX(APP_INSTANCES_TOPIC_STR)
+	vnfDefinitionTopicRegex = regexp.MustCompilePOSIX(VNF_DEFINITION_TOPIC_STR)
+	vnfInstancesTopicRegex  = regexp.MustCompilePOSIX(VNF_INSTANCES_TOPIC_STR)
+	chainDefinitionTopicRegex = regexp.MustCompilePOSIX(CHAIN_DEFINITION_TOPIC_STR)
+)
 
 type TopicObject interface {
 	DataTopic() Topic
@@ -12,10 +35,12 @@ type ApplicationDefinitionTopic struct {
 }
 func ParseApplicationDefinitionTopic(s string) (*ApplicationDefinitionTopic, error) {
 	var topic ApplicationDefinitionTopic
-	_, err := fmt.Sscanf(s, "apps/%s/definition", &topic.AppID)
-	if err != nil {
-		return nil, err
+	matches := appDefinitionTopicRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid topic format")
 	}
+	topic.AppID = matches[1]
+	logger.DebugLogger().Printf("Parsed ApplicationDefinitionTopic: %+v", topic)
 	return &topic, nil
 }
 func (t *ApplicationDefinitionTopic) DataTopic() Topic {
@@ -31,10 +56,12 @@ type ApplicationServicesTopic struct {
 }
 func ParseApplicationServicesTopic(s string) (*ApplicationServicesTopic, error) {
 	var topic ApplicationServicesTopic
-	_, err := fmt.Sscanf(s, "apps/%s/services", &topic.AppID)
-	if err != nil {
-		return nil, err
+	matches := appServicesTopicRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid topic format")
 	}
+	topic.AppID = matches[1]
+	logger.DebugLogger().Printf("Parsed ApplicationServicesTopic: %+v", topic)
 	return &topic, nil
 }
 func (t *ApplicationServicesTopic) DataTopic() Topic {
@@ -49,10 +76,12 @@ type VNFDefinitionTopic struct {
 }
 func ParseVNFDefinitionTopic(s string) (*VNFDefinitionTopic, error) {
 	var topic VNFDefinitionTopic
-	_, err := fmt.Sscanf(s, "nfs/%s/definition", &topic.VNFID)
-	if err != nil {
-		return nil, err
+	matches := vnfDefinitionTopicRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid topic format")
 	}
+	topic.VNFID = matches[1]
+	logger.DebugLogger().Printf("Parsed VNFDefinitionTopic: %+v", topic)
 	return &topic, nil
 }
 func (t *VNFDefinitionTopic) DataTopic() Topic {
@@ -69,10 +98,14 @@ type RemoteAppGroupInstancesTopic struct {
 }
 func ParseRemoteAppGroupInstancesTopic(s string) (*RemoteAppGroupInstancesTopic, error) {
 	var topic RemoteAppGroupInstancesTopic
-	_, err := fmt.Sscanf(s, "apps/%s/nodes/%s/groups/%s", &topic.AppID, &topic.NodeID, &topic.GroupID)
-	if err != nil {
-		return nil, err
+	matches := appInstancesTopicRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid topic format")
 	}
+	topic.AppID = matches[1]
+	topic.NodeID = matches[2]
+	topic.GroupID = matches[3]
+	logger.DebugLogger().Printf("Parsed RemoteAppGroupInstancesTopic: %+v", topic)
 	return &topic, nil
 }
 func (t *RemoteAppGroupInstancesTopic) DataTopic() Topic {
@@ -89,10 +122,14 @@ type RemoteVNFGroupInstancesTopic struct {
 }
 func ParseRemoteVNFGroupInstancesTopic(s string) (*RemoteVNFGroupInstancesTopic, error) {
 	var topic RemoteVNFGroupInstancesTopic
-	_, err := fmt.Sscanf(s, "nfs/%s/nodes/%s/groups/%s", &topic.VNFID, &topic.NodeID, &topic.GroupID)
-	if err != nil {
-		return nil, err
+	matches := vnfInstancesTopicRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid topic format")
 	}
+	topic.VNFID = matches[1]
+	topic.NodeID = matches[2]
+	topic.GroupID = matches[3]
+	logger.DebugLogger().Printf("Parsed RemoteVNFGroupInstancesTopic: %+v", topic)
 	return &topic, nil
 }
 func (t *RemoteVNFGroupInstancesTopic) DataTopic() Topic {
@@ -107,10 +144,12 @@ type ServiceChainDefinitionTopic struct {
 }
 func ParseServiceChainDefinitionTopic(s string) (*ServiceChainDefinitionTopic, error) {
 	var topic ServiceChainDefinitionTopic
-	_, err := fmt.Sscanf(s, "chains/%s/definition", &topic.ChainID)
-	if err != nil {
-		return nil, err
+	matches := chainDefinitionTopicRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid topic format")
 	}
+	topic.ChainID = matches[1]
+	logger.DebugLogger().Printf("Parsed ServiceChainDefinitionTopic: %+v", topic)
 	return &topic, nil
 }
 func (t *ServiceChainDefinitionTopic) DataTopic() Topic {

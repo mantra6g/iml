@@ -198,13 +198,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = mqtt.Initialize(eventbus)
+	_, err = mqtt.Initialize(eventbus, ctrl.Log.WithName("mqtt"))
 	if err != nil {
 		setupLog.Error(err, "unable to initialize MQTT service")
 		os.Exit(1)
 	}
 
-	_, err = southapi.InitializeSouthboundAPI(cacheService)
+	_, err = southapi.InitializeSouthboundAPI(cacheService, ctrl.Log.WithName("south-api"))
 	if err != nil {
 		setupLog.Error(err, "unable to initialize southbound API")
 		os.Exit(1)

@@ -40,7 +40,7 @@ func main() {
 		logger.ErrorLogger().Printf("Failed to initialize IP allocator: %v", err)
 		panic("Failed to initialize IP allocator: " + err.Error())
 	}
-	appIP.Next() // Skip the first IP, which is reserved for the nfrouter
+	appIP.Next(); appIP.Next() // Skip the first two IPs (a.b.c.0 for network, and a.b.c.1 for nfrouter)
 
 	// Initialize the IP allocator for the VNFs
 	vnfIP, err := helpers.NewIPAllocator(config.NFSubnet)
@@ -48,7 +48,7 @@ func main() {
 		logger.ErrorLogger().Printf("Failed to initialize IP allocator: %v", err)
 		panic("Failed to initialize IP allocator: " + err.Error())
 	}
-	vnfIP.Next() // Skip the first IP, which is reserved for the nfrouter
+	vnfIP.Next(); vnfIP.Next()// Skip the first two IPs (a.b.c.0 for network, and a.b.c.1 for nfrouter)
 
 	// Initialize the registry
 	registry, err := db.InitializeInMemoryRegistry()
