@@ -157,7 +157,7 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		}
 
 		// Add the route inside the container's network namespace
-		if err := netlink.RouteChange(routeLink); err != nil {
+		if err := netlink.RouteAdd(routeLink); err != nil {
 			return fmt.Errorf("failed to add route: %w", err)
 		}
 		return nil
@@ -283,7 +283,7 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 			Scope: netlink.SCOPE_UNIVERSE,
 		}
 		// Add the route inside the container's network namespace
-		if err := netlink.RouteChange(routeLink); err != nil {
+		if err := netlink.RouteAdd(routeLink); err != nil {
 			return fmt.Errorf("failed to add route: %w", err)
 		}
 		// Get the loopback interface
@@ -468,7 +468,8 @@ func tearDownApplicationFunction(cniArgs *skel.CmdArgs) error {
 		// Get the peer interface by name inside the container's namespace
 		intf, err := netlink.LinkByName("iml0")
 		if err != nil {
-			return fmt.Errorf("failed to get interface %s in netns %s: %w", "iml0", cniArgs.Netns, err)
+			// If the interface does not exist, consider it already torn down
+			return nil
 		}
 
 		// Set the interface down

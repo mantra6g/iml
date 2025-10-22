@@ -74,13 +74,12 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	}
 
 	// Finally, return the container details including the allocated IP.
+	response.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
 		logger.ErrorLogger().Printf("failed to encode response: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	response.WriteHeader(http.StatusOK)
-	response.Header().Set("Content-Type", "application/json")
 }
 
 func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, request *http.Request) {
@@ -115,8 +114,8 @@ func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, 
 		return
 	}
 
-	response.WriteHeader(http.StatusOK)
 	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(http.StatusOK)
 }
 
 func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWriter, request *http.Request) {
@@ -172,13 +171,12 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 	}
 
 	// Finally, return the VNF details including the allocated IP.
+	response.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
 		logger.ErrorLogger().Printf("failed to encode response: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	response.WriteHeader(http.StatusOK)
-	response.Header().Set("Content-Type", "application/json")
 }
 
 func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, request *http.Request) {
@@ -212,9 +210,9 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}
-
-	response.WriteHeader(http.StatusOK)
+	
 	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(http.StatusOK)
 }
 
 // Sets up the local API for CNI operations

@@ -69,7 +69,7 @@ func (c *Client) GetApplication(id string) (*models.Application, error) {
 	}
 
 	// If not, then retrieve it from IML
-	resp, err := http.Get(env.API_URL + "/api/v1/applications/" + id)
+	resp, err := http.Get(env.API_URL + "/api/v1/apps/" + id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact IML: %v", err)
 	}

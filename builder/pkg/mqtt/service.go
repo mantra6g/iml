@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/listeners"
@@ -14,9 +15,10 @@ import (
 type MQTTService struct {
 	broker *mqtt.Server
 	bus    *events.EventBus
+	logger logr.Logger
 }
 
-func Initialize(bus *events.EventBus) (*MQTTService, error) {
+func Initialize(bus *events.EventBus, logger logr.Logger) (*MQTTService, error) {
 	// Create the new MQTT Server.
 	server := mqtt.New(&mqtt.Options{
 		InlineClient: true,
@@ -44,6 +46,7 @@ func Initialize(bus *events.EventBus) (*MQTTService, error) {
 	service := &MQTTService{
 		broker: server,
 		bus:    bus,
+		logger: logger,
 	}
 	bus.Subscribe(events.EventAppUpdated, service.handleAppUpdates)
 	bus.Subscribe(events.EventAppDeleted, service.handleAppUpdates)

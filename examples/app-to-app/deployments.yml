@@ -19,7 +19,7 @@ spec:
               "name": "iml-cni", 
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "f9ca24d0-61d9-421c-b65b-18e89571818b"
+                "app_id": "11b61d80-0421-458a-a193-17807f4ece16"
               }
             }
           ]
