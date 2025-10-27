@@ -11,30 +11,14 @@ import (
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/autopaho/queue/memory"
 	"github.com/eclipse/paho.golang/paho"
-	diff "github.com/r3labs/diff"
 )
 
 type Topic string
 
-// TopicData holds information about an exact topic.
-//
-// For example, if you subscribe to "apps/+/definition", there will be multiple topics
-// like "apps/1/definition", "apps/2/definition", etc. Each of these exact topics
-// will have its own TopicData instance.
-type TopicData struct {
-	lastMessage Message
-}
-
-
-type TopicUpdate struct {
-	NewMessage Message
-	ChangeLog  diff.Changelog
-}
-
 type Client struct {
 	conn   *autopaho.ConnectionManager
-	topics map[Topic]TopicData
 	subs   map[Topic]Subscription
+	router paho.Router
 }
 
 func NewClient(ctx context.Context) (*Client, error) {
@@ -48,18 +32,13 @@ func NewClient(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("failed to get hostname: %v", err)
 	}
 
+	router := paho.NewStandardRouter()
+
 	client := &Client{
-		topics: make(map[Topic]TopicData),
 		subs:   make(map[Topic]Subscription),
+		router: router,
 	}
 
-	router := paho.NewStandardRouter()
-	router.RegisterHandler("apps/+/definition", client.handleAppDefinitionUpdateMessage)
-	router.RegisterHandler("apps/+/services", client.handleAppServicesUpdateMessage)
-	router.RegisterHandler("nfs/+/definition", client.handleVNFDefinitionUpdateMessage)
-	router.RegisterHandler("chains/+/definition", client.handleServiceChainDefinitionUpdateMessage)
-	router.RegisterHandler("apps/+/nodes/+/groups/+", client.handleAppInstancesMessage)
-	router.RegisterHandler("nfs/+/nodes/+/groups/+", client.handleVNFInstancesMessage)
 
 	clientConfig := autopaho.ClientConfig{
 		ServerUrls: []*url.URL{u},
@@ -115,5 +94,17 @@ func (c *Client) Remove(subscriptionTopic Topic) error {
 	}
 	// TODO: Remove all TopicData instances related to this subscription
 	delete(c.subs, subscriptionTopic)
+	return nil
+}
+
+func (c *Client) RegisterHandler(topic string, handler paho.MessageHandler) error {
+	if handler == nil {
+		return fmt.Errorf("cannot register nil handler for topic %s", topic)
+	}
+	if c.router == nil {
+		return fmt.Errorf("router is not initialized")
+	}
+
+	c.router.RegisterHandler(topic, handler)
 	return nil
 }

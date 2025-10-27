@@ -2,20 +2,21 @@ package events
 
 import "sync"
 
-
 const (
-	EventAppGroupCreated      = "apps:group:created"
-	EventAppGroupRemoved      = "apps:group:removed"
-	EventAppInstanceCreated   = "apps:instance:created"
-	EventAppInstanceRemoved   = "apps:instance:removed"
-	EventVnfGroupCreated      = "vnfs:group:created"
-	EventVnfGroupRemoved      = "vnfs:group:removed"
-	EventVnfInstanceCreated   = "vnfs:instance:created"
-	EventVnfInstanceRemoved   = "vnfs:instance:removed"
-	EventChainCreated         = "chains:chain:created"
-	EventChainRemoved         = "chains:chain:removed"
-	EventChainUpdated         = "chains:chain:updated"
-	EventRouteCalculated      = "routes:calculated"
+	EventLocalAppGroupCreated  = "apps:group:local:created"
+	EventLocalAppGroupRemoved  = "apps:group:local:removed"
+	EventRemoteAppGroupCreated = "apps:group:remote:created"
+	EventRemoteAppGroupRemoved = "apps:group:remote:removed"
+	EventLocalVnfGroupCreated  = "vnfs:group:local:created"
+	EventLocalVnfGroupRemoved  = "vnfs:group:local:removed"
+	EventRemoteVnfGroupCreated  = "vnfs:group:remote:created"
+	EventRemoteVnfGroupRemoved  = "vnfs:group:remote:removed"
+	
+
+	EventChainCreated          = "chains:chain:created"
+	EventChainRemoved          = "chains:chain:removed"
+	EventChainUpdated          = "chains:chain:updated"
+	EventRouteCalculated       = "routes:calculated"
 )
 
 // Event represents a domain event with a name and payload.

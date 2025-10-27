@@ -17,13 +17,20 @@ type SubscriptionManager struct {
 	_mutex sync.RWMutex
 }
 
-func NewSubscriptionManager(mqttClient *mqtt.Client, repo *db.Registry) *SubscriptionManager {
+func NewSubscriptionManager(mqttClient *mqtt.Client, repo *db.Registry) (*SubscriptionManager, error) {
+	if mqttClient == nil {
+		return nil, fmt.Errorf("SubscriptionManager.NewSubscriptionManager: mqttClient is nil")
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("SubscriptionManager.NewSubscriptionManager: repo is nil")
+	}
+
 	return &SubscriptionManager{
 		subscriptions: make(map[SubscriptionKey]Subscription),
 		dependencies:  make(map[DependencyKey]Dependency),
 		mqttClient:    mqttClient,
 		repo:         repo,
-	}
+	}, nil
 }
 
 func (mgr *SubscriptionManager) AddDependency(dep Dependency) error {
@@ -67,7 +74,7 @@ func (mgr *SubscriptionManager) removeSubscription(sub Subscription) error {
 	return mgr.executeRemoveSubscription(key)
 }
 
-func (mgr *SubscriptionManager) onSubscriptionEnded(sub Subscription) error {
+func (mgr *SubscriptionManager) OnSubscriptionEnded(sub Subscription) error {
 	err := mgr.executeRemoveDependency(sub.Dependency().Key())
 	if err != nil {
 		return fmt.Errorf("SubscriptionManager.onSubscriptionEnded: failed to remove dependency for subscription %v: %w", sub.Key(), err)

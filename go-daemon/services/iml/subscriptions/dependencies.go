@@ -84,6 +84,7 @@ func (d *TemporaryAppDependency) PreAdd(mgr *SubscriptionManager) error {
 }
 func (d *TemporaryAppDependency) PostAdd(mgr *SubscriptionManager) error {
 	time.AfterFunc(30*time.Second, func() {
+		logger.DebugLogger().Printf("TemporaryAppDependency: timeout reached for AppID %s, removing dependency", d.AppID)
 		err := mgr.RemoveDependency(d)
 		if err != nil {
 			logger.ErrorLogger().Printf("TemporaryAppDependency: failed to remove dependency for AppID %s: %v", d.AppID, err)
@@ -121,6 +122,7 @@ func (d *TemporaryVnfDependency) PreAdd(mgr *SubscriptionManager) error {
 }
 func (d *TemporaryVnfDependency) PostAdd(mgr *SubscriptionManager) error {
 	time.AfterFunc(30*time.Second, func() {
+		logger.DebugLogger().Printf("TemporaryVnfDependency: timeout reached for VnfID %s, removing dependency", d.VnfID)
 		err := mgr.RemoveDependency(d)
 		if err != nil {
 			logger.ErrorLogger().Printf("TemporaryVnfDependency: failed to remove dependency for VnfID %s: %v", d.VnfID, err)
@@ -151,19 +153,29 @@ func (d *LocalAppDependency) Key() DependencyKey {
 	return DependencyKey{ID: d.AppID, Type: LocalAppDep}
 }
 func (d *LocalAppDependency) PreAdd(mgr *SubscriptionManager) error     {
+	logger.DebugLogger().Printf("LocalAppDependency.PreAdd: attempting to add for AppID %s", d.AppID)
 	err := mgr.AddDependency(&AppDefinitionDependency{AppID: d.AppID})
 	if err != nil {
+		logger.ErrorLogger().Printf("LocalAppDependency.PreAdd: failed to add AppDefinitionDependency for AppID %s: %v", d.AppID, err)
 		return fmt.Errorf("LocalAppDependency.PreAdd: failed to add AppDefinitionDependency for AppID %s: %w", d.AppID, err)
 	}
 	err = mgr.AddDependency(&AppServicesDependency{AppID: d.AppID})
 	if err != nil {
+		logger.ErrorLogger().Printf("LocalAppDependency.PreAdd: failed to add AppServicesDependency for AppID %s: %v", d.AppID, err)
 		mgr.RemoveDependency(&AppDefinitionDependency{AppID: d.AppID})
 		return fmt.Errorf("LocalAppDependency.PreAdd: failed to add AppServicesDependency for AppID %s: %w", d.AppID, err)
 	}
+	logger.DebugLogger().Printf("LocalAppDependency.PreAdd: successfully added for AppID %s", d.AppID)
 	return nil
 }
-func (d *LocalAppDependency) PostAdd(mgr *SubscriptionManager) error    { return nil }
-func (d *LocalAppDependency) PreRemove(mgr *SubscriptionManager) error  { return nil }
+func (d *LocalAppDependency) PostAdd(mgr *SubscriptionManager) error    {
+	logger.DebugLogger().Printf("LocalAppDependency.PostAdd: successfully added for AppID %s", d.AppID)
+	return nil
+}
+func (d *LocalAppDependency) PreRemove(mgr *SubscriptionManager) error  {
+	logger.DebugLogger().Printf("LocalAppDependency.PreRemove: successfully removed for AppID %s", d.AppID)
+	return nil
+}
 func (d *LocalAppDependency) PostRemove(mgr *SubscriptionManager) error {
 	err := mgr.RemoveDependency(&AppDefinitionDependency{AppID: d.AppID})
 	if err != nil {
@@ -363,8 +375,12 @@ type AppServicesDependency struct {
 func (d *AppServicesDependency) Key() DependencyKey {
 	return DependencyKey{ID: d.AppID, Type: AppServicesDep}
 }
-func (d *AppServicesDependency) PreAdd(mgr *SubscriptionManager) error     { return nil }
+func (d *AppServicesDependency) PreAdd(mgr *SubscriptionManager) error     {
+	logger.DebugLogger().Printf("AppServicesDependency.PreAdd: attempting to add for AppID %s", d.AppID)
+	return nil
+}
 func (d *AppServicesDependency) PostAdd(mgr *SubscriptionManager) error    {
+	logger.DebugLogger().Printf("AppServicesDependency.PostAdd: successfully added for AppID %s", d.AppID)
 	err := mgr.addSubscription(&AppServicesSubscription{AppID: d.AppID})
 	if err != nil {
 		return fmt.Errorf("AppServicesDependency.PostAdd: failed to add AppServicesSubscription for AppID %s: %w", d.AppID, err)
@@ -372,17 +388,17 @@ func (d *AppServicesDependency) PostAdd(mgr *SubscriptionManager) error    {
 	return nil
 }
 func (d *AppServicesDependency) PreRemove(mgr *SubscriptionManager) error  {
+	logger.DebugLogger().Printf("AppServicesDependency.PreRemove: attempting to remove for AppID %s", d.AppID)
 	err := mgr.removeSubscription(&AppServicesSubscription{AppID: d.AppID})
 	if err != nil {
 		return fmt.Errorf("AppServicesDependency.PreRemove: failed to remove AppServicesSubscription for AppID %s: %w", d.AppID, err)
 	}
 	return nil
 }
-func (d *AppServicesDependency) PostRemove(mgr *SubscriptionManager) error { return nil }
-
-
-
-
+func (d *AppServicesDependency) PostRemove(mgr *SubscriptionManager) error {
+	logger.DebugLogger().Printf("AppServicesDependency.PostRemove: successfully removed for AppID %s", d.AppID)
+	return nil
+}
 
 type ServiceChainDependency struct {
 	DependencyBase

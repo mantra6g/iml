@@ -13,6 +13,7 @@ import (
 	"iml-daemon/services/chains"
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
+	"iml-daemon/services/iml/controllers"
 	"iml-daemon/services/iml/subscriptions"
 	"iml-daemon/services/routecalc"
 	"iml-daemon/services/router"
@@ -67,7 +68,75 @@ func main() {
 		panic("Failed to create MQTT client: " + err.Error())
 	}
 
-	subscriptionManager := subscriptions.NewSubscriptionManager(mqttClient, registry)
+	subscriptionManager, err := subscriptions.NewSubscriptionManager(mqttClient, registry)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create SubscriptionManager: %v", err)
+		panic("Failed to create SubscriptionManager: " + err.Error())
+	}
+
+	// Initialize the IML local resource controllers
+	err = (&controllers.AppDefinitionController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup AppDefinitionController: %v", err)
+		panic("Failed to setup AppDefinitionController: " + err.Error())
+	}
+
+	err = (&controllers.VNFDefinitionController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup VNFDefinitionController: %v", err)
+		panic("Failed to setup VNFDefinitionController: " + err.Error())
+	}
+
+	err = (&controllers.NodeDefinitionController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup NodeDefinitionController: %v", err)
+		panic("Failed to setup NodeDefinitionController: " + err.Error())
+	}
+
+	err = (&controllers.ChainDefinitionController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup ChainDefinitionController: %v", err)
+		panic("Failed to setup ChainDefinitionController: " + err.Error())
+	}
+
+	err = (&controllers.AppServicesController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup AppServicesController: %v", err)
+		panic("Failed to setup AppServicesController: " + err.Error())
+	}
+
+	err = (&controllers.AppGroupsController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup AppGroupsController: %v", err)
+		panic("Failed to setup AppGroupsController: " + err.Error())
+	}
+
+	err = (&controllers.VnfGroupsController{
+		Registry:   registry,
+		SubManager: subscriptionManager,
+	}).SetupWithMQTT(mqttClient)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to setup VnfGroupsController: %v", err)
+		panic("Failed to setup VnfGroupsController: " + err.Error())
+	}
 
 	// Initialize the IML Client
 	imlClient, err := iml.NewClient(eb, registry, subscriptionManager)
@@ -124,11 +193,6 @@ func main() {
 	}
 
 	// Initialize the APIs
-	imlApi, err := api.InitializeIMLApi(chainService)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize IML API: %v", err)
-		panic("Failed to initialize IML API: " + err.Error())
-	}
 	cniApi, err := api.InitializeCNIApi(appService, vnfService)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize CNI API: %v", err)
@@ -147,9 +211,6 @@ func main() {
 	defer cancel()
 
 	// Shutdown services gracefully
-	if err := imlApi.Shutdown(ctx); err != nil {
-		logger.ErrorLogger().Printf("IML API shutdown error: %v", err)
-	}
 	if err := cniApi.Shutdown(ctx); err != nil {
 		logger.ErrorLogger().Printf("CNI API shutdown error: %v", err)
 	}

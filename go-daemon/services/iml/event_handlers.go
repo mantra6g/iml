@@ -8,6 +8,7 @@ import (
 )
 
 func (c *Client) handleLocalAppGroupCreated(event events.Event) {
+	logger.DebugLogger().Printf("iml.handleLocalAppGroupCreated: %v", event)
 	appGroup, ok := event.Payload.(models.AppGroup)
 	if !ok {
 		logger.ErrorLogger().Printf("iml.handleLocalAppGroupCreated: error casting event payload to LocalAppGroup")
@@ -23,6 +24,7 @@ func (c *Client) handleLocalAppGroupCreated(event events.Event) {
 }
 
 func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
+	logger.DebugLogger().Printf("iml.handleLocalAppGroupRemoved: %v", event)
 	appGroup, ok := event.Payload.(models.AppGroup)
 	if !ok {
 		logger.ErrorLogger().Printf("iml.handleLocalAppGroupRemoved: error casting event payload to LocalAppGroup")
@@ -38,6 +40,7 @@ func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
 }
 
 func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
+	logger.DebugLogger().Printf("iml.handleLocalVnfGroupCreated: %v", event)
 	vnfGroup, ok := event.Payload.(models.VnfGroup)
 	if !ok {
 		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupCreated: error casting event payload to VnfGroup")
@@ -53,6 +56,7 @@ func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
 }
 
 func (c *Client) handleLocalVnfGroupRemoved(event events.Event) {
+	logger.DebugLogger().Printf("iml.handleLocalVnfGroupRemoved: %v", event)
 	vnfGroup, ok := event.Payload.(models.VnfGroup)
 	if !ok {
 		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupRemoved: error casting event payload to VnfGroup")

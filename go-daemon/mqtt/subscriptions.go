@@ -11,8 +11,6 @@ import (
 // instance for this pattern, but multiple TopicData instances for each exact topic.
 type Subscription interface {
 	Topic() Topic
-	onUpdate(TopicUpdate)
-	onDelete(TopicUpdate)
 }
 
 type Result struct {
@@ -20,24 +18,7 @@ type Result struct {
 	RequeueAfter time.Duration
 }
 
-type Handlers struct {
-	OnUpdate func(TopicUpdate)
-	OnDelete func(TopicUpdate)
-}
-
-func (s *Handlers) onUpdate(update TopicUpdate) {
-	if s.OnUpdate != nil {
-		s.OnUpdate(update)
-	}
-}
-func (s *Handlers) onDelete(update TopicUpdate) {
-	if s.OnDelete != nil {
-		s.OnDelete(update)
-	}
-}
-
 type ApplicationDefinitionSubscription struct {
-	Handlers
 	AppID string
 }
 
@@ -46,7 +27,6 @@ func (s *ApplicationDefinitionSubscription) Topic() Topic {
 }
 
 type ApplicationServicesSubscription struct {
-	Handlers
 	AppID string
 }
 
@@ -55,7 +35,6 @@ func (s *ApplicationServicesSubscription) Topic() Topic {
 }
 
 type VNFDefinitionSubscription struct {
-	Handlers
 	VNFID string
 }
 
@@ -64,7 +43,6 @@ func (s *VNFDefinitionSubscription) Topic() Topic {
 }
 
 type VnfGroupsSubscription struct {
-	Handlers
 	NfID string
 }
 func (s *VnfGroupsSubscription) Topic() Topic {
@@ -72,7 +50,6 @@ func (s *VnfGroupsSubscription) Topic() Topic {
 }
 
 type AppGroupsSubscription struct {
-	Handlers
 	AppID string
 }
 func (s *AppGroupsSubscription) Topic() Topic {
@@ -80,7 +57,6 @@ func (s *AppGroupsSubscription) Topic() Topic {
 }
 
 type ServiceChainDefinitionSubscription struct {
-	Handlers
 	ChainID string
 }
 func (s *ServiceChainDefinitionSubscription) Topic() Topic {
@@ -88,7 +64,6 @@ func (s *ServiceChainDefinitionSubscription) Topic() Topic {
 }
 
 type NodeDefinitionSubscription struct {
-	Handlers
 	NodeID string
 }
 func (s *NodeDefinitionSubscription) Topic() Topic {

@@ -72,14 +72,16 @@ func (r *NFRouter) AddRoute(srcIP string, dstIP string, sids []net.IP) error {
 		return fmt.Errorf("failed to parse destination IP address: %w", err)
 	}
 
+	family := nl.GetIPFamily(srcAddr.IP)
 	route := &netlink.Route{
+		Src:       srcAddr.IP,
 		Dst:       dstAddr.IPNet,
-		Gw:        srcAddr.IP,
 		LinkIndex: r.link.Attrs().Index,
 		Encap:     &netlink.SEG6Encap{
 			Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
 			Segments: sids,
 		},
+		Family: family,
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
