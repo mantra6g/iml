@@ -143,7 +143,7 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		if err != nil {
 			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.Name, err)
 		}
-		// Set the peer interface's IP address
+		// Set the container interface's IP address
 		if err := netlink.AddrAdd(containerLink, &netlink.Addr{IPNet: ipNet}); err != nil {
 			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.Name, err)
 		}
@@ -152,8 +152,8 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		routeLink := &netlink.Route{
 			Dst: dstNet,
 			Gw:  gwIP,
-			Src: ipNet.IP,
 			Scope: netlink.SCOPE_UNIVERSE,
+			Family: nl.FAMILY_V6,
 		}
 
 		// Add the route inside the container's network namespace
@@ -164,6 +164,26 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+	}
+
+	hostLink, err := netlink.LinkByName(imlInterface.PeerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
+	}
+
+	nfrouter, err := netlink.LinkByName("nfrouter")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nfrouter interface: %w", err)
+	}
+
+	err = netlink.LinkSetMaster(hostLink, nfrouter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set host interface %s master to nfrouter: %w", imlInterface.PeerName, err)
+	}
+
+	err = netlink.LinkSetUp(hostLink)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set host interface %s up: %w", imlInterface.PeerName, err)
 	}
 
 	intfIndex := 0
@@ -279,8 +299,8 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		routeLink := &netlink.Route{
 			Dst: dstNet,
 			Gw:  gwIP,
-			Src: ifaceIP.IP,
 			Scope: netlink.SCOPE_UNIVERSE,
+			Family: nl.FAMILY_V6,
 		}
 		// Add the route inside the container's network namespace
 		if err := netlink.RouteAdd(routeLink); err != nil {
@@ -307,6 +327,26 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+	}
+
+	hostLink, err := netlink.LinkByName(imlInterface.PeerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
+	}
+
+	nfrouter, err := netlink.LinkByName("nfrouter")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nfrouter interface: %w", err)
+	}
+
+	err = netlink.LinkSetMaster(hostLink, nfrouter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set host interface %s master to nfrouter: %w", imlInterface.PeerName, err)
+	}
+
+	err = netlink.LinkSetUp(hostLink)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set host interface %s up: %w", imlInterface.PeerName, err)
 	}
 
 	intfIndex := 0

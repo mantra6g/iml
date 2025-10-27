@@ -110,7 +110,7 @@ func (c *SouthboundAPIController) handleAppDefinitionRequest(w http.ResponseWrit
 
 	appDefinition, err := c.Cache.GetApp(types.UID(appID))
 	if err != nil {
-		c.logger.Info("Application %s not found", appID)
+		c.logger.Info("Application not found", "appID", appID)
 		http.NotFound(w, r)
 		return
 	}
@@ -136,7 +136,7 @@ func (c *SouthboundAPIController) handleNFDefinitionRequest(w http.ResponseWrite
 
 	nfDefinition, err := c.Cache.GetNF(types.UID(nfID))
 	if err != nil {
-		c.logger.Info("Network Function with ID %s not found", nfID)
+		c.logger.Info("Network Function not found", "nfID", nfID)
 		http.NotFound(w, r)
 		return
 	}
@@ -162,7 +162,7 @@ func (c *SouthboundAPIController) handleSCDefinitionRequest(w http.ResponseWrite
 
 	scDefinition, err := c.Cache.GetServiceChain(types.UID(scID))
 	if err != nil {
-		c.logger.Info("Service chain with ID %s not found", scID)
+		c.logger.Info("Service chain not found", "scID", scID)
 		http.NotFound(w, r)
 		return
 	}

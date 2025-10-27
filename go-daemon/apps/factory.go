@@ -10,8 +10,8 @@ import (
 )
 
 type InstanceFactory struct {
-	repo *db.Registry
-	bus  *events.EventBus
+	repo      *db.Registry
+	bus       *events.EventBus
 	imlClient *iml.Client
 }
 
@@ -24,8 +24,8 @@ func NewInstanceFactory(repo *db.Registry, bus *events.EventBus, imlClient *iml.
 	}
 
 	return &InstanceFactory{
-		repo: repo,
-		bus:  bus,
+		repo:      repo,
+		bus:       bus,
 		imlClient: imlClient,
 	}, nil
 }
@@ -49,7 +49,7 @@ func (f *InstanceFactory) NewLocalInstance(appUID string, instanceIP *net.IPNet,
 		}
 
 		f.bus.Publish(events.Event{
-			Name:    events.EventAppGroupCreated,
+			Name:    events.EventLocalAppGroupCreated,
 			Payload: *appGroup,
 		})
 	}
@@ -67,7 +67,6 @@ func (f *InstanceFactory) NewLocalInstance(appUID string, instanceIP *net.IPNet,
 	return instance, nil
 }
 
-
 func (f *InstanceFactory) DeleteInstance(instance *models.AppInstance) error {
 	// Delete the instance from the registry
 	if err := f.repo.RemoveAppInstance(instance.ID); err != nil {
@@ -83,7 +82,7 @@ func (f *InstanceFactory) DeleteInstance(instance *models.AppInstance) error {
 	if len(appGroup.Instances) == 0 {
 		// If there are no more instances, delete the app group
 		f.bus.Publish(events.Event{
-			Name:    events.EventAppGroupRemoved,
+			Name:    events.EventLocalAppGroupRemoved,
 			Payload: *appGroup,
 		})
 

@@ -68,69 +68,77 @@ func (svc *MQTTService) Shutdown() error {
 }
 
 func (svc *MQTTService) handleAppUpdates(event events.Event) {
+	svc.logger.Info("Received app update", "event", event)
 	app, ok := event.Payload.(*dto.ApplicationDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for AppUpdated event\n")
+		svc.logger.Error(fmt.Errorf("invalid payload for AppUpdated event"), "handleAppUpdates error")
 		return
 	}
 	bytes, err := json.Marshal(app)
 	if err != nil {
-		fmt.Printf("Failed to marshal app definition: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to marshal app definition: %v", err), "handleAppUpdates error")
 		return
 	}
 	err = svc.broker.Publish(fmt.Sprintf("apps/%s/definition", app.ID), bytes, true, 1)
 	if err != nil {
-		fmt.Printf("Failed to publish app definition: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to publish app definition: %v", err), "handleAppUpdates error")
 	}
+	svc.logger.Info("Published to apps definition", "topic", fmt.Sprintf("apps/%s/definition", app.ID), "payload", string(bytes))
 }
 
 func (svc *MQTTService) handleChainUpdates(event events.Event) {
+	svc.logger.Info("Received chain update", "event", event)
 	chain, ok := event.Payload.(*dto.ServiceChainDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for ChainUpdated event\n")
+		svc.logger.Error(fmt.Errorf("invalid payload for ChainUpdated event"), "handleChainUpdates error")
 		return
 	}
 	bytes, err := json.Marshal(chain)
 	if err != nil {
-		fmt.Printf("Failed to marshal chain definition: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to marshal chain definition: %v", err), "handleChainUpdates error")
 		return
 	}
 	err = svc.broker.Publish(fmt.Sprintf("chains/%s/definition", chain.ID), bytes, true, 1)
 	if err != nil {
-		fmt.Printf("Failed to publish chain definition: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to publish chain definition: %v", err), "handleChainUpdates error")
 	}
+	svc.logger.Info("Published to chains definition", "topic", fmt.Sprintf("chains/%s/definition", chain.ID), "payload", string(bytes))
 }
 
 func (svc *MQTTService) handleNFUpdates(event events.Event) {
+	svc.logger.Info("Received NF update", "event", event)
 	nf, ok := event.Payload.(*dto.NetworkFunctionDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for NfUpdated event\n")
+		svc.logger.Error(fmt.Errorf("invalid payload for NfUpdated event"), "handleNFUpdates error")
 		return
 	}
 	bytes, err := json.Marshal(nf)
 	if err != nil {
-		fmt.Printf("Failed to marshal network function definition: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to marshal network function definition: %v", err), "handleNFUpdates error")
 		return
 	}
 	err = svc.broker.Publish(fmt.Sprintf("nfs/%s/definition", nf.ID), bytes, true, 1)
 	if err != nil {
-		fmt.Printf("Failed to publish network function definition: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to publish network function definition: %v", err), "handleNFUpdates error")
 	}
+	svc.logger.Info("Published to nfs definition", "topic", fmt.Sprintf("nfs/%s/definition", nf.ID), "payload", string(bytes))
 }
 
 func (svc *MQTTService) handleAppChainsUpdates(event events.Event) {
+	svc.logger.Info("Received app chains update", "event", event)
 	appChains, ok := event.Payload.(*dto.ApplicationServiceChains)
 	if !ok {
-		fmt.Printf("Invalid payload for AppChainsUpdated event\n")
+		svc.logger.Error(fmt.Errorf("invalid payload for AppChainsUpdated event"), "handleAppChainsUpdates error")
 		return
 	}
 	bytes, err := json.Marshal(appChains)
 	if err != nil {
-		fmt.Printf("Failed to marshal application service chains: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to marshal application service chains: %v", err), "handleAppChainsUpdates error")
 		return
 	}
 	err = svc.broker.Publish(fmt.Sprintf("apps/%s/services", appChains.AppID), bytes, true, 1)
 	if err != nil {
-		fmt.Printf("Failed to publish application service chains: %v\n", err)
+		svc.logger.Error(fmt.Errorf("failed to publish application service chains: %v", err), "handleAppChainsUpdates error")
 	}
+	svc.logger.Info("Published to app services", "topic", fmt.Sprintf("apps/%s/services", appChains.AppID), "payload", string(bytes))
 }

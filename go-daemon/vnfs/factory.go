@@ -60,7 +60,7 @@ func (f *InstanceFactory) NewLocalInstance(nfUID string, containerID string, ifa
 		}
 
 		f.bus.Publish(events.Event{
-			Name:    events.EventVnfGroupCreated,
+			Name:    events.EventLocalVnfGroupCreated,
 			Payload: *vnfGroup,
 		})
 	}
@@ -95,7 +95,7 @@ func (f *InstanceFactory) DeleteInstance(instance *models.VnfInstance) error {
 	}
 
 	f.bus.Publish(events.Event{
-		Name:    events.EventVnfGroupRemoved,
+		Name:    events.EventLocalVnfGroupRemoved,
 		Payload: *vnfGroup,
 	})
 

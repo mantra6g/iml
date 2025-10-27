@@ -2,7 +2,6 @@ package models
 
 import (
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type Route struct {
@@ -11,9 +10,4 @@ type Route struct {
 	SrcAppGroupID   uuid.UUID
 	DstAppGroupID   uuid.UUID
 	Stages          []VnfGroup `gorm:"many2many:route_stages"`
-}
-
-func (r *Route) AfterSave(tx *gorm.DB) (err error) {
-	// TODO: Create the corresponding dataplane route
-	return nil
 }

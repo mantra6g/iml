@@ -23,6 +23,7 @@ import (
 
 	cachev1alpha1 "builder/api/v1alpha1"
 	"builder/internal/controller"
+	"builder/pkg/appchains"
 	"builder/pkg/cache"
 	"builder/pkg/events"
 	"builder/pkg/mqtt"
@@ -192,9 +193,15 @@ func main() {
 
 	eventbus := events.New()
 
-	cacheService, err := cache.New(eventbus)
+	cacheService, err := cache.New(eventbus, ctrl.Log.WithName("cache"))
 	if err != nil {
 		setupLog.Error(err, "unable to initialize cache service")
+		os.Exit(1)
+	}
+
+	_, err = appchains.NewService(cacheService, eventbus, ctrl.Log.WithName("appchains"))
+	if err != nil {
+		setupLog.Error(err, "unable to initialize appchains service")
 		os.Exit(1)
 	}
 

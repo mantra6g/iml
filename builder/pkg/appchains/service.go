@@ -1,23 +1,34 @@
 package appchains
 
 import (
-	"builder/api/v1alpha1"
 	"builder/pkg/cache"
 	"builder/pkg/cache/dto"
 	"builder/pkg/events"
 	"fmt"
 	"time"
+
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type Service struct {
 	cache *cache.Service
 	bus   *events.EventBus
+	logger logr.Logger
 }
 
-func NewService(cache *cache.Service, bus *events.EventBus) *Service {
+func NewService(cache *cache.Service, bus *events.EventBus, logger logr.Logger) (*Service, error) {
+	if cache == nil {
+		return nil, fmt.Errorf("cache service is required")
+	}
+	if bus == nil {
+		return nil, fmt.Errorf("event bus is required")
+	}
+
 	service := &Service{
 		cache: cache,
 		bus:   bus,
+		logger: logger,
 	}
 
 	bus.Subscribe(events.EventAppUpdated, service.handleAppUpdatedEvent)
@@ -25,18 +36,19 @@ func NewService(cache *cache.Service, bus *events.EventBus) *Service {
 	bus.Subscribe(events.EventChainUpdated, service.handleChainUpdatedEvent)
 	bus.Subscribe(events.EventChainDeleted, service.handleChainDeletedEvent)
 
-	return service
+	return service, nil
 }
 
 func (s *Service) handleAppUpdatedEvent(event events.Event) {
-	app, ok := event.Payload.(*v1alpha1.Application)
+	s.logger.Info("Handling AppUpdated event")
+	app, ok := event.Payload.(*dto.ApplicationDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for AppUpdated event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for AppUpdated event"), "error casting event payload to Application")
 		return
 	}
 
 	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(app.UID)
+	appChains, err := s.cache.GetAppServiceChains(types.UID(app.ID))
 	if err != nil {
 		// App chains does not exist, create new
 		appChainsPtr = &dto.ApplicationServiceChains{
@@ -46,7 +58,7 @@ func (s *Service) handleAppUpdatedEvent(event events.Event) {
 				Seq:       1,
 				Timestamp: time.Now(),
 			},
-			AppID:  string(app.UID),
+			AppID:  app.ID,
 			Chains: []string{},
 		}
 	} else {
@@ -63,17 +75,19 @@ func (s *Service) handleAppUpdatedEvent(event events.Event) {
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
 	})
+	s.logger.Info("Successfully published app chains pre-updated event", "appID", appChainsPtr.AppID)
 }
 
 func (s *Service) handleAppDeletedEvent(event events.Event) {
-	app, ok := event.Payload.(*v1alpha1.Application)
+	s.logger.Info("Handling AppDeleted event")
+	app, ok := event.Payload.(*dto.ApplicationDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for AppDeleted event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for AppDeleted event"), "error casting event payload to Application")
 		return
 	}
 	
 	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(app.UID)
+	appChains, err := s.cache.GetAppServiceChains(types.UID(app.ID))
 	if err != nil {
 		// App chains does not exist, create new with deleted status
 		appChainsPtr = &dto.ApplicationServiceChains{
@@ -83,7 +97,7 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 				Seq:       1,
 				Timestamp: time.Now(),
 			},
-			AppID:  string(app.UID),
+			AppID:  app.ID,
 			Chains: []string{},
 		}
 	} else {
@@ -94,7 +108,7 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 			Seq:       appChainsPtr.Seq + 1,
 			Timestamp: time.Now(),
 		}
-		appChainsPtr.AppID = string(app.UID)
+		appChainsPtr.AppID = app.ID
 		appChainsPtr.Chains = []string{} // Clear chains on deletion
 	}
 
@@ -102,17 +116,19 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
 	})
+	s.logger.Info("Successfully published app chains pre-updated event for deletion", "appID", appChainsPtr.AppID)
 }
 
 func (s *Service) handleChainUpdatedEvent(event events.Event) {
-	chain, ok := event.Payload.(*v1alpha1.ServiceChain)
+	s.logger.Info("Handling ChainUpdated event")
+	chain, ok := event.Payload.(*dto.ServiceChainDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for ChainUpdated event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for ChainUpdated event"), "error casting event payload to ServiceChainDefinition")
 		return
 	}
 
 	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(chain.Status.SourceAppUID)
+	appChains, err := s.cache.GetAppServiceChains(types.UID(chain.SrcAppID))
 	if err != nil {
 		// App chains does not exist, create new
 		appChainsPtr = &dto.ApplicationServiceChains{
@@ -122,8 +138,8 @@ func (s *Service) handleChainUpdatedEvent(event events.Event) {
 				Seq:       1,
 				Timestamp: time.Now(),
 			},
-			AppID:  string(chain.Status.SourceAppUID),
-			Chains: []string{string(chain.UID)},
+			AppID:  chain.SrcAppID,
+			Chains: []string{chain.ID},
 		}
 	} else {
 		appChainsPtr = &appChains
@@ -133,18 +149,18 @@ func (s *Service) handleChainUpdatedEvent(event events.Event) {
 			Seq:       appChainsPtr.Seq + 1,
 			Timestamp: time.Now(),
 		}
-		appChainsPtr.AppID = string(chain.Status.SourceAppUID)
+		appChainsPtr.AppID = chain.SrcAppID
 
 		// Add chain if not already present
 		found := false
 		for _, c := range appChainsPtr.Chains {
-			if c == string(chain.UID) {
+			if c == chain.ID {
 				found = true
 				break
 			}
 		}
 		if !found {
-			appChainsPtr.Chains = append(appChainsPtr.Chains, string(chain.UID))
+			appChainsPtr.Chains = append(appChainsPtr.Chains, chain.ID)
 			return // No need to publish if chain already exists
 		}
 	}
@@ -153,17 +169,19 @@ func (s *Service) handleChainUpdatedEvent(event events.Event) {
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
 	})
+	s.logger.Info("Successfully published app chains pre-updated event", "appID", appChainsPtr.AppID)
 }
 
 func (s *Service) handleChainDeletedEvent(event events.Event) {
-	chain, ok := event.Payload.(*v1alpha1.ServiceChain)
+	s.logger.Info("Handling ChainDeleted event")
+	chain, ok := event.Payload.(*dto.ServiceChainDefinition)
 	if !ok {
-		fmt.Printf("Invalid payload for ChainDeleted event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for ChainDeleted event"), "error casting event payload to ServiceChain")
 		return
 	}
 
 	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(chain.Status.SourceAppUID)
+	appChains, err := s.cache.GetAppServiceChains(types.UID(chain.SrcAppID))
 	if err != nil {
 		// App chains does not exist, nothing to delete
 		return
@@ -175,13 +193,13 @@ func (s *Service) handleChainDeletedEvent(event events.Event) {
 		Seq:       appChainsPtr.Seq + 1,
 		Timestamp: time.Now(),
 	}
-	appChainsPtr.AppID = string(chain.Status.SourceAppUID)
+	appChainsPtr.AppID = chain.SrcAppID
 
 	// Remove the chain from the list
 	newChains := []string{}
 	found := false
 	for _, c := range appChainsPtr.Chains {
-		if c != string(chain.UID) {
+		if c != chain.ID {
 			newChains = append(newChains, c)
 			continue
 		}
@@ -197,4 +215,5 @@ func (s *Service) handleChainDeletedEvent(event events.Event) {
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
 	})
+	s.logger.Info("Successfully published app chains pre-updated event", "appID", appChainsPtr.AppID)
 }

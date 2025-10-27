@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -16,14 +17,16 @@ type Service struct {
 	appChainsCache *Cache[types.UID, dto.ApplicationServiceChains]
 	chainCache     *Cache[types.UID, dto.ServiceChainDefinition]
 	bus            *events.EventBus
+	logger         logr.Logger
 }
 
-func New(eventbus *events.EventBus) (*Service, error) {
+func New(eventbus *events.EventBus, logger logr.Logger) (*Service, error) {
 	service := &Service{
 		appCache:   NewCache[types.UID, dto.ApplicationDefinition](),
 		nfCache:    NewCache[types.UID, dto.NetworkFunctionDefinition](),
 		chainCache: NewCache[types.UID, dto.ServiceChainDefinition](),
 		bus:        eventbus,
+		logger:     logger,
 	}
 
 	eventbus.Subscribe(events.EventAppPreUpdated, service.handleAppUpdatedEvent)
@@ -38,84 +41,93 @@ func New(eventbus *events.EventBus) (*Service, error) {
 }
 
 func (s *Service) handleAppUpdatedEvent(event events.Event) {
+	s.logger.Info("Received app update event", "event", event)
 	app, ok := event.Payload.(*v1alpha1.Application)
 	if !ok {
-		fmt.Printf("Invalid payload for AppUpdated event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for AppUpdated event"), "handleAppUpdatedEvent error")
 		return
 	}
 	if err := s.UpdateApp(app.UID, app); err != nil {
-		fmt.Printf("Error updating app in cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error updating app in cache: %v", err), "handleAppUpdatedEvent error")
 	}
 }
 
 func (s *Service) handleAppDeletedEvent(event events.Event) {
+	s.logger.Info("Received app delete event", "event", event)
 	app, ok := event.Payload.(*v1alpha1.Application)
 	if !ok {
-		fmt.Printf("Invalid payload for AppDeleted event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for AppDeleted event"), "handleAppDeletedEvent error")
 		return
 	}
 	if err := s.DeleteApp(app.UID); err != nil {
-		fmt.Printf("Error deleting app from cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error deleting app from cache: %v", err), "handleAppDeletedEvent error")
 	}
 }
 
 func (s *Service) handleNfUpdatedEvent(event events.Event) {
+	s.logger.Info("Received nf update event", "event", event)
 	nf, ok := event.Payload.(*v1alpha1.NetworkFunction)
 	if !ok {
-		fmt.Printf("Invalid payload for NfUpdated event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for NfUpdated event"), "handleNfUpdatedEvent error")
 		return
 	}
 	if err := s.UpdateNF(nf.UID, nf); err != nil {
-		fmt.Printf("Error updating network function in cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error updating network function in cache: %v", err), "handleNfUpdatedEvent error")
 	}
 }
 
 func (s *Service) handleNfDeletedEvent(event events.Event) {
+	s.logger.Info("Received nf delete event", "event", event)
 	nf, ok := event.Payload.(*v1alpha1.NetworkFunction)
 	if !ok {
-		fmt.Printf("Invalid payload for NfDeleted event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for NfDeleted event"), "handleNfDeletedEvent error")
 		return
 	}
 	if err := s.DeleteNF(nf.UID); err != nil {
-		fmt.Printf("Error deleting network function from cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error deleting network function from cache: %v", err), "handleNfDeletedEvent error")
 	}
 }
 
 func (s *Service) handleChainUpdatedEvent(event events.Event) {
+	s.logger.Info("Received chain update event", "event", event)
 	chain, ok := event.Payload.(*v1alpha1.ServiceChain)
 	if !ok {
-		fmt.Printf("Invalid payload for ChainUpdated event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for ChainUpdated event"), "handleChainUpdatedEvent error")
 		return
 	}
 	if err := s.UpdateServiceChain(chain.UID, chain); err != nil {
-		fmt.Printf("Error updating service chain in cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error updating service chain in cache: %v", err), "handleChainUpdatedEvent error")
 	}
 }
 
 func (s *Service) handleChainDeletedEvent(event events.Event) {
+	s.logger.Info("Received chain delete event", "event", event)
 	chain, ok := event.Payload.(*v1alpha1.ServiceChain)
 	if !ok {
-		fmt.Printf("Invalid payload for ChainDeleted event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for ChainDeleted event"), "handleChainDeletedEvent error")
 		return
 	}
 	if err := s.DeleteServiceChain(chain.UID); err != nil {
-		fmt.Printf("Error deleting service chain from cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error deleting service chain from cache: %v", err), "handleChainDeletedEvent error")
 	}
 }
 
 func (s *Service) handleAppChainsUpdatedEvent(event events.Event) {
+	s.logger.Info("Received app chains update event", "event", event)
 	appChains, ok := event.Payload.(*dto.ApplicationServiceChains)
 	if !ok {
-		fmt.Printf("Invalid payload for AppChainsUpdated event\n")
+		s.logger.Error(fmt.Errorf("invalid payload for AppChainsUpdated event"), "handleAppChainsUpdatedEvent error")
 		return
 	}
 	if err := updateEntry(s.appChainsCache, types.UID(appChains.AppID), *appChains); err != nil {
-		fmt.Printf("Error updating app service chains in cache: %v\n", err)
+		s.logger.Error(fmt.Errorf("error updating app service chains in cache: %v", err), "handleAppChainsUpdatedEvent error")
 	}
+	s.logger.Info("Successfully updated app service chains in cache", "appID", appChains.AppID)
 	s.bus.Publish(events.Event{
 		Name:    events.EventAppChainsUpdated,
 		Payload: appChains,
 	})
+	s.logger.Info("Successfully published app chains updated event", "appID", appChains.AppID)
 }
 
 func (s *Service) GetApp(uid types.UID) (dto.ApplicationDefinition, error) {
