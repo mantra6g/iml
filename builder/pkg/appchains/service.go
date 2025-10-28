@@ -49,6 +49,7 @@ func (s *Service) handleAppUpdatedEvent(event events.Event) {
 
 	var appChainsPtr *dto.ApplicationServiceChains
 	appChains, err := s.cache.GetAppServiceChains(types.UID(app.ID))
+	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
 	if err != nil {
 		// App chains does not exist, create new
 		appChainsPtr = &dto.ApplicationServiceChains{
@@ -71,6 +72,7 @@ func (s *Service) handleAppUpdatedEvent(event events.Event) {
 		}
 	}
 
+	s.logger.Info("Publishing app chains pre-updated event", "appChains", appChainsPtr)
 	s.bus.Publish(events.Event{
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
@@ -88,6 +90,7 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 	
 	var appChainsPtr *dto.ApplicationServiceChains
 	appChains, err := s.cache.GetAppServiceChains(types.UID(app.ID))
+	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
 	if err != nil {
 		// App chains does not exist, create new with deleted status
 		appChainsPtr = &dto.ApplicationServiceChains{
@@ -112,6 +115,7 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 		appChainsPtr.Chains = []string{} // Clear chains on deletion
 	}
 
+	s.logger.Info("Publishing app chains pre-updated event for deletion", "appChains", appChainsPtr)
 	s.bus.Publish(events.Event{
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
@@ -129,6 +133,7 @@ func (s *Service) handleChainUpdatedEvent(event events.Event) {
 
 	var appChainsPtr *dto.ApplicationServiceChains
 	appChains, err := s.cache.GetAppServiceChains(types.UID(chain.SrcAppID))
+	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
 	if err != nil {
 		// App chains does not exist, create new
 		appChainsPtr = &dto.ApplicationServiceChains{
@@ -159,12 +164,13 @@ func (s *Service) handleChainUpdatedEvent(event events.Event) {
 				break
 			}
 		}
-		if !found {
-			appChainsPtr.Chains = append(appChainsPtr.Chains, chain.ID)
+		if found {
 			return // No need to publish if chain already exists
 		}
+		appChainsPtr.Chains = append(appChainsPtr.Chains, chain.ID)
 	}
 
+	s.logger.Info("Publishing app chains pre-updated event", "appChains", appChainsPtr)
 	s.bus.Publish(events.Event{
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,
@@ -182,6 +188,7 @@ func (s *Service) handleChainDeletedEvent(event events.Event) {
 
 	var appChainsPtr *dto.ApplicationServiceChains
 	appChains, err := s.cache.GetAppServiceChains(types.UID(chain.SrcAppID))
+	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
 	if err != nil {
 		// App chains does not exist, nothing to delete
 		return
@@ -211,6 +218,7 @@ func (s *Service) handleChainDeletedEvent(event events.Event) {
 	}
 	appChainsPtr.Chains = newChains
 
+	s.logger.Info("Publishing app chains pre-updated event", "appChains", appChainsPtr)
 	s.bus.Publish(events.Event{
 		Name:    events.EventAppChainsPreUpdated,
 		Payload: appChainsPtr,

@@ -15,6 +15,14 @@ func (r *Registry) FindAppById(id uuid.UUID) (*models.Application, error) {
 	return &app, nil
 }
 
+func (r *Registry) FindActiveAppByLocalID(localID uuid.UUID) (*models.Application, error) {
+	var app models.Application
+	if err := r.dbHandle.First(&app, "id = ? AND status = ?", localID, models.AppStatusActive).Error; err != nil {
+		return nil, fmt.Errorf("application with local ID %s not found: %w", localID, err)
+	}
+	return &app, nil
+}
+
 func (r *Registry) FindActiveAppByGlobalID(globalID string) (*models.Application, error) {
 	var app models.Application
 	if err := r.dbHandle.First(&app, "global_id = ? AND status = ?", globalID, models.AppStatusActive).Error; err != nil {
@@ -86,6 +94,14 @@ func (r *Registry) FindNetworkFunctionByID(id uuid.UUID) (*models.VirtualNetwork
 		return nil, fmt.Errorf("network function with id %s not found: %w", id, err)
 	}
 	return &function, nil
+}
+
+func (r *Registry) FindActiveNetworkFunctionByLocalID(localID uuid.UUID) (*models.VirtualNetworkFunction, error) {
+	var vnf models.VirtualNetworkFunction
+	if err := r.dbHandle.First(&vnf, "id = ? AND status = ?", localID, models.VNFStatusActive).Error; err != nil {
+		return nil, fmt.Errorf("VNF with local ID %s not found: %w", localID, err)
+	}
+	return &vnf, nil
 }
 
 func (r *Registry) FindActiveNetworkFunctionByGlobalID(globalID string) (*models.VirtualNetworkFunction, error) {

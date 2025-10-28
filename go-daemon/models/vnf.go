@@ -11,10 +11,10 @@ const (
 )
 
 type VirtualNetworkFunction struct {
-	ID       uuid.UUID  `gorm:"primaryKey"`
+	ID       uuid.UUID `gorm:"primaryKey"`
 	GlobalID string
-	Status   string     `gorm:"index:status,default:ACTIVE"`
-	Etag	   int
+	Status   string `gorm:"index:idx_virtual_network_functions_status,default:ACTIVE"`
+	Etag     int
 	Groups   []VnfGroup `gorm:"foreignKey:vnf_id"`
 }
 

@@ -116,13 +116,10 @@ func (c *VNFDefinitionController) processQueue() {
 			continue
 		}
 
-		var changelog diff.Changelog
-		var err error
-		if topicData.LastMessage != nil {
-			changelog, err = diff.Diff(topicData.LastMessage, event.Message)
-			if err != nil {
-				logger.ErrorLogger().Printf("failed to compute diff between last and new Vnf definition message on topic %s: %v\n", event.Topic, err)
-			}
+		changelog, err := diff.Diff(topicData.LastMessage, event.Message)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new Vnf definition message on topic %s: %v\n", event.Topic, err)
+			continue
 		}
 
 		// Process the event

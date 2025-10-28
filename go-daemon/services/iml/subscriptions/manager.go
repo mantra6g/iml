@@ -142,7 +142,7 @@ func (mgr *SubscriptionManager) executeRemoveSubscription(key SubscriptionKey) e
 func (mgr *SubscriptionManager) executeAddReferenceToDependency(key DependencyKey) error {
 	mgr._mutex.Lock()
 	defer mgr._mutex.Unlock()
-	dep, exists := mgr.GetDependency(key)
+	dep, exists := mgr.dependencies[key]
 	if !exists {
 		return fmt.Errorf("SubscriptionManager.addReferenceToDependency: dependency %v not found", key)
 	}
@@ -153,7 +153,7 @@ func (mgr *SubscriptionManager) executeAddReferenceToDependency(key DependencyKe
 func (mgr *SubscriptionManager) executeRemoveReferenceFromDependency(key DependencyKey) error {
 	mgr._mutex.Lock()
 	defer mgr._mutex.Unlock()
-	dep, exists := mgr.GetDependency(key)
+	dep, exists := mgr.dependencies[key]
 	if !exists {
 		return fmt.Errorf("SubscriptionManager.removeReferenceFromDependency: dependency %v not found", key)
 	}

@@ -116,13 +116,10 @@ func (c *ChainDefinitionController) processQueue() {
 			continue
 		}
 
-		var changelog diff.Changelog
-		var err error
-		if topicData.LastMessage != nil {
-			changelog, err = diff.Diff(topicData.LastMessage, event.Message)
-			if err != nil {
-				logger.ErrorLogger().Printf("failed to compute diff between last and new Chain definition message on topic %s: %v\n", event.Topic, err)
-			}
+		changelog, err := diff.Diff(topicData.LastMessage, event.Message)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new Chain definition message on topic %s: %v\n", event.Topic, err)
+			continue
 		}
 
 		// Process the event
@@ -137,10 +134,11 @@ func (c *ChainDefinitionController) processQueue() {
 			res, err := c.OnDelete(topicData.Args.(ChainDefinitionTopic), topicData.LastMessage)
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnDelete for Chain ID %s: %v. Skipping event", newMsg.ID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = nil
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration
@@ -155,10 +153,11 @@ func (c *ChainDefinitionController) processQueue() {
 			})
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnUpdate for Chain ID %s: %v. Skipping event", newMsg.ID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = newMsg
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration
@@ -191,7 +190,16 @@ func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update 
 	for _, change := range update.ChangeLog {
 		switch change.Path[0] {
 		case "dst_app_id":
-			if change.Type == "replace" {
+			switch change.Type {
+			case diff.DELETE:
+				if oldAppID, ok := change.From.(string); ok {
+					removedApps = append(removedApps, oldAppID)
+				}
+			case diff.CREATE:
+				if newAppID, ok := change.To.(string); ok {
+					addedApps = append(addedApps, newAppID)
+				}
+			case diff.UPDATE:
 				if oldAppID, ok := change.From.(string); ok {
 					removedApps = append(removedApps, oldAppID)
 				}
@@ -200,13 +208,21 @@ func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update 
 				}
 			}
 		case "functions":
-			if change.Type == "add" {
+			switch change.Type {
+			case diff.DELETE:
+				if vnfID, ok := change.From.(string); ok {
+					removedVnfs = append(removedVnfs, vnfID)
+				}
+			case diff.CREATE:
 				if vnfID, ok := change.To.(string); ok {
 					addedVnfs = append(addedVnfs, vnfID)
 				}
-			} else if change.Type == "remove" {
+			case diff.UPDATE:
 				if vnfID, ok := change.From.(string); ok {
 					removedVnfs = append(removedVnfs, vnfID)
+				}
+				if vnfID, ok := change.To.(string); ok {
+					addedVnfs = append(addedVnfs, vnfID)
 				}
 			}
 		default:

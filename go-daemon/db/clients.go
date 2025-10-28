@@ -15,7 +15,7 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 	}
 
 	// Migrate the schema
-	db.AutoMigrate(
+	err = db.AutoMigrate(
 		&models.Application{},
 		&models.AppInstance{},
 		&models.VirtualNetworkFunction{},
@@ -29,6 +29,9 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 		&models.RemoteAppInstance{},
 		&models.RemoteVnfGroup{},
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to migrate database schema: %w", err)
+	}
 
 	// Setup many-to-many relationship for Route and Segment
 	db.SetupJoinTable(&models.Route{}, "RouteSegments", &models.RouteStage{})
