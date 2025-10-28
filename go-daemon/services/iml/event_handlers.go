@@ -15,8 +15,15 @@ func (c *Client) handleLocalAppGroupCreated(event events.Event) {
 		return
 	}
 
-	err := c.manager.AddDependency(&subscriptions.LocalAppDependency{
-		AppID: appGroup.AppID.String(),
+	// TODO: Race condition possible here if temporaryAppDependency ends before we get here
+	app, err := c.repo.FindActiveAppByLocalID(appGroup.AppID)
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalAppGroupCreated: error finding active app by local ID %s: %v", appGroup.AppID, err)
+		return
+	}
+
+	err = c.manager.AddDependency(&subscriptions.LocalAppDependency{
+		AppID: app.GlobalID,
 	})
 	if err != nil {
 		logger.ErrorLogger().Printf("iml.handleLocalAppGroupCreated: error adding local app group dependency: %v", err)
@@ -31,8 +38,15 @@ func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
 		return
 	}
 
-	err := c.manager.RemoveDependency(&subscriptions.LocalAppDependency{
-		AppID: appGroup.AppID.String(),
+	// TODO: Race condition possible here if temporaryAppDependency ends before we get here
+	app, err := c.repo.FindActiveAppByLocalID(appGroup.AppID)
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalAppGroupCreated: error finding active app by local ID %s: %v", appGroup.AppID, err)
+		return
+	}
+
+	err = c.manager.RemoveDependency(&subscriptions.LocalAppDependency{
+		AppID: app.GlobalID,
 	})
 	if err != nil {
 		logger.ErrorLogger().Printf("iml.handleLocalAppGroupRemoved: error removing local app group dependency: %v", err)
@@ -47,8 +61,15 @@ func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
 		return
 	}
 
-	err := c.manager.AddDependency(&subscriptions.LocalVnfDependency{
-		VnfID: vnfGroup.VnfID.String(),
+	// TODO: Race condition possible here if temporaryVnfDependency ends before we get here
+	vnf, err := c.repo.FindActiveNetworkFunctionByLocalID(vnfGroup.VnfID)
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupCreated: error finding active VNF by local ID %s: %v", vnfGroup.VnfID, err)
+		return
+	}
+
+	err = c.manager.AddDependency(&subscriptions.LocalVnfDependency{
+		VnfID: vnf.GlobalID,
 	})
 	if err != nil {
 		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupCreated: error adding local vnf group dependency: %v", err)
@@ -63,8 +84,15 @@ func (c *Client) handleLocalVnfGroupRemoved(event events.Event) {
 		return
 	}
 
-	err := c.manager.RemoveDependency(&subscriptions.LocalVnfDependency{
-		VnfID: vnfGroup.VnfID.String(),
+	// TODO: Race condition possible here if temporaryVnfDependency ends before we get here
+	vnf, err := c.repo.FindActiveNetworkFunctionByLocalID(vnfGroup.VnfID)
+	if err != nil {
+		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupCreated: error finding active VNF by local ID %s: %v", vnfGroup.VnfID, err)
+		return
+	}
+
+	err = c.manager.RemoveDependency(&subscriptions.LocalVnfDependency{
+		VnfID: vnf.GlobalID,
 	})
 	if err != nil {
 		logger.ErrorLogger().Printf("iml.handleLocalVnfGroupRemoved: error removing local vnf group dependency: %v", err)

@@ -11,11 +11,11 @@ const (
 )
 
 type Application struct {
-	ID        uuid.UUID   `gorm:"primaryKey"` // Surrogate key
-	GlobalID  string
-	Status    string      `gorm:"index:status,default:ACTIVE"`
-	Etag	  int
-	Groups    []AppGroup  `gorm:"foreignKey:app_id"`
+	ID       uuid.UUID `gorm:"primaryKey"` // Surrogate key
+	GlobalID string
+	Status   string `gorm:"index:idx_applications_status,default:ACTIVE"`
+	Etag     int
+	Groups   []AppGroup `gorm:"foreignKey:app_id"`
 }
 
 func (Application) BeforeCreate(tx *gorm.DB) (err error) {

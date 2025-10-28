@@ -119,13 +119,10 @@ func (c *AppDefinitionController) processQueue() {
 			continue
 		}
 
-		var changelog diff.Changelog
-		var err error
-		if topicData.LastMessage != nil {
-			changelog, err = diff.Diff(topicData.LastMessage, event.Message)
-			if err != nil {
-				logger.ErrorLogger().Printf("failed to compute diff between last and new App definition message on topic %s: %v\n", event.Topic, err)
-			}
+		changelog, err := diff.Diff(topicData.LastMessage, event.Message)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new App definition message on topic %s: %v\n", event.Topic, err)
+			continue
 		}
 
 		// Process the event
@@ -140,13 +137,15 @@ func (c *AppDefinitionController) processQueue() {
 			res, err := c.OnDelete(topicData.Args.(ApplicationDefinitionTopic), topicData.LastMessage)
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnDelete for App ID %s: %v. Skipping event", newMsg.ID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = nil
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
+				// If the result is zero, continue with the next event
 				continue
 			}
-			// Re-enqueue the event after the specified duration
+			// If the result is not zero, re-enqueue the event after the specified duration
 			time.AfterFunc(res.RequeueAfter, func() {
 				c.eventQueue.Enqueue(event)
 				go c.processQueue()
@@ -158,10 +157,11 @@ func (c *AppDefinitionController) processQueue() {
 			})
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnUpdate for App ID %s: %v. Skipping event", newMsg.ID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = newMsg
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration

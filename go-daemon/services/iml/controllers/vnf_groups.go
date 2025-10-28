@@ -118,13 +118,10 @@ func (c *VnfGroupsController) processQueue() {
 			continue
 		}
 
-		var changelog diff.Changelog
-		var err error
-		if topicData.LastMessage != nil {
-			changelog, err = diff.Diff(topicData.LastMessage, event.Message)
-			if err != nil {
-				logger.ErrorLogger().Printf("failed to compute diff between last and new RemoteVnfGroups message on topic %s: %v\n", event.Topic, err)
-			}
+		changelog, err := diff.Diff(topicData.LastMessage, event.Message)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new RemoteVnfGroups message on topic %s: %v\n", event.Topic, err)
+			continue
 		}
 
 		// Process the event
@@ -139,10 +136,11 @@ func (c *VnfGroupsController) processQueue() {
 			res, err := c.OnDelete(topicData.Args.(RemoteVnfGroupsTopic), topicData.LastMessage)
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnDelete for remote VNF groups of VNF ID %s: %v. Skipping event", newMsg.VnfID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = nil
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration
@@ -157,10 +155,11 @@ func (c *VnfGroupsController) processQueue() {
 			})
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnUpdate for remote VNF groups of VNF ID %s: %v. Skipping event", newMsg.VnfID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = newMsg
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration

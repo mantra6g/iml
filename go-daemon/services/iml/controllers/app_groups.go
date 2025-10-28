@@ -119,13 +119,10 @@ func (c *AppGroupsController) processQueue() {
 			continue
 		}
 
-		var changelog diff.Changelog
-		var err error
-		if topicData.LastMessage != nil {
-			changelog, err = diff.Diff(topicData.LastMessage, event.Message)
-			if err != nil {
-				logger.ErrorLogger().Printf("failed to compute diff between last and new RemoteAppGroups message on topic %s: %v\n", event.Topic, err)
-			}
+		changelog, err := diff.Diff(topicData.LastMessage, event.Message)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new RemoteAppGroups message on topic %s: %v\n", event.Topic, err)
+			continue
 		}
 
 		// Process the event
@@ -140,10 +137,11 @@ func (c *AppGroupsController) processQueue() {
 			res, err := c.OnDelete(topicData.Args.(RemoteAppGroupsTopic), topicData.LastMessage)
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnDelete for remote app groups of App ID %s: %v. Skipping event", newMsg.AppID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = nil
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration
@@ -158,10 +156,11 @@ func (c *AppGroupsController) processQueue() {
 			})
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnUpdate for remote app groups of App ID %s: %v. Skipping event", newMsg.AppID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = newMsg
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration

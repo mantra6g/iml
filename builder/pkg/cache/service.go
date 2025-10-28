@@ -24,6 +24,7 @@ func New(eventbus *events.EventBus, logger logr.Logger) (*Service, error) {
 	service := &Service{
 		appCache:   NewCache[types.UID, dto.ApplicationDefinition](),
 		nfCache:    NewCache[types.UID, dto.NetworkFunctionDefinition](),
+		appChainsCache: NewCache[types.UID, dto.ApplicationServiceChains](),
 		chainCache: NewCache[types.UID, dto.ServiceChainDefinition](),
 		bus:        eventbus,
 		logger:     logger,

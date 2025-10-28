@@ -68,11 +68,13 @@ func NewClient(ctx context.Context) (*Client, error) {
 
 func (c *Client) Add(sub Subscription) (Topic, error) {
 	topic := sub.Topic()
-	_, err := c.conn.Subscribe(context.Background(), &paho.Subscribe{
+	logger.DebugLogger().Printf("Adding MQTT subscription for topic %s", topic)
+	subAck, err := c.conn.Subscribe(context.Background(), &paho.Subscribe{
 		Subscriptions: []paho.SubscribeOptions{
 			{Topic: string(topic), QoS: 1},
 		},
 	})
+	logger.DebugLogger().Printf("Subscription acknowledged for topic %s: %+v", topic, subAck)
 	if err != nil {
 		return "", fmt.Errorf("failed to subscribe to topic %s: %v", topic, err)
 	}

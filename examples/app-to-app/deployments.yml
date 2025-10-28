@@ -19,7 +19,7 @@ spec:
               "name": "iml-cni", 
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "ef0584f6-fb5a-42c0-abfb-37a8d01ec2e0"
+                "app_id": "202103cd-1547-429d-9e8c-0d0a1559904c"
               }
             }
           ]
@@ -53,7 +53,7 @@ spec:
               "name": "iml-cni", 
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "ef0584f6-fb5a-42c0-abfb-37a8d01ec2e0"
+                "app_id": "202103cd-1547-429d-9e8c-0d0a1559904c"
               }
             }
           ]
@@ -65,37 +65,37 @@ spec:
           image: nginx:latest
           ports:
             - containerPort: 80
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: mongodb
-#   namespace: default
-# spec:
-#   replicas: 1
-#   selector:
-#     matchLabels:
-#       app: mongodb
-#   template:
-#     metadata:
-#       labels:
-#         app: mongodb
-#       annotations:
-#         k8s.v1.cni.cncf.io/networks: |
-#           [
-#             { 
-#               "name": "iml-cni",
-#               "cni-args": {
-#                 "app_type": "application_function",
-#                 "app_id": "04931906-db77-4916-bcaa-ba377ea1c552"
-#               }
-#             }
-#           ]
-#     spec:
-#       nodeSelector:
-#         kubernetes.io/hostname: oai-01
-#       containers:
-#         - name: mongodb
-#           image: mongo:latest
-#           ports:
-#             - containerPort: 27017
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            { 
+              "name": "iml-cni",
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "f240b84f-6efb-4e9b-a61e-61c9f9ba9a3a"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: mongodb
+          image: mongo:latest
+          ports:
+            - containerPort: 27017

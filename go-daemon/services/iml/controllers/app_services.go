@@ -79,15 +79,15 @@ func (c *AppServicesController) HandleMessage(msg *paho.Publish) {
 		logger.DebugLogger().Printf("Registered new topic data for topic %s\n", msg.Topic)
 	}
 
-	var newMsg mqtt.AppInstances
+	var newMsg mqtt.ApplicationServiceChains
 	err := json.Unmarshal(msg.Payload, &newMsg)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to unmarshal app instances message on topic %s: %v\n", msg.Topic, err)
+		logger.ErrorLogger().Printf("failed to unmarshal app service chains message on topic %s: %v\n", msg.Topic, err)
 		return
 	}
 
 	if topicData.LastMessage != nil && newMsg.Seq <= topicData.LastMessage.GetSeq() {
-		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate app instances message on topic %s: last seq %d, new seq %d\n", msg.Topic, topicData.LastMessage.GetSeq(), newMsg.Seq)
+		logger.DebugLogger().Printf("Ignoring out-of-order or duplicate app service chains message on topic %s: last seq %d, new seq %d\n", msg.Topic, topicData.LastMessage.GetSeq(), newMsg.Seq)
 		return
 	}
 
@@ -113,13 +113,10 @@ func (c *AppServicesController) processQueue() {
 			continue
 		}
 
-		var changelog diff.Changelog
-		var err error
-		if topicData.LastMessage != nil {
-			changelog, err = diff.Diff(topicData.LastMessage, event.Message)
-			if err != nil {
-				logger.ErrorLogger().Printf("failed to compute diff between last and new App definition message on topic %s: %v\n", event.Topic, err)
-			}
+		changelog, err := diff.Diff(topicData.LastMessage, event.Message)
+		if err != nil {
+			logger.ErrorLogger().Printf("failed to compute diff between last and new App definition message on topic %s: %v\n", event.Topic, err)
+			continue
 		}
 
 		// Process the event
@@ -133,14 +130,16 @@ func (c *AppServicesController) processQueue() {
 		case "deleted":
 			res, err := c.OnDelete(topicData.Args.(ApplicationServicesTopic), topicData.LastMessage)
 			if err != nil {
-				logger.ErrorLogger().Printf("The following error occurred while executing OnDelete for App ID %s: %v. Skipping event", newMsg.AppID, err)
-				continue
+				logger.ErrorLogger().Printf("The following error occurred while executing OnDelete for App ID %s: %v", newMsg.AppID, err)
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = nil
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
+				// If the result is zero, continue with the next event
 				continue
 			}
-			// Re-enqueue the event after the specified duration
+			// If the result is not zero, re-enqueue the event after the specified duration
 			time.AfterFunc(res.RequeueAfter, func() {
 				c.eventQueue.Enqueue(event)
 				go c.processQueue()
@@ -152,10 +151,11 @@ func (c *AppServicesController) processQueue() {
 			})
 			if err != nil {
 				logger.ErrorLogger().Printf("The following error occurred while executing OnUpdate for App ID %s: %v. Skipping event", newMsg.AppID, err)
-				continue
+			} else {
+				// Consider this successful only if no error occurred
+				topicData.LastMessage = newMsg
 			}
 			if res.IsZero() {
-				topicData.LastMessage = nil
 				continue
 			}
 			// Re-enqueue the event after the specified duration
@@ -184,11 +184,11 @@ func (c *AppServicesController) OnUpdate(topic ApplicationServicesTopic, update 
 	for _, change := range update.ChangeLog {
 		switch change.Path[0] {
 		case "chains":
-			if change.Type == "add" {
+			if change.Type == diff.CREATE {
 				if chainID, ok := change.To.(string); ok {
 					addedChains = append(addedChains, chainID)
 				}
-			} else if change.Type == "remove" {
+			} else if change.Type == diff.DELETE {
 				if chainID, ok := change.From.(string); ok {
 					removedChains = append(removedChains, chainID)
 				}

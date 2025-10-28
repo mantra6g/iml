@@ -13,12 +13,12 @@ const (
 type ServiceChain struct {
 	ID       uuid.UUID `gorm:"primaryKey"`
 	GlobalID string
-	Status   string    `gorm:"index:status,default:ACTIVE"`
-	Etag 	 int
+	Status   string `gorm:"index:idx_service_chains_status,default:ACTIVE"`
+	Etag     int
 	SrcAppID uuid.UUID
 	DstAppID uuid.UUID
-	SrcApp   Application `gorm:"foreignKey:src_app_id"`
-	DstApp   Application `gorm:"foreignKey:dst_app_id"`
+	SrcApp   Application        `gorm:"foreignKey:src_app_id"`
+	DstApp   Application        `gorm:"foreignKey:dst_app_id"`
 	Elements []ServiceChainVnfs `gorm:"foreignKey:chain_id"`
 }
 
