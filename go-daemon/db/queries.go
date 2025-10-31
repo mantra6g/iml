@@ -185,63 +185,63 @@ func (r *Registry) FindRemoteVnfGroupByNodeAndExternalID(nodeID string, groupID 
 }
 
 func (r *Registry) SaveApp(app *models.Application) error {
-	if err := r.dbHandle.Create(app).Error; err != nil {
+	if err := r.dbHandle.Save(app).Error; err != nil {
 		return fmt.Errorf("failed to save application: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveAppGroup(group *models.AppGroup) error {
-	if err := r.dbHandle.Create(group).Error; err != nil {
+	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save app group: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveAppInstance(instance *models.AppInstance) error {
-	if err := r.dbHandle.Create(instance).Error; err != nil {
+	if err := r.dbHandle.Save(instance).Error; err != nil {
 		return fmt.Errorf("failed to save app instance: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveVnf(function *models.VirtualNetworkFunction) error {
-	if err := r.dbHandle.Create(function).Error; err != nil {
+	if err := r.dbHandle.Save(function).Error; err != nil {
 		return fmt.Errorf("failed to save virtual network function: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveVnfGroup(group *models.VnfGroup) error {
-	if err := r.dbHandle.Create(group).Error; err != nil {
+	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save VNF group: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveVnfInstance(instance *models.VnfInstance) error {
-	if err := r.dbHandle.Create(instance).Error; err != nil {
+	if err := r.dbHandle.Save(instance).Error; err != nil {
 		return fmt.Errorf("failed to save VNF instance: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveNetworkServiceChain(chain *models.ServiceChain) error {
-	if err := r.dbHandle.Create(chain).Error; err != nil {
+	if err := r.dbHandle.Save(chain).Error; err != nil {
 		return fmt.Errorf("failed to save network service chain: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveChainElement(element *models.ServiceChainVnfs) error {
-	if err := r.dbHandle.Create(element).Error; err != nil {
+	if err := r.dbHandle.Save(element).Error; err != nil {
 		return fmt.Errorf("failed to save chain element: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveRoute(route *models.Route) error {
-	if err := r.dbHandle.Create(route).Error; err != nil {
+	if err := r.dbHandle.Save(route).Error; err != nil {
 		return fmt.Errorf("failed to save route: %w", err)
 	}
 	return nil
@@ -249,7 +249,7 @@ func (r *Registry) SaveRoute(route *models.Route) error {
 
 func (r *Registry) SaveRemoteAppInstances(instances []*models.RemoteAppInstance) error {
 	for _, instance := range instances {
-		if err := r.dbHandle.Create(instance).Error; err != nil {
+		if err := r.dbHandle.Save(instance).Error; err != nil {
 			return fmt.Errorf("failed to save remote app instance: %w", err)
 		}
 	}
@@ -298,8 +298,16 @@ func (r *Registry) RemoveVnfInstanceByContainerID(containerID string) error {
 	return nil
 }
 
+func (r *Registry) FindAllRoutes() ([]*models.Route, error) {
+	var routes []*models.Route
+	if err := r.dbHandle.Find(&routes).Error; err != nil {
+		return nil, fmt.Errorf("failed to find all routes: %w", err)
+	}
+	return routes, nil
+}
+
 func (r *Registry) RemoveAllRoutes() error {
-	if err := r.dbHandle.Delete(&models.Route{}).Error; err != nil {
+	if err := r.dbHandle.Delete(&models.Route{}, "1 = 1").Error; err != nil {
 		return fmt.Errorf("failed to remove all routes: %w", err)
 	}
 	return nil
@@ -326,7 +334,7 @@ func (r *Registry) SaveRoutes(routes []*models.Route) error {
 
 func (r *Registry) SaveRouteStages(routeStages []*models.RouteStage) error {
 	for _, stage := range routeStages {
-		if err := r.dbHandle.Create(stage).Error; err != nil {
+		if err := r.dbHandle.Save(stage).Error; err != nil {
 			return fmt.Errorf("failed to save route stage: %w", err)
 		}
 	}
@@ -334,21 +342,21 @@ func (r *Registry) SaveRouteStages(routeStages []*models.RouteStage) error {
 }
 
 func (r *Registry) SaveRemoteAppGroup(group *models.RemoteAppGroup) error {
-	if err := r.dbHandle.Create(group).Error; err != nil {
+	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save remote app group: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveRemoteVnfGroup(group *models.RemoteVnfGroup) error {
-	if err := r.dbHandle.Create(group).Error; err != nil {
+	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save remote VNF group: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) SaveNode(node *models.Worker) error {
-	if err := r.dbHandle.Create(node).Error; err != nil {
+	if err := r.dbHandle.Save(node).Error; err != nil {
 		return fmt.Errorf("failed to save node: %w", err)
 	}
 	return nil

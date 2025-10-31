@@ -3,7 +3,10 @@ package routecalc
 import (
 	"container/heap"
 	"fmt"
+	"iml-daemon/env"
+	"iml-daemon/logger"
 	"iml-daemon/models"
+	"net"
 
 	"github.com/google/uuid"
 )
@@ -24,17 +27,23 @@ func NewGraph() (*Graph, error) {
 	graph := &Graph{
 		nodes: make(map[uuid.UUID]GraphNode),
 		adj:   make(map[uuid.UUID][]GraphEdge),
+		hub:   make(map[uuid.UUID]WorkerNode),
 		srcNode: srcNodeID,
 	}
+	globalConfig, err := env.Config()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get global config: %w", err)
+	}
 	srcNode := WorkerNode{
-		id:        srcNodeID,
+		id:       srcNodeID,
+		DecapSID: globalConfig.NFRouterVNFIP.IP,
 	}
 	graph.nodes[srcNodeID] = srcNode
 
 	return graph, nil
 }
 
-func (g *Graph) AddVNFGroup(vnfGroup *models.VnfGroup) error {
+func (g *Graph) AddLocalVNFGroup(vnfGroup *models.VnfGroup) error {
 	if vnfGroup == nil {
 		return fmt.Errorf("vnfGroup is nil")
 	}
@@ -42,9 +51,6 @@ func (g *Graph) AddVNFGroup(vnfGroup *models.VnfGroup) error {
 		return fmt.Errorf("vnfGroup ID is nil")
 	}
 	hID := g.srcNode
-	if vnfGroup.WorkerID != nil {
-		hID = *vnfGroup.WorkerID
-	}
 	hNode, ok := g.nodes[hID].(WorkerNode)
 	if !ok {
 		return fmt.Errorf("worker node %s does not exist", hID)
@@ -59,7 +65,29 @@ func (g *Graph) AddVNFGroup(vnfGroup *models.VnfGroup) error {
 	return nil
 }
 
-func (g *Graph) AddAppGroup(appGroup *models.AppGroup) error {
+func (g *Graph) AddRemoteVNFGroup(vnfGroup *models.RemoteVnfGroup) error {
+	if vnfGroup == nil {
+		return fmt.Errorf("vnfGroup is nil")
+	}
+	if vnfGroup.ID == uuid.Nil {
+		return fmt.Errorf("vnfGroup ID is nil")
+	}
+	hID := vnfGroup.WorkerID
+	hNode, ok := g.nodes[hID].(WorkerNode)
+	if !ok {
+		return fmt.Errorf("worker node %s does not exist", hID)
+	}
+	g.nodes[vnfGroup.ID] = VnfNode{
+		id:    vnfGroup.ID,
+		VnfID: vnfGroup.VnfID,
+	}
+	g.hub[vnfGroup.ID] = hNode
+	g.addEdge(vnfGroup.ID, hID, 1)
+
+	return nil
+}
+
+func (g *Graph) AddLocalAppGroup(appGroup *models.AppGroup) error {
 	if appGroup == nil {
 		return fmt.Errorf("appGroup is nil")
 	}
@@ -67,9 +95,27 @@ func (g *Graph) AddAppGroup(appGroup *models.AppGroup) error {
 		return fmt.Errorf("appGroup ID is nil")
 	}
 	hID := g.srcNode
-	if appGroup.WorkerID != nil {
-		hID = *appGroup.WorkerID
+	hNode, ok := g.nodes[hID].(WorkerNode)
+	if !ok {
+		return fmt.Errorf("worker node %s does not exist", hID)
 	}
+	g.nodes[appGroup.ID] = AppNode{
+		id:    appGroup.ID,
+		appID: appGroup.AppID,
+	}
+	g.hub[appGroup.ID] = hNode
+	g.addEdge(appGroup.ID, hID, 1) // Cost is always 1
+	return nil
+}
+
+func (g *Graph) AddRemoteAppGroup(appGroup *models.RemoteAppGroup) error {
+	if appGroup == nil {
+		return fmt.Errorf("appGroup is nil")
+	}
+	if appGroup.ID == uuid.Nil {
+		return fmt.Errorf("appGroup ID is nil")
+	}
+	hID := appGroup.NodeID
 	hNode, ok := g.nodes[hID].(WorkerNode)
 	if !ok {
 		return fmt.Errorf("worker node %s does not exist", hID)
@@ -90,8 +136,15 @@ func (g *Graph) AddWorker(worker *models.Worker) error {
 	if worker.ID == uuid.Nil {
 		return fmt.Errorf("worker ID is nil")
 	}
+	// TODO: This receives a string in the ip/net format, but this parses the ip only.
+	// We need to adjust this if we want to use the subnet mask later.
+	sid := net.ParseIP(worker.DecapSID)
+	if sid == nil {
+		return fmt.Errorf("invalid DecapSID IP address: %s", worker.DecapSID)
+	}
 	srcNode := WorkerNode{
 		id:        worker.ID,
+		DecapSID:  sid,
 	}
 	g.nodes[worker.ID] = srcNode
 	g.addEdge(g.srcNode, worker.ID, 100) // From worker to source node
@@ -138,10 +191,14 @@ func (g *Graph) addEdge(nodeA, nodeB uuid.UUID, cost int) {
 }
 
 func (g *Graph) FindLocalAppGroupNode(appID uuid.UUID) *AppNode {
+	logger.DebugLogger().Printf("Finding local AppGroupNode for AppID: %s", appID)
+	logger.DebugLogger().Printf("Graph state: %+v", g)
 	for _, node := range g.nodes {
+		logger.DebugLogger().Printf("Checking node: %+v", node)
 		appNode, ok := node.(AppNode)
 		if !ok || appNode.appID != appID {continue}
 		hubNode, exists := g.hub[appNode.id]
+		logger.DebugLogger().Printf("Hub node for AppNode %s: %+v, exists: %v", appNode.id, hubNode, exists)
 		if exists && hubNode.id == g.srcNode {
 			return &appNode
 		}
@@ -198,6 +255,8 @@ type pathIndex struct {
 
 // Dijkstra's implementation using heap
 func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, error) {
+	logger.DebugLogger().Printf("Starting ShortestPath to %s with VNFs: %+v", dstID, vnfs)
+	logger.DebugLogger().Printf("Graph state: %+v", g)
 	// Set the source node
 	srcID := g.srcNode
 
@@ -205,7 +264,7 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 	bests := make(map[pathIndex]int)
 	prev := make(map[uuid.UUID]uuid.UUID)
 	for node := range g.nodes {
-		for vnfIndex := range vnfs {
+		for vnfIndex := 0; vnfIndex < len(vnfs)+1; vnfIndex++ {
 			bests[pathIndex{node: node, vnfIndex: vnfIndex}] = int(^uint(0) >> 1) // max int
 		}
 	}
@@ -221,7 +280,10 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 		u = heap.Pop(pq).(*item)
 
 		// Stop if we reached the destination node and have traversed all categories
-		if u.node == dstID && u.catIndex == len(vnfs) { break }
+		if u.node == dstID && u.catIndex == len(vnfs) {
+			logger.DebugLogger().Printf("Reached destination %s with all VNFs traversed.", dstID)
+			break 
+		}
 
 		// Check if we need to move to the next category
 		if vnf, ok := g.nodes[u.node].(VnfNode); ok && u.catIndex < len(vnfs) && vnf.VnfID == vnfs[u.catIndex] {
@@ -230,14 +292,20 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 		
 		// If we have already found a better path to this node, skip it
 		pIndx := pathIndex{node: u.node, vnfIndex: u.catIndex}
-		if u.dist > bests[pIndx] { continue }
+		if u.dist > bests[pIndx] {
+			logger.DebugLogger().Printf("Skipping node %s with category index %d as a better path already exists.", u.node, u.catIndex)
+			continue
+		}
 
 		bests[pIndx] = u.dist
 
 		// Explore neighbors
+		logger.DebugLogger().Printf("Exploring neighbors of node %s with category index %d.", u.node, u.catIndex)
 		for _, edge := range g.adj[u.node] {
+			logger.DebugLogger().Printf("Checking edge from %s to %s", u.node, edge.To)
 			alt := u.dist + edge.Cost
 			if alt < bests[pathIndex{node: edge.To, vnfIndex: u.catIndex}] {
+				logger.DebugLogger().Printf("Found better path to %s with category index %d: %d", edge.To, u.catIndex, alt)
 				bests[pathIndex{node: edge.To, vnfIndex: u.catIndex}] = alt
 				prev[edge.To] = u.node
 				heap.Push(pq, &item{node: edge.To, dist: alt, catIndex: u.catIndex})
@@ -246,6 +314,10 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 	}
 	
 	if u.node != dstID {
+		logger.DebugLogger().Printf("No path found to %s after exploring all nodes.", dstID)
+		logger.DebugLogger().Printf("Best distances: %+v", bests)
+		logger.DebugLogger().Printf("Previous nodes: %+v", prev)
+		logger.DebugLogger().Printf("Final node reached: %s with category index %d", u.node, u.catIndex)
 		return nil, fmt.Errorf("no path found to %s", dstID)
 	}
 

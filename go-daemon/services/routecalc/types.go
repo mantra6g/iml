@@ -1,6 +1,10 @@
 package routecalc
 
-import "github.com/google/uuid"
+import (
+	"net"
+
+	"github.com/google/uuid"
+)
 
 type GraphNode interface {
 	ID() uuid.UUID // Returns the unique identifier of the node
@@ -9,6 +13,7 @@ type GraphNode interface {
 
 type WorkerNode struct {
 	id        uuid.UUID // Unique identifier for the worker node
+	DecapSID  net.IP
 }
 func (w WorkerNode) ID() uuid.UUID {
 	return w.id

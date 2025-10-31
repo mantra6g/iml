@@ -11,12 +11,13 @@ const (
 	EventLocalVnfGroupRemoved  = "vnfs:group:local:removed"
 	EventRemoteVnfGroupCreated  = "vnfs:group:remote:created"
 	EventRemoteVnfGroupRemoved  = "vnfs:group:remote:removed"
-	
-
+	EventNodeCreated         = "nodes:worker:created"
+	EventNodeRemoved         = "nodes:worker:removed"
 	EventChainCreated          = "chains:chain:created"
 	EventChainRemoved          = "chains:chain:removed"
 	EventChainUpdated          = "chains:chain:updated"
-	EventRouteCalculated       = "routes:calculated"
+	EventRouteRecalculationStarted  = "routes:recalculation:started"
+	EventRouteRecalculationFinished = "routes:recalculation:finished"
 )
 
 // Event represents a domain event with a name and payload.

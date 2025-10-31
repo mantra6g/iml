@@ -7,6 +7,7 @@ import (
 	"iml-daemon/logger"
 	"iml-daemon/models"
 	"iml-daemon/mqtt"
+	"iml-daemon/services/events"
 	"iml-daemon/services/iml/subscriptions"
 	"regexp"
 	"time"
@@ -34,6 +35,7 @@ type ChainDefinitionTopicData struct {
 type ChainDefinitionController struct {
 	Registry   *db.Registry
 	SubManager *subscriptions.SubscriptionManager
+	EventBus   *events.EventBus
 
 	topics     map[ChainDefinitionTopic]ChainDefinitionTopicData
 	eventQueue Queue
@@ -282,6 +284,12 @@ func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update 
 	if err := c.Registry.SaveNetworkServiceChain(localChain); err != nil {
 		return Result{}, fmt.Errorf("failed to update/create Service Chain ID %s in local database: %w", topic.ChainID, err)
 	}
+
+	c.EventBus.Publish(events.Event{
+		Name:    events.EventChainUpdated,
+		Payload: *localChain,
+	})
+
 	logger.InfoLogger().Printf("Successfully processed update for Service Chain ID %s", topic.ChainID)
 	return Result{}, nil
 }
@@ -322,6 +330,12 @@ func (c *ChainDefinitionController) OnDelete(topic ChainDefinitionTopic, lastMsg
 	if err := c.SubManager.OnSubscriptionEnded(sub); err != nil {
 		return Result{}, fmt.Errorf("failed to handle subscription end for Service Chain ID %s: %w", topic.ChainID, err)
 	}
+
+	c.EventBus.Publish(events.Event{
+		Name:    events.EventChainRemoved,
+		Payload: nil,
+	})
+
 	logger.InfoLogger().Printf("Successfully stopped subscription for Service Chain ID %s", topic.ChainID)
 	return Result{}, nil
 }
