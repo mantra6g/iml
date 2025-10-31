@@ -85,7 +85,7 @@ func (r *NFRouter) AddRoute(srcIP string, dstIP string, sids []net.IP) error {
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
-		return fmt.Errorf("failed to add route from %s to %s: %w", srcIP, dstIP, err)
+		return fmt.Errorf("failed to add route from %s to %s via %s: %w", srcAddr.IP.String(), dstAddr.IPNet.String(), sids, err)
 	}
 
 	return nil

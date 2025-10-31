@@ -7,6 +7,7 @@ import (
 	"iml-daemon/logger"
 	"iml-daemon/models"
 	"iml-daemon/services/events"
+	"runtime/debug"
 	"sync"
 
 	"github.com/google/uuid"
@@ -41,53 +42,127 @@ func NewRouteCalcService(registry *db.Registry, eb *events.EventBus) (*RouteCalc
 	}
 
 	// subscribe to instance lifecycle events
-	eb.Subscribe("AppGroupCreated", rc.handleEvent)
-	eb.Subscribe("VnfGroupCreated", rc.handleEvent)
-	eb.Subscribe("WorkerNodeCreated", rc.handleEvent)
-	eb.Subscribe("AppGroupRemoved", rc.handleEvent)
-	eb.Subscribe("VnfGroupRemoved", rc.handleEvent)
-	eb.Subscribe("WorkerNodeRemoved", rc.handleEvent)
+	eb.Subscribe(events.EventLocalAppGroupCreated, rc.handleEvent)
+	eb.Subscribe(events.EventRemoteAppGroupCreated, rc.handleEvent)
+	eb.Subscribe(events.EventLocalVnfGroupCreated, rc.handleEvent)
+	eb.Subscribe(events.EventRemoteVnfGroupCreated, rc.handleEvent)
+	eb.Subscribe(events.EventChainCreated, rc.handleEvent)
+	eb.Subscribe(events.EventChainUpdated, rc.handleEvent)
+	eb.Subscribe(events.EventNodeCreated, rc.handleEvent)
+
+	eb.Subscribe(events.EventLocalAppGroupRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventRemoteAppGroupRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventLocalVnfGroupRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventRemoteVnfGroupRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventChainRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventNodeRemoved, rc.handleEvent)
 
 	return rc, nil
 }
 
 // handleEvent processes incoming events and triggers recalculation.
 func (rc *RouteCalcService) handleEvent(evt events.Event) {
+	logger.InfoLogger().Printf("RouteCalcService received event: %s", evt.Name)
+	defer func() {
+		if r := recover(); r != nil {
+			logger.ErrorLogger().Printf("panic in handleEvent: %v", r)
+			debug.PrintStack()
+		}
+	}()
+
 	rc.mutex.Lock()
 	defer rc.mutex.Unlock()
+	logger.InfoLogger().Printf("RouteCalcService got lock for event: %s", evt.Name)
 
+	var err error
 	switch evt.Name {
-	case "VnfGroupCreated":
-		inst := evt.Payload.(models.VnfGroup)
-		rc.graph.AddVNFGroup(&inst)
+	case events.EventLocalVnfGroupCreated:
+		inst, ok := evt.Payload.(models.VnfGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventLocalVnfGroupCreated")
+			break
+		}
+		err = rc.graph.AddLocalVNFGroup(&inst)
 		// rc.recalculateRoutesWithVnf(inst.ID)
-	case "LocalAppGroupCreated":
-		inst := evt.Payload.(models.AppGroup)
-		rc.graph.AddAppGroup(&inst)
+	case events.EventRemoteVnfGroupCreated:
+		inst, ok := evt.Payload.(models.RemoteVnfGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventRemoteVnfGroupCreated")
+			break
+		}
+		err = rc.graph.AddRemoteVNFGroup(&inst)
+		// rc.recalculateRoutesWithVnf(inst.ID)
+	case events.EventLocalAppGroupCreated:
+		inst, ok := evt.Payload.(models.AppGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventLocalAppGroupCreated")
+			break
+		}
+		err = rc.graph.AddLocalAppGroup(&inst)
 		// rc.recalculateRoutesWhereAppGroupIsSrc(inst.ID)
-	case "RemoteAppGroupCreated":
-		inst := evt.Payload.(models.AppGroup)
-		rc.graph.AddAppGroup(&inst)
+	case events.EventRemoteAppGroupCreated:
+		inst, ok := evt.Payload.(models.RemoteAppGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventRemoteAppGroupCreated")
+			break
+		}
+		err = rc.graph.AddRemoteAppGroup(&inst)
 		// rc.recalculateRoutesWhereAppGroupIsDst(inst.ID)
-	case "WorkerNodeCreated":
-		inst := evt.Payload.(models.Worker)
-		rc.graph.AddWorker(&inst)
-	case "VnfGroupRemoved":
-		inst := evt.Payload.(models.VnfGroup)
+	case events.EventChainCreated, events.EventChainUpdated:
+		// Chains do not affect the graph structure directly
+		// so we do not need to update the graph here.
+		break
+	case events.EventNodeCreated:
+		inst, ok := evt.Payload.(models.Worker)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventNodeCreated")
+			break
+		}
+		err = rc.graph.AddWorker(&inst)
+	case events.EventLocalVnfGroupRemoved:
+		inst, ok := evt.Payload.(models.VnfGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventLocalVnfGroupRemoved")
+			break
+		}
 		rc.graph.RemoveNode(inst.ID)
 		// rc.recalculateRoutesWithVnf(inst.ID)
-	case "LocalAppGroupRemoved":
-		inst := evt.Payload.(models.AppGroup)
+	case events.EventRemoteVnfGroupRemoved:
+		inst, ok := evt.Payload.(models.RemoteVnfGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventRemoteVnfGroupRemoved")
+			break
+		}
+		rc.graph.RemoveNode(inst.ID)
+		// rc.recalculateRoutesWithVnf(inst.ID)
+	case events.EventLocalAppGroupRemoved:
+		inst, ok := evt.Payload.(models.AppGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventLocalAppGroupRemoved")
+			break
+		}
 		rc.graph.RemoveNode(inst.ID)
 		// When removing a local app group, 
 		// this means that there is no longer a source for routes
 		// rc.invalidateRoutesWhereAppGroupIsSrc(inst.ID)
-	case "RemoteAppGroupRemoved":
-		inst := evt.Payload.(models.AppGroup)
+	case events.EventRemoteAppGroupRemoved:
+		inst, ok := evt.Payload.(models.RemoteAppGroup)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventRemoteAppGroupRemoved")
+			break
+		}
 		rc.graph.RemoveNode(inst.ID)
 		// rc.recalculateRoutesWhereAppGroupIsDst(inst.ID)
-	case "WorkerNodeRemoved":
-		inst := evt.Payload.(models.Worker)
+	case events.EventChainRemoved:
+		// Chains do not affect the graph structure directly
+		// so we do not need to update the graph here.
+		break
+	case events.EventNodeRemoved:
+		inst, ok := evt.Payload.(models.Worker)
+		if !ok {
+			err = fmt.Errorf("invalid payload type for EventNodeRemoved")
+			break
+		}
 		rc.graph.RemoveNode(inst.ID)
 		// When removing a worker, we need to recalculate 
 		// all routes that might have used this worker
@@ -96,7 +171,12 @@ func (rc *RouteCalcService) handleEvent(evt events.Event) {
 		// by only recalculating routes that were directly affected.
 		// rc.recalculateAll()
 	}
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to update graph for event %s: %v", evt.Name, err)
+		return
+	}
 
+	logger.InfoLogger().Printf("RouteCalcService starting route recalculation")
 	// recalculate all routes after update
 	if err := rc.recalculateAll(); err != nil {
 		logger.ErrorLogger().Printf("failed to recalculate routes: %v", err)
@@ -110,6 +190,7 @@ func (rc *RouteCalcService) recalculateAll() error {
 	if err != nil {
 		return fmt.Errorf("failed to list chains: %v", err)
 	}
+	logger.DebugLogger().Printf("Got the following service chains: %+v", chains)
 
 	// Remove all old routes
 	if err := rc.registry.RemoveAllRoutes(); err != nil {
@@ -118,21 +199,30 @@ func (rc *RouteCalcService) recalculateAll() error {
 
 	// Notify that routes are being recalculated
 	rc.eventBus.Publish(events.Event{
-		Name:    "RoutesRecalculating",
+		Name:    events.EventRouteRecalculationStarted,
 		Payload: nil,
 	})
 
 	// Recompute routes for each chain
+	logger.DebugLogger().Printf("Recomputing routes for %d chains", len(chains))
 	for _, chain := range chains {
 		routes, err := rc.computeRoutes(chain)
 		if err != nil {
-			logger.InfoLogger().Printf("failed to compute route for chain %d: %v", chain.ID, err)
+			logger.ErrorLogger().Printf("failed to compute route for chain %d: %v", chain.ID, err)
 			continue
 		}
 		if err := rc.registry.SaveRoutes(routes); err != nil {
 			return fmt.Errorf("failed to save routes for chain %d: %v", chain.ID, err)
 		}
 	}
+	logger.DebugLogger().Printf("Route recomputation completed")
+
+	// Notify that routes finished recalculation
+	rc.eventBus.Publish(events.Event{
+		Name:    events.EventRouteRecalculationFinished,
+		Payload: nil,
+	})
+
 	return nil
 }
 
@@ -141,12 +231,12 @@ func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*models
 
 	srcAppNode := rc.graph.FindLocalAppGroupNode(chain.SrcAppID)
 	if srcAppNode == nil {
-		return nil, fmt.Errorf("no source app group found for chain %s", chain.ID)
+		return nil, fmt.Errorf("no source app group with id %s found for chain %s", chain.SrcAppID, chain.ID)
 	}
 
 	dstAppNodes := rc.graph.FindAllAppGroupNodes(chain.DstAppID)
 	if len(dstAppNodes) == 0 {
-		return nil, fmt.Errorf("no destination app groups found for chain %s", chain.ID)
+		return nil, fmt.Errorf("no destination app groups with id %s found for chain %s", chain.DstAppID, chain.ID)
 	}
 
 	var vnfIDChain []uuid.UUID

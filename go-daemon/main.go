@@ -105,6 +105,7 @@ func main() {
 	err = (&controllers.ChainDefinitionController{
 		Registry:   registry,
 		SubManager: subscriptionManager,
+		EventBus:   eb,
 	}).SetupWithMQTT(mqttClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to setup ChainDefinitionController: %v", err)

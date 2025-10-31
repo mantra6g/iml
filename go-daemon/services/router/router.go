@@ -50,9 +50,65 @@ func New(registry *db.Registry, eventBus *events.EventBus) (*RouterService, erro
 		eventBus: eventBus,
 		nfrouter: nfrInstance,
 	}
-	eventBus.Subscribe("RouteUpdated", router.handleRouteUpdated)
+	// eventBus.Subscribe("RouteUpdated", router.handleRouteUpdated)
+	eventBus.Subscribe(events.EventRouteRecalculationFinished, router.handlerRecalculationFinished)
 
 	return router, nil
+}
+
+func (r *RouterService) handlerRecalculationFinished(evt events.Event) {
+	// After route recalculation, update all routes in the NFRouter
+	routes, err := r.registry.FindAllRoutes()
+	if err != nil {
+		logger.ErrorLogger().Printf("handlerRecalculationFinished: error retrieving routes: %v", err)
+		return
+	}
+
+	for _, route := range routes {
+		err := r.Add(route)
+		if err != nil {
+			logger.ErrorLogger().Printf("handlerRecalculationFinished: error adding route %v: %v", route, err)
+		}
+	}
+}
+
+func (r *RouterService) Add(route *models.Route) error {
+	// Search for instances in the registry
+	srcAppInstances, err := r.registry.FindAppInstancesByGroupID(route.SrcAppGroupID)
+	if err != nil {
+		return fmt.Errorf("error finding source app instances: %v", err)
+	}
+	dstAppInstances, err := r.registry.FindAppInstancesByGroupID(route.DstAppGroupID)
+	if err != nil {
+		return fmt.Errorf("error finding destination app instances: %v", err)
+	}
+	// TODO: Differentiate between local and remote Groups
+	// For now, we assume all are local and reachable directly.
+	// As such, we will use the DecapSID of the worker node hosting the destination app group.
+	globalConfig, err := env.Config()
+	if err != nil {
+		return fmt.Errorf("failed to get global config: %w", err)
+	}
+
+	var sids []net.IP
+	for _, vnfGroup := range route.Stages {
+		sid := net.ParseIP(vnfGroup.SID)
+		if sid == nil {
+			return fmt.Errorf("error parsing SID %s: %v", vnfGroup.SID, err)
+		}
+		sids = append(sids, sid)
+	}
+	sids = append(sids, globalConfig.NFRouterVNFIP.IP)
+
+	for _, srcAppInstance := range srcAppInstances {
+		for _, dstAppInstance := range dstAppInstances {
+			err = r.nfrouter.AddRoute(srcAppInstance.IP, dstAppInstance.IP, sids)
+			if err != nil {
+				logger.ErrorLogger().Printf("handleRouteUpdated: error adding route from %s to %s: %v", srcAppInstance.IP, dstAppInstance.IP, err)
+			}
+		}
+	}
+	return nil
 }
 
 func (r *RouterService) handleRouteUpdated(evt events.Event) {
@@ -62,35 +118,8 @@ func (r *RouterService) handleRouteUpdated(evt events.Event) {
 		return
 	}
 
-	// Search for instances in the registry
-	srcAppInstances, err := r.registry.FindAppInstancesByGroupID(route.SrcAppGroupID)
-	if err != nil {
-		logger.ErrorLogger().Printf("handleRouteUpdated: error finding source app instances: %v", err)
-		return
-	}
-	dstAppInstances, err := r.registry.FindAppInstancesByGroupID(route.DstAppGroupID)
-	if err != nil {
-		logger.ErrorLogger().Printf("handleRouteUpdated: error finding destination app instances: %v", err)
-		return
-	}
-
-	var sids []net.IP
-	for _, vnfGroup := range route.Stages {
-		sid := net.ParseIP(vnfGroup.SID)
-		if sid == nil {
-			logger.ErrorLogger().Printf("handleRouteUpdated: error parsing SID %s: %v", vnfGroup.SID, err)
-			return
-		}
-		sids = append(sids, sid)
-	}
-
-	for _, srcAppInstance := range srcAppInstances {
-		for _, dstAppInstance := range dstAppInstances {
-			err = r.nfrouter.AddRoute(srcAppInstance.IP, dstAppInstance.IP, sids)
-			if err != nil {
-				logger.ErrorLogger().Printf("handleRouteUpdated: error adding route from %s to %s: %v", srcAppInstance.IP, dstAppInstance.IP, err)
-			}
-		}
+	if err := r.Add(&route); err != nil {
+		logger.ErrorLogger().Printf("handleRouteUpdated: error adding route: %v", err)
 	}
 }
 
