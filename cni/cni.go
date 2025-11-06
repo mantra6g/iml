@@ -17,7 +17,6 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
-	"golang.org/x/sys/unix"
 )
 
 func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
@@ -90,9 +89,9 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 	}
 
 	// Parse the destination network from the response
-	dstNet, err := netlink.ParseIPNet(netConfig.ClusterCIDR)
+	clusterNet, err := netlink.ParseIPNet(netConfig.ClusterCIDR)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.ClusterCIDR)
+		return nil, fmt.Errorf("failed to parse cluster network: %s", netConfig.ClusterCIDR)
 	}
 
 	// Parse the gateway IP from the response
@@ -106,7 +105,6 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host netns: %w", err)
 	}
-	defer hostNs.Close()
 
 	// Create a veth pair for the container
 	// The container interface is called "iml0"
@@ -128,29 +126,24 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		}
 		peerInterface, err := netlink.LinkByName(imlInterface.PeerName)
 		if err != nil {
-			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.PeerName, err)
+			return fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
 		}
 		// Move the peer interface to the host namespace
 		if err := netlink.LinkSetNsFd(peerInterface, int(hostNs)); err != nil {
-			return fmt.Errorf("failed to move peer interface %s to host netns: %w", imlInterface.PeerName, err)
+			return fmt.Errorf("failed to move host interface %s to host netns: %w", imlInterface.PeerName, err)
 		}
 		// Set both ends of the veth pair up
 		if err := netlink.LinkSetUp(imlInterface); err != nil {
-			return fmt.Errorf("failed to set veth interface up: %w", err)
-		}
-		// Get the peer interface of the veth pair
-		containerLink, err := netlink.LinkByName(imlInterface.Name)
-		if err != nil {
-			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.Name, err)
+			return fmt.Errorf("failed to set container interface up: %w", err)
 		}
 		// Set the container interface's IP address
-		if err := netlink.AddrAdd(containerLink, &netlink.Addr{IPNet: ipNet}); err != nil {
-			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.Name, err)
+		if err := netlink.AddrAdd(imlInterface, &netlink.Addr{IPNet: ipNet}); err != nil {
+			return fmt.Errorf("failed to add IP address to container interface %s: %w", imlInterface.Name, err)
 		}
 
 		// Create route to the destination network
 		routeLink := &netlink.Route{
-			Dst: dstNet,
+			Dst: clusterNet,
 			Gw:  gwIP,
 			Scope: netlink.SCOPE_UNIVERSE,
 			Family: nl.FAMILY_V6,
@@ -162,8 +155,9 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		}
 		return nil
 	})
+	hostNs.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+		return nil, fmt.Errorf("failed to execute inside container netns %s: %w", cniArgs.Netns, err)
 	}
 
 	hostLink, err := netlink.LinkByName(imlInterface.PeerName)
@@ -171,14 +165,14 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 		return nil, fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
 	}
 
-	nfrouter, err := netlink.LinkByName("nfrouter")
+	bridge, err := netlink.LinkByName(netConfig.BridgeName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get nfrouter interface: %w", err)
+		return nil, fmt.Errorf("failed to get bridge interface: %w", err)
 	}
 
-	err = netlink.LinkSetMaster(hostLink, nfrouter)
+	err = netlink.LinkSetMaster(hostLink, bridge)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set host interface %s master to nfrouter: %w", imlInterface.PeerName, err)
+		return nil, fmt.Errorf("failed to set host interface %s master to bridge: %w", imlInterface.PeerName, err)
 	}
 
 	err = netlink.LinkSetUp(hostLink)
@@ -198,11 +192,12 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 			{
 				Interface: &intfIndex,
 				Address:   *ipNet,
+				Gateway:   gwIP,
 			},
 		},
 		Routes: []*types.Route{
 			{
-				Dst: *dstNet,
+				Dst: *clusterNet,
 				GW:  gwIP,
 			},
 		},
@@ -215,27 +210,21 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 	logger.DebugLogger().Printf("Deploying network function with config: %+v\n", netConfig)
 
 	// Parse the IP address from the response
+	ipNet, err := netlink.ParseIPNet(netConfig.IPNet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.IPNet)
+	}
+
+	// Parse the SID address from the response
 	sid, err := netlink.ParseIPNet(netConfig.SID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse IP address: %s", netConfig.SID)
-	}
-
-	// Parse the subnet from the response
-	subnet, err := netlink.ParseIPNet(netConfig.Subnet)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse subnet: %s", netConfig.Subnet)
-	}
-
-	// Get the IP of the interface
-	ifaceIP := &net.IPNet{
-		IP:   sid.IP,
-		Mask: subnet.Mask,
+		return nil, fmt.Errorf("failed to parse SID address: %s", netConfig.SID)
 	}
 
 	// Parse the destination network from the response
-	dstNet, err := netlink.ParseIPNet(netConfig.ClusterCIDR)
+	clusterNet, err := netlink.ParseIPNet(netConfig.ClusterCIDR)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse destination route: %s", netConfig.ClusterCIDR)
+		return nil, fmt.Errorf("failed to parse cluster network: %s", netConfig.ClusterCIDR)
 	}
 
 	// Parse the gateway IP from the response
@@ -249,7 +238,6 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host netns: %w", err)
 	}
-	defer hostNs.Close()
 
 	// Create a veth pair for the container
 	// The container interface is called "iml0"
@@ -265,39 +253,39 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 
 	// Change to the container namespace
 	err = execInsideNs(cniArgs.Netns, func() error {
+		// Set up ip forwarding and SRv6
+		if err := os.WriteFile("/proc/sys/net/ipv6/conf/all/forwarding", []byte("1"), 0644); err != nil {
+			return fmt.Errorf("failed to enable IPv6 forwarding: %w", err)
+		}
+		if err := os.WriteFile("/proc/sys/net/ipv6/conf/all/seg6_enabled", []byte("1"), 0644); err != nil {
+			return fmt.Errorf("failed to enable SRv6: %w", err)
+		}
+
 		// Add the veth pair
 		if err := netlink.LinkAdd(imlInterface); err != nil {
 			return fmt.Errorf("failed to create veth pair: %w", err)
 		}
 		peerInterface, err := netlink.LinkByName(imlInterface.PeerName)
 		if err != nil {
-			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.PeerName, err)
+			return fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
 		}
 		// Move the peer interface to the host namespace
 		if err := netlink.LinkSetNsFd(peerInterface, int(hostNs)); err != nil {
-			return fmt.Errorf("failed to move peer interface %s to host netns: %w", imlInterface.PeerName, err)
+			return fmt.Errorf("failed to move host interface %s to host netns: %w", imlInterface.PeerName, err)
 		}
 		// Set both ends of the veth pair up
 		if err := netlink.LinkSetUp(imlInterface); err != nil {
-			return fmt.Errorf("failed to set veth interface up: %w", err)
-		}
-		// Get the peer interface of the veth pair
-		containerLink, err := netlink.LinkByName(imlInterface.Name)
-		if err != nil {
-			return fmt.Errorf("failed to get peer interface %s: %w", imlInterface.Name, err)
+			return fmt.Errorf("failed to set container interface up: %w", err)
 		}
 		// Set the peer interface's IP address
 		// ip -6 addr add <IP>/<PREFIXLEN> dev iml0 anycast
-		if err := netlink.AddrAdd(containerLink, &netlink.Addr{
-			IPNet: ifaceIP,
-			Flags: unix.IFA_ANYCAST,
-		}); err != nil {
-			return fmt.Errorf("failed to add IP address to peer interface %s: %w", imlInterface.Name, err)
+		if err := netlink.AddrAdd(imlInterface, &netlink.Addr{IPNet: ipNet}); err != nil {
+			return fmt.Errorf("failed to add IP address to container interface %s: %w", imlInterface.Name, err)
 		}
 		// Create route to the destination network
 		// ip -6 route add <DESTINATION> via <GATEWAY> src <IP>
 		routeLink := &netlink.Route{
-			Dst: dstNet,
+			Dst: clusterNet,
 			Gw:  gwIP,
 			Scope: netlink.SCOPE_UNIVERSE,
 			Family: nl.FAMILY_V6,
@@ -306,18 +294,19 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		if err := netlink.RouteAdd(routeLink); err != nil {
 			return fmt.Errorf("failed to add route: %w", err)
 		}
-		// Get the loopback interface
-		lo, err := netlink.LinkByName("lo")
-		if err != nil {
-			return fmt.Errorf("failed to get loopback interface: %w", err)
-		}
-		// ip -6 route add <SID> dev lo encap seg6local action End
+		// Add SRv6 End.X route
+		// ip -6 route add <SID> dev lo encap seg6local action End.X nh6 <Gateway> dev <Container interface>
+		end_x_flags := [nl.SEG6_LOCAL_MAX]bool{}
+		end_x_flags[nl.SEG6_LOCAL_ACTION] = true
+		end_x_flags[nl.SEG6_LOCAL_NH6] = true
 		srv6EndRoute := &netlink.Route{
 			Dst:      sid,
-			LinkIndex: lo.Attrs().Index,
+			LinkIndex: imlInterface.Attrs().Index,
 			Scope: netlink.SCOPE_UNIVERSE,
 			Encap: &netlink.SEG6LocalEncap{
-				Action: nl.SEG6_LOCAL_ACTION_END,
+				Flags:     end_x_flags,
+				Action: nl.SEG6_LOCAL_ACTION_END_X,
+				In6Addr: gwIP,
 			},
 		}
 		if err := netlink.RouteAdd(srv6EndRoute); err != nil {
@@ -325,8 +314,9 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		}
 		return nil
 	})
+	hostNs.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute inside netns %s: %w", cniArgs.Netns, err)
+		return nil, fmt.Errorf("failed to execute inside container netns %s: %w", cniArgs.Netns, err)
 	}
 
 	hostLink, err := netlink.LinkByName(imlInterface.PeerName)
@@ -334,14 +324,14 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		return nil, fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
 	}
 
-	nfrouter, err := netlink.LinkByName("nfrouter")
+	bridge, err := netlink.LinkByName(netConfig.BridgeName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get nfrouter interface: %w", err)
+		return nil, fmt.Errorf("failed to get bridge interface: %w", err)
 	}
 
-	err = netlink.LinkSetMaster(hostLink, nfrouter)
+	err = netlink.LinkSetMaster(hostLink, bridge)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set host interface %s master to nfrouter: %w", imlInterface.PeerName, err)
+		return nil, fmt.Errorf("failed to set host interface %s master to bridge: %w", imlInterface.PeerName, err)
 	}
 
 	err = netlink.LinkSetUp(hostLink)
@@ -360,12 +350,13 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		IPs: []*current.IPConfig{
 			{
 				Interface: &intfIndex,
-				Address:   *ifaceIP,
+				Address:   *ipNet,
+				Gateway:   gwIP,
 			},
 		},
 		Routes: []*types.Route{
 			{
-				Dst: *dstNet,
+				Dst: *clusterNet,
 				GW:  gwIP,
 			},
 		},

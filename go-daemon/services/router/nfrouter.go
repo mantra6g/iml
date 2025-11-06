@@ -33,15 +33,6 @@ func newNFRouter(appIP *net.IPNet, vnfIP *net.IPNet) (*NFRouter, error) {
 		return nil, fmt.Errorf("failed to create nfrouter interface: %w", err)
 	}
 
-	// Set the APP domain address on the nfrouter
-	addr, err := netlink.ParseAddr(appIP.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse application domain address: %w", err)
-	}
-	if err := netlink.AddrAdd(nfrouter, addr); err != nil {
-		return nil, fmt.Errorf("failed to add application domain address to nfrouter interface: %w", err)
-	}
-
 	// Set the VNF domain address on the nfrouter
 	vnfAddr, err := netlink.ParseAddr(vnfIP.String())
 	if err != nil {
@@ -61,31 +52,73 @@ func newNFRouter(appIP *net.IPNet, vnfIP *net.IPNet) (*NFRouter, error) {
 	}, nil
 }
 
-func (r *NFRouter) AddRoute(srcIP string, dstIP string, sids []net.IP) error {
-	// Parse the source and destination IP addresses
-	srcAddr, err := netlink.ParseAddr(srcIP)
-	if err != nil {
-		return fmt.Errorf("failed to parse source IP address: %w", err)
-	}
-	dstAddr, err := netlink.ParseAddr(dstIP)
-	if err != nil {
-		return fmt.Errorf("failed to parse destination IP address: %w", err)
+func (r *NFRouter) AddIP(ip net.IP, network net.IPNet) error {
+	if !network.Contains(ip) {
+		return fmt.Errorf("IP %s is not in the network %s", ip.String(), network.String())
 	}
 
-	family := nl.GetIPFamily(srcAddr.IP)
+	maskSize, _ := network.Mask.Size()
+	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%d", ip.String(), maskSize))
+	if err != nil {
+		return fmt.Errorf("failed to parse IP address: %w", err)
+	}
+	if err := netlink.AddrAdd(r.link, addr); err != nil {
+		return fmt.Errorf("failed to add IP address to nfrouter: %w", err)
+	}
+	return nil
+}
+
+// func (r *NFRouter) AddRoute(table uint32, srcIP string, dstIP string, sids []net.IP) error {
+// 	// Parse the source and destination IP addresses
+// 	srcAddr, err := netlink.ParseAddr(srcIP)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to parse source IP address: %w", err)
+// 	}
+// 	dstAddr, err := netlink.ParseAddr(dstIP)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to parse destination IP address: %w", err)
+// 	}
+
+// 	family := nl.GetIPFamily(srcAddr.IP)
+// 	route := &netlink.Route{
+// 		Dst:       dstAddr.IPNet,
+// 		LinkIndex: r.link.Attrs().Index,
+// 		Encap:     &netlink.SEG6Encap{
+// 			Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
+// 			Segments: sids,
+// 		},
+// 		Family: family,
+// 		Table:  int(table),
+// 	}
+
+// 	if err := netlink.RouteAdd(route); err != nil {
+// 		return fmt.Errorf("failed to add route from %s to %s via %s: %w", srcAddr.IP.String(), dstAddr.IPNet.String(), sids, err)
+// 	}
+
+// 	return nil
+// }
+
+func (r *NFRouter) AddRoute(table uint32, dstNet string, sids []net.IP) error {
+	// Parse the destination network
+	dst, err := netlink.ParseAddr(dstNet)
+	if err != nil {
+		return fmt.Errorf("failed to parse destination network: %w", err)
+	}
+
+	family := nl.GetIPFamily(dst.IP)
 	route := &netlink.Route{
-		Src:       srcAddr.IP,
-		Dst:       dstAddr.IPNet,
+		Dst:       dst.IPNet,
 		LinkIndex: r.link.Attrs().Index,
 		Encap:     &netlink.SEG6Encap{
 			Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
 			Segments: sids,
 		},
 		Family: family,
+		Table:  int(table),
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
-		return fmt.Errorf("failed to add route from %s to %s via %s: %w", srcAddr.IP.String(), dstAddr.IPNet.String(), sids, err)
+		return fmt.Errorf("failed to add route in table %d to %s with segs %s: %w", table, dst.IPNet.String(), sids, err)
 	}
 
 	return nil

@@ -63,9 +63,7 @@ spec:
           command:
             - ./iml-daemon
           securityContext:
-            capabilities:
-              add:
-                - NET_ADMIN
+            privileged: true
           resources:
             requests:
               cpu: 1000m

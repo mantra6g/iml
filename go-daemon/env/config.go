@@ -17,17 +17,18 @@ type GlobalConfig struct {
 	ClusterCIDR *net.IPNet
 	AppSubnet   *net.IPNet
 	NFSubnet    *net.IPNet
-	NFRouterAppIP *net.IPNet
-	NFRouterVNFIP *net.IPNet
+	SIDSubnet   *net.IPNet
+	TunSubnet   *net.IPNet
+	DecapSID    *net.IPNet
 	NodeID		    string
 }
 
 type controllerResponse struct {
-	ClusterCIDR   net.IPNet `json:"cluster_cidr"`
-	AppSubnet     net.IPNet `json:"app_subnet"`
-	NFSubnet      net.IPNet `json:"nf_subnet"`
-	NFRouterAppIP net.IP    `json:"nf_router_app_ip"`
-	NFRouterVNFIP net.IP    `json:"nf_router_vnf_ip"`
+	ClusterCIDR net.IPNet `json:"cluster_cidr"`
+	AppSubnet   net.IPNet `json:"app_subnet"`
+	NFSubnet    net.IPNet `json:"nf_subnet"`
+	SIDSubnet		net.IPNet `json:"sid_subnet"`
+	TunSubnet   net.IPNet `json:"tun_subnet"`
 }
 
 // Singleton instance of GlobalConfig
@@ -51,15 +52,9 @@ func (e *GlobalConfig) getSubnetFromIML() error {
 
 	e.AppSubnet = &subnetResponse.AppSubnet
 	e.NFSubnet = &subnetResponse.NFSubnet
+	e.SIDSubnet = &subnetResponse.SIDSubnet
+	e.TunSubnet = &subnetResponse.TunSubnet
 	e.ClusterCIDR = &subnetResponse.ClusterCIDR
-	e.NFRouterAppIP = &net.IPNet{
-		IP: subnetResponse.NFRouterAppIP,
-		Mask: e.AppSubnet.Mask,
-	}
-	e.NFRouterVNFIP = &net.IPNet{
-		IP: subnetResponse.NFRouterVNFIP,
-		Mask: e.NFSubnet.Mask,
-	}
 	return nil
 }
 

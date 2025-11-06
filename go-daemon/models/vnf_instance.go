@@ -8,7 +8,7 @@ import (
 type VnfInstance struct {
 	ID          uuid.UUID `gorm:"primaryKey"`
 	GroupID     uuid.UUID
-	Group       VnfGroup  `gorm:"foreignKey:group_id"`
+	IP          string // in "ip"/"prefix" format
 	ContainerID string
 	IfaceName   string // e.g., "nfr-aabbcc"
 }
@@ -20,8 +20,4 @@ func (VnfInstance) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	tx.Statement.SetColumn("id", randomID)
 	return
-}
-
-func (v VnfInstance) GetIP() string {
-	return v.Group.SID
 }

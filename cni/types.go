@@ -21,10 +21,11 @@ type AppConfigRequest struct {
 }
 
 type AppConfigResponse struct {
-	IPNet       string `json:"ip_net"`
-	IfaceName   string `json:"iface_name"`
-	ClusterCIDR string `json:"cluster_cidr"`
-	GatewayIP   string `json:"gateway_ip"`
+	IPNet         string `json:"ip_net"`
+	IfaceName     string `json:"iface_name"`
+	ClusterCIDR   string `json:"cluster_cidr"`
+	GatewayIP     string `json:"gateway_ip"`
+	BridgeName    string `json:"bridge_name"`
 }
 
 type NFConfigRequest struct {
@@ -33,11 +34,12 @@ type NFConfigRequest struct {
 }
 
 type NFConfigResponse struct {
+	IPNet 		  string `json:"ip_net"`
 	SID         string `json:"sid"`
-	Subnet      string `json:"subnet"`
 	IfaceName   string `json:"iface_name"`
 	ClusterCIDR string `json:"cluster_cidr"`
 	GatewayIP   string `json:"gateway_ip"`
+	BridgeName  string `json:"bridge_name"`
 }
 
 type AppTeardownRequest struct {

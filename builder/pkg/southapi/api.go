@@ -4,6 +4,7 @@ import (
 	"builder/pkg/cache"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 
 	iplib "github.com/c-robinson/iplib/v2"
@@ -13,24 +14,58 @@ import (
 )
 
 type SouthboundAPIController struct {
-	ClusterCIDR   iplib.Net6
-	AppRange      iplib.Net6
-	NFRange       iplib.Net6
-	LastAppSubnet *iplib.Net6
-	LastNFSubnet  *iplib.Net6
-	Cache         *cache.Service
-	logger        logr.Logger
+	ClusterCIDR     iplib.Net6
+	AppNetAllocator *Subnet6Allocator
+	NFNetAllocator  *Subnet6Allocator
+	SIDNetAllocator *Subnet6Allocator
+	TunNetAllocator *Subnet6Allocator
+	Cache           *cache.Service
+	logger          logr.Logger
 }
 
 func InitializeSouthboundAPI(cache *cache.Service, logger logr.Logger) (*http.Server, error) {
+	_, appSuperNet, err := net.ParseCIDR("fd00:0000::/20")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse app supernet: %v", err)
+	}
+	_, nfSuperNet, err := net.ParseCIDR("fd00:1000::/20")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse nf supernet: %v", err)
+	}
+	_, sidSuperNet, err := net.ParseCIDR("fd00:2000::/20")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sid supernet: %v", err)
+	}
+	_, tunSuperNet, err := net.ParseCIDR("fd00:3000::/20")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse tun supernet: %v", err)
+	}
+
+	appNetAllocator, err := NewSubnet6Allocator(appSuperNet, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app subnet allocator: %v", err)
+	}
+	nfNetAllocator, err := NewSubnet6Allocator(nfSuperNet, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create nf subnet allocator: %v", err)
+	}
+	sidNetAllocator, err := NewSubnet6Allocator(sidSuperNet, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sid subnet allocator: %v", err)
+	}
+	tunNetAllocator, err := NewSubnet6Allocator(tunSuperNet, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tun subnet allocator: %v", err)
+	}
+
 	controller := &SouthboundAPIController{
-		ClusterCIDR:   iplib.Net6FromStr("fd00::/15"),
-		AppRange:      iplib.Net6FromStr("fd00::/16"),
-		NFRange:       iplib.Net6FromStr("fd01::/16"),
-		LastAppSubnet: nil,
-		LastNFSubnet:  nil,
-		Cache:         cache,
-		logger:        logger,
+		ClusterCIDR:      iplib.Net6FromStr("fd00::/15"),
+		AppNetAllocator:  appNetAllocator,
+		NFNetAllocator:   nfNetAllocator,
+		SIDNetAllocator:  sidNetAllocator,
+		TunNetAllocator:  tunNetAllocator,
+		Cache:            cache,
+		logger:           logger,
 	}
 	router := mux.NewRouter()
 	server := &http.Server{
@@ -46,38 +81,25 @@ func InitializeSouthboundAPI(cache *cache.Service, logger logr.Logger) (*http.Se
 }
 
 func (c *SouthboundAPIController) handleSubnetRequest(w http.ResponseWriter, r *http.Request) {
-	// TODO: Check assignments
-	var appnet iplib.Net6
-	if c.LastAppSubnet != nil {
-		appnet = c.LastAppSubnet.NextNet(32)
-	} else {
-		appnets, err := c.AppRange.Subnet(32, 0)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		appnet = appnets[0]
-	}
-
-	var nfnet iplib.Net6
-	if c.LastNFSubnet != nil {
-		nfnet = c.LastNFSubnet.NextNet(32)
-	} else {
-		nfnets, err := c.NFRange.Subnet(32, 0)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		nfnet = nfnets[0]
-	}
-
-	// get the nfrouter addresses
-	nfrouterAppIP, err := appnet.NextIP(appnet.FirstAddress())
+	appNet, err := c.AppNetAllocator.Allocate()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	nfrouterVnfIP, err := nfnet.NextIP(nfnet.FirstAddress())
+
+	nfNet, err := c.NFNetAllocator.Allocate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sidNet, err := c.SIDNetAllocator.Allocate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tunNet, err := c.TunNetAllocator.Allocate()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -85,10 +107,10 @@ func (c *SouthboundAPIController) handleSubnetRequest(w http.ResponseWriter, r *
 
 	response := SubnetResponse{
 		ClusterCIDR: c.ClusterCIDR.IPNet,
-		AppSubnet: appnet.IPNet,
-		NFSubnet:  nfnet.IPNet,
-		NFRouterAppIP: nfrouterAppIP,
-		NFRouterVNFIP: nfrouterVnfIP,
+		AppSubnet:   *appNet,
+		NFSubnet:    *nfNet,
+		TunSubnet:   *tunNet,
+		SIDSubnet:   *sidNet,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

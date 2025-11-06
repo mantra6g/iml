@@ -36,7 +36,7 @@ func NewGraph() (*Graph, error) {
 	}
 	srcNode := WorkerNode{
 		id:       srcNodeID,
-		DecapSID: globalConfig.NFRouterVNFIP.IP,
+		DecapSID: globalConfig.DecapSID.IP,
 	}
 	graph.nodes[srcNodeID] = srcNode
 

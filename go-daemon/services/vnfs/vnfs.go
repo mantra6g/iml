@@ -64,7 +64,7 @@ func (r *VnfService) Shutdown(ctx context.Context) error {
 }
 
 func InitializeVnfService(
-	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *events.EventBus, imlClient *iml.Client, vnfFactory *vnfs.InstanceFactory) (*VnfService, error) {
+	registry *db.Registry, eb *events.EventBus, imlClient *iml.Client, vnfFactory *vnfs.InstanceFactory) (*VnfService, error) {
 	// Validate the registry
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -73,8 +73,6 @@ func InitializeVnfService(
 	// Create a new VNF service with the provided registry
 	return &VnfService{
 		registry:   registry,
-		appIP:      appIP,
-		vnfIP:      vnfIP,
 		eventBus:   eb,
 		imlClient:  imlClient,
 		vnfFactory: vnfFactory,

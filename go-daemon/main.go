@@ -6,11 +6,9 @@ import (
 	"iml-daemon/apps"
 	"iml-daemon/db"
 	"iml-daemon/env"
-	"iml-daemon/helpers"
 	"iml-daemon/logger"
 	"iml-daemon/mqtt"
 	appServices "iml-daemon/services/apps"
-	"iml-daemon/services/chains"
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
 	"iml-daemon/services/iml/controllers"
@@ -35,22 +33,6 @@ func main() {
 		panic("Failed to request NodeManager subnet: " + err.Error())
 	}
 
-	// Initialize the IP allocator for the applications
-	appIP, err := helpers.NewIPAllocator(config.AppSubnet)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize IP allocator: %v", err)
-		panic("Failed to initialize IP allocator: " + err.Error())
-	}
-	appIP.Next(); appIP.Next() // Skip the first two IPs (a.b.c.0 for network, and a.b.c.1 for nfrouter)
-
-	// Initialize the IP allocator for the VNFs
-	vnfIP, err := helpers.NewIPAllocator(config.NFSubnet)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize IP allocator: %v", err)
-		panic("Failed to initialize IP allocator: " + err.Error())
-	}
-	vnfIP.Next(); vnfIP.Next()// Skip the first two IPs (a.b.c.0 for network, and a.b.c.1 for nfrouter)
-
 	// Initialize the registry
 	registry, err := db.InitializeInMemoryRegistry()
 	if err != nil {
@@ -60,6 +42,13 @@ func main() {
 
 	// Initialize the event bus
 	eb := events.NewEventBus()
+
+	// Initialize the Dataplane
+	dataplane, err := router.NewDataplane(config.SIDSubnet, config.AppSubnet, config.NFSubnet, config.TunSubnet)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create Dataplane: %v", err)
+		panic("Failed to create Dataplane: " + err.Error())
+	}
 
 	// Create the MQTT client config
 	mqttClient, err := mqtt.NewClient(context.Background())
@@ -146,37 +135,37 @@ func main() {
 		panic("Failed to initialize IML client: " + err.Error())
 	}
 
+	// Initialize the router service
+	routerService, err := router.New(registry, eb, dataplane)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to initialize RouterService: %v", err)
+		panic("Failed to initialize RouterService: " + err.Error())
+	}
+
 	// Create app and vnf instance factories
-	appFactory, err := apps.NewInstanceFactory(registry, eb, imlClient)
+	appFactory, err := apps.NewInstanceFactory(registry, eb, dataplane, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create AppInstanceFactory: %v", err)
 		panic("Failed to create AppInstanceFactory: " + err.Error())
 	}
-	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, vnfIP, imlClient)
+	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, dataplane, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create VnfInstanceFactory: %v", err)
 		panic("Failed to create VnfInstanceFactory: " + err.Error())
 	}
 
 	// Initialize the application services
-	appService, err := appServices.InitializeAppService(registry, appIP, vnfIP, eb, appFactory)
+	appService, err := appServices.InitializeAppService(registry, eb, appFactory)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize AppService: %v", err)
 		panic("Failed to initialize AppService: " + err.Error())
 	}
 
 	// Initialize the VNF services
-	vnfService, err := vnfServices.InitializeVnfService(registry, appIP, vnfIP, eb, imlClient, vnfFactory)
+	vnfService, err := vnfServices.InitializeVnfService(registry, eb, imlClient, vnfFactory)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize VnfService: %v", err)
 		panic("Failed to initialize VnfService: " + err.Error())
-	}
-
-	// Initialize the network service chain services
-	chainService, err := chains.InitializeNetworkServiceChainService(registry, appIP, vnfIP, eb)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize NetworkServiceChainService: %v", err)
-		panic("Failed to initialize NetworkServiceChainService: " + err.Error())
 	}
 
 	// Initialize the route calculation service
@@ -186,15 +175,8 @@ func main() {
 		panic("Failed to initialize RouteCalcService: " + err.Error())
 	}
 
-	// Initialize the router service
-	routerService, err := router.New(registry, eb)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize RouterService: %v", err)
-		panic("Failed to initialize RouterService: " + err.Error())
-	}
-
 	// Initialize the APIs
-	cniApi, err := api.InitializeCNIApi(appService, vnfService)
+	cniApi, err := api.InitializeCNIApi(appService, vnfService, registry)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize CNI API: %v", err)
 		panic("Failed to initialize CNI API: " + err.Error())
@@ -220,9 +202,6 @@ func main() {
 	}
 	if err := routeCalcService.Shutdown(ctx); err != nil {
 		logger.ErrorLogger().Printf("RouteCalcService shutdown error: %v", err)
-	}
-	if err := chainService.Shutdown(ctx); err != nil {
-		logger.ErrorLogger().Printf("ChainService shutdown error: %v", err)
 	}
 	if err := appService.Shutdown(ctx); err != nil {
 		logger.ErrorLogger().Printf("AppService shutdown error: %v", err)

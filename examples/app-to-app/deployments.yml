@@ -19,7 +19,7 @@ spec:
               "name": "iml-cni", 
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "202103cd-1547-429d-9e8c-0d0a1559904c"
+                "app_id": "447e834c-82c3-4145-bb15-5cb4fe6f12f8"
               }
             }
           ]
@@ -53,7 +53,7 @@ spec:
               "name": "iml-cni", 
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "202103cd-1547-429d-9e8c-0d0a1559904c"
+                "app_id": "447e834c-82c3-4145-bb15-5cb4fe6f12f8"
               }
             }
           ]
@@ -87,7 +87,7 @@ spec:
               "name": "iml-cni",
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "f240b84f-6efb-4e9b-a61e-61c9f9ba9a3a"
+                "app_id": "bf1f9d15-40a1-49c7-8d4e-57df6bbaa63c"
               }
             }
           ]
