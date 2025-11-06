@@ -12,14 +12,15 @@ type AppInstanceConfigRequest struct {
 }
 
 type AppInstanceConfigResponse struct {
-	IPNet       string `json:"ip_net"`
-	IfaceName   string `json:"iface_name"`
-	ClusterCIDR string `json:"cluster_cidr"`
-	GatewayIP   string `json:"gateway_ip"`
+	IPNet         string `json:"ip_net"`
+	IfaceName     string `json:"iface_name"`
+	ClusterCIDR   string `json:"cluster_cidr"`
+	GatewayIP     string `json:"gateway_ip"`
+	BridgeName    string `json:"bridge_name"`
 }
 
 type AppInstanceTeardownRequest struct {
-	ContainerID   string `json:"container_id" validate:"required"`
+	ContainerID string `json:"container_id" validate:"required"`
 }
 
 // ========== VNFs ===========
@@ -30,15 +31,16 @@ type VnfInstanceConfigRequest struct {
 }
 
 type VnfInstanceConfigResponse struct {
+	IPNet       string `json:"ip_net"`
 	SID         string `json:"sid"`
-	Subnet      string `json:"subnet"`
 	IfaceName   string `json:"iface_name"`
 	ClusterCIDR string `json:"cluster_cidr"`
 	GatewayIP   string `json:"gateway_ip"`
+	BridgeName  string `json:"bridge_name"`
 }
 
 type VnfInstanceTeardownRequest struct {
-	ContainerID   string `json:"container_id" validate:"required"`
+	ContainerID string `json:"container_id" validate:"required"`
 }
 
 /**************************************************************

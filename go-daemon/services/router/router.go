@@ -20,12 +20,12 @@ import (
 )
 
 type RouterService struct {
-	registry *db.Registry
-	eventBus *events.EventBus
-	nfrouter *NFRouter
+	registry  *db.Registry
+	eventBus  *events.EventBus
+	dataplane *Dataplane
 }
 
-func New(registry *db.Registry, eventBus *events.EventBus) (*RouterService, error) {
+func New(registry *db.Registry, eventBus *events.EventBus, dataplane *Dataplane) (*RouterService, error) {
 	// Validate the registry and event bus
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -33,22 +33,14 @@ func New(registry *db.Registry, eventBus *events.EventBus) (*RouterService, erro
 	if eventBus == nil {
 		return nil, fmt.Errorf("event bus cannot be nil")
 	}
-
-	config, err := env.Config()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get global config: %w", err)
-	}
-
-	nfrInstance, err := newNFRouter(config.NFRouterAppIP, config.NFRouterVNFIP)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to configure NFRouter: %v", err)
-		return nil, fmt.Errorf("failed to configure NFRouter: %w", err)
+	if dataplane == nil {
+		return nil, fmt.Errorf("dataplane cannot be nil")
 	}
 
 	router := &RouterService{
-		registry: registry,
-		eventBus: eventBus,
-		nfrouter: nfrInstance,
+		registry:  registry,
+		eventBus:  eventBus,
+		dataplane: dataplane,
 	}
 	// eventBus.Subscribe("RouteUpdated", router.handleRouteUpdated)
 	eventBus.Subscribe(events.EventRouteRecalculationFinished, router.handlerRecalculationFinished)
@@ -74,13 +66,13 @@ func (r *RouterService) handlerRecalculationFinished(evt events.Event) {
 
 func (r *RouterService) Add(route *models.Route) error {
 	// Search for instances in the registry
-	srcAppInstances, err := r.registry.FindAppInstancesByGroupID(route.SrcAppGroupID)
+	srcAppGroup, err := r.registry.FindAppGroupByID(route.SrcAppGroupID)
 	if err != nil {
-		return fmt.Errorf("error finding source app instances: %v", err)
+		return fmt.Errorf("error finding source app group: %v", err)
 	}
-	dstAppInstances, err := r.registry.FindAppInstancesByGroupID(route.DstAppGroupID)
+	dstAppGroup, err := r.registry.FindAppGroupByID(route.DstAppGroupID)
 	if err != nil {
-		return fmt.Errorf("error finding destination app instances: %v", err)
+		return fmt.Errorf("error finding destination app group: %v", err)
 	}
 	// TODO: Differentiate between local and remote Groups
 	// For now, we assume all are local and reachable directly.
@@ -98,15 +90,11 @@ func (r *RouterService) Add(route *models.Route) error {
 		}
 		sids = append(sids, sid)
 	}
-	sids = append(sids, globalConfig.NFRouterVNFIP.IP)
+	sids = append(sids, globalConfig.DecapSID.IP)
 
-	for _, srcAppInstance := range srcAppInstances {
-		for _, dstAppInstance := range dstAppInstances {
-			err = r.nfrouter.AddRoute(srcAppInstance.IP, dstAppInstance.IP, sids)
-			if err != nil {
-				logger.ErrorLogger().Printf("handleRouteUpdated: error adding route from %s to %s: %v", srcAppInstance.IP, dstAppInstance.IP, err)
-			}
-		}
+	err = r.dataplane.AddRoute(srcAppGroup.ID, dstAppGroup.Subnet, sids)
+	if err != nil {
+		return fmt.Errorf("error adding route from group %s to group %s: %v", srcAppGroup.ID, dstAppGroup.ID, err)
 	}
 	return nil
 }
@@ -125,13 +113,13 @@ func (r *RouterService) handleRouteUpdated(evt events.Event) {
 
 func (r *RouterService) Shutdown(ctx context.Context) error {
 	// Place any necessary cleanup logic here
-	if r.nfrouter == nil {
+	if r.dataplane == nil {
 		return nil
 	}
-	// tear the nfrouter interface down
-	if err := r.nfrouter.Teardown(); err != nil {
+	// tear the dataplane down
+	if err := r.dataplane.Close(); err != nil {
 		logger.ErrorLogger().Printf("RouterService shutdown error: %v", err)
-		return fmt.Errorf("failed to shutdown NFRouter: %w", err)
+		return fmt.Errorf("failed to shutdown Dataplane: %w", err)
 	}
 	return nil
 }

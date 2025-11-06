@@ -11,6 +11,9 @@ type VnfGroup struct {
 	WorkerID   *uuid.UUID `gorm:"default:null"` // Nullable foreign key to Worker
 	SID        string // in "IP/prefix" format
 	Instances  []VnfInstance `gorm:"foreignKey:group_id"`
+	Subnet     string
+	GatewayIP  string
+	Bridge     string
 }
 
 func (VnfGroup) BeforeCreate(tx *gorm.DB) (err error) {

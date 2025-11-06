@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"iml-daemon/db"
 	"iml-daemon/env"
 	"iml-daemon/logger"
 	"iml-daemon/services/apps"
@@ -16,6 +17,7 @@ import (
 type CNIController struct {
 	appService *apps.AppService
 	vnfService *vnfs.VnfService
+	repo       *db.Registry
 }
 
 var validate *validator.Validate
@@ -66,11 +68,19 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 		return
 	}
 
+	groupDetails, err := c.repo.FindAppGroupByID(appDetails.GroupID)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to get app group details: %v", err)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	configResponse := &AppInstanceConfigResponse{
-		IPNet:       appDetails.IP,
-		IfaceName:   appDetails.IfaceName,
-		ClusterCIDR: globalConfig.ClusterCIDR.String(),
-		GatewayIP:   globalConfig.NFRouterAppIP.IP.String(),
+		IPNet:        appDetails.IP,
+		IfaceName:    appDetails.IfaceName,
+		ClusterCIDR:  globalConfig.ClusterCIDR.String(),
+		GatewayIP:    groupDetails.GatewayIP,
+		BridgeName:   groupDetails.Bridge,
 	}
 
 	// Finally, return the container details including the allocated IP.
@@ -162,12 +172,20 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 		return
 	}
 
+	groupDetails, err := c.repo.FindVnfGroupByID(vnfDetails.GroupID)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to get VNF group details: %v", err)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	configResponse := &VnfInstanceConfigResponse{
-		SID:         vnfDetails.Group.SID,
-		Subnet:      globalConfig.NFSubnet.String(),
+		IPNet:       vnfDetails.IP,
+		SID:         groupDetails.SID,
 		IfaceName:   vnfDetails.IfaceName,
 		ClusterCIDR: globalConfig.ClusterCIDR.String(),
-		GatewayIP:   globalConfig.NFRouterVNFIP.IP.String(),
+		GatewayIP:   groupDetails.GatewayIP,
+		BridgeName:  groupDetails.Bridge,
 	}
 
 	// Finally, return the VNF details including the allocated IP.
@@ -210,7 +228,7 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
 		return
 	}
-	
+
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
 }
@@ -219,16 +237,17 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService) (*http.Server, error) {
+func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService, repo *db.Registry) (*http.Server, error) {
 	// Validate the services
-	if appSvc == nil || vnfSvc == nil {
-		return nil, fmt.Errorf("appService and vnfService cannot be nil")
+	if appSvc == nil || vnfSvc == nil || repo == nil {
+		return nil, fmt.Errorf("appService, vnfService, and repo cannot be nil")
 	}
 
 	// Create a new CNI controller with the services
 	cniController := &CNIController{
 		appService: appSvc,
 		vnfService: vnfSvc,
+		repo:       repo,
 	}
 	validate = validator.New(validator.WithRequiredStructEnabled())
 	router := mux.NewRouter()

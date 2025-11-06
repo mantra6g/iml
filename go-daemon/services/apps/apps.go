@@ -21,14 +21,6 @@ func (svc *AppService) RegisterLocalAppInstance(request *AppInstanceRegistration
 		return appInstance, nil
 	}
 
-	// Allocate an IP for the application instance
-	appIP, err := svc.appIP.Next()
-	if err != nil {
-		return nil, services.Errorf(
-			http.StatusInternalServerError,
-			"failed to allocate IP for app instance %s: %v", request.ContainerID, err)
-	}
-
 	// Generate a new interface name for the application instance
 	ifaceName, err := helpers.GenerateUniqueInterfaceName(request.ContainerID)
 	if err != nil {
@@ -37,7 +29,7 @@ func (svc *AppService) RegisterLocalAppInstance(request *AppInstanceRegistration
 			"failed to generate interface name for app instance %s: %v", request.ContainerID, err)
 	}
 
-	appDetails, err := svc.appFactory.NewLocalInstance(request.ApplicationID, appIP, request.ContainerID, ifaceName)
+	appDetails, err := svc.appFactory.NewLocalInstance(request.ApplicationID, request.ContainerID, ifaceName)
 	if err != nil {
 		return nil, services.Errorf(
 			http.StatusInternalServerError,
@@ -72,7 +64,7 @@ func (svc *AppService) Shutdown(ctx context.Context) error {
 }
 
 func InitializeAppService(
-	registry *db.Registry, appIP, vnfIP *helpers.IPAllocator, eb *events.EventBus, appFactory *apps.InstanceFactory) (*AppService, error) {
+	registry *db.Registry, eb *events.EventBus, appFactory *apps.InstanceFactory) (*AppService, error) {
 	// Validate the registry
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")
@@ -81,8 +73,6 @@ func InitializeAppService(
 	// Initialize the application service with the provided registry
 	return &AppService{
 		registry:   registry,
-		appIP:      appIP,
-		vnfIP:      vnfIP,
 		eventBus:   eb,
 		appFactory: appFactory,
 	}, nil
