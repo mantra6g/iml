@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: iml-oakestra-service-account
+  namespace: desire6g-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: iml-oakestra-rolebinding-apps
+subjects:
+  - kind: ServiceAccount
+    name: iml-oakestra-service-account
+    namespace: desire6g-system
+roleRef:
+  kind: ClusterRole
+  name: iml-application-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: iml-oakestra-rolebinding-nfs
+subjects:
+  - kind: ServiceAccount
+    name: iml-oakestra-service-account
+    namespace: desire6g-system
+roleRef:
+  kind: ClusterRole
+  name: iml-networkfunction-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: iml-oakestra-rolebinding-chains
+subjects:
+  - kind: ServiceAccount
+    name: iml-oakestra-service-account
+    namespace: desire6g-system
+roleRef:
+  kind: ClusterRole
+  name: iml-servicechain-editor-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: iml-oakestra
+  name: iml-oakestra-agent-service
+  namespace: desire6g-system
+spec:
+  selector:
+    app.kubernetes.io/name: iml-oakestra-agent
+    control-plane: iml-oakestra
+  ports:
+    - name: http
+      type: NodePort
+      protocol: TCP
+      nodePort: 30050
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: iml-oakestra-agent
+    control-plane: iml-oakestra
+  name: iml-oakestra-agent
+  namespace: desire6g-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iml-oakestra-agent
+      control-plane: iml-oakestra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: iml-oakestra-agent
+        control-plane: iml-oakestra
+    spec:
+      serviceAccountName: iml-oakestra-agent
+      containers:
+        - name: iml-oakestra-agent
+          image: tomasagata/iml-oakestra-agent:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
