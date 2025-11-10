@@ -51,12 +51,12 @@ metadata:
   name: iml-oakestra-agent-service
   namespace: desire6g-system
 spec:
+  type: NodePort
   selector:
     app.kubernetes.io/name: iml-oakestra-agent
     control-plane: iml-oakestra
   ports:
     - name: http
-      type: NodePort
       protocol: TCP
       nodePort: 30050
       port: 8080
@@ -82,7 +82,7 @@ spec:
         app.kubernetes.io/name: iml-oakestra-agent
         control-plane: iml-oakestra
     spec:
-      serviceAccountName: iml-oakestra-agent
+      serviceAccountName: iml-oakestra-service-account
       containers:
         - name: iml-oakestra-agent
           image: tomasagata/iml-oakestra-agent:latest
