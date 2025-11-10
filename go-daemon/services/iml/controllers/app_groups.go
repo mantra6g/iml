@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	APP_INSTANCES_TOPIC_STR    = "^apps/(" + UUID_REGEX_STR + ")/nodes/(" + UUID_REGEX_STR + ")/groups/(" + UUID_REGEX_STR + ")$"
+	APP_INSTANCES_TOPIC_STR = "^apps/(" + ID_REGEX_STR + ")/nodes/(" + ID_REGEX_STR + ")/groups/(" + ID_REGEX_STR + ")$"
 )
 
 type RemoteAppGroupsTopic struct {
@@ -24,6 +24,7 @@ type RemoteAppGroupsTopic struct {
 	NodeID  string
 	GroupID string
 }
+
 func (t RemoteAppGroupsTopic) String() string {
 	return fmt.Sprintf("apps/%s/nodes/%s/groups/%s", t.AppID, t.NodeID, t.GroupID)
 }
@@ -57,8 +58,6 @@ func (c *AppGroupsController) SetupWithMQTT(client *mqtt.Client) error {
 	}
 	return nil
 }
-
-
 
 func (c *AppGroupsController) HandleMessage(msg *paho.Publish) {
 	logger.DebugLogger().Printf("Handling Remote App Groups message on topic %s: %s\n", msg.Topic, string(msg.Payload))
@@ -103,8 +102,6 @@ func (c *AppGroupsController) HandleMessage(msg *paho.Publish) {
 
 	go c.processQueue()
 }
-
-
 
 func (c *AppGroupsController) processQueue() {
 	for {
@@ -174,8 +171,6 @@ func (c *AppGroupsController) processQueue() {
 	}
 }
 
-
-
 func (c *AppGroupsController) OnUpdate(topic RemoteAppGroupsTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for remote app groups of App ID %s: %+v", topic.AppID, update)
 	newAppGroup, ok := update.NewMessage.(*mqtt.AppInstances)
@@ -228,7 +223,6 @@ func (c *AppGroupsController) OnUpdate(topic RemoteAppGroupsTopic, update Update
 	}
 	appGroupEntry.NodeID = node.ID
 
-
 	err = c.Registry.RemoveRemoteAppInstancesByIP(removedInstanceIPs, appGroupEntry.ID)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to remove remote app instances by IPs %v: %w", removedInstanceIPs, err)
@@ -249,8 +243,6 @@ func (c *AppGroupsController) OnUpdate(topic RemoteAppGroupsTopic, update Update
 	logger.InfoLogger().Printf("Successfully processed remote app group update for App ID %s", topic.AppID)
 	return Result{}, nil
 }
-
-
 
 func (c *AppGroupsController) OnDelete(topic RemoteAppGroupsTopic, lastMsg mqtt.Message) (Result, error) {
 	logger.InfoLogger().Printf("Received delete for remote app groups of App ID %s with last processed message: %+v", topic.AppID, lastMsg)

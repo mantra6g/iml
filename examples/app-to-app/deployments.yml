@@ -19,41 +19,7 @@ spec:
               "name": "iml-cni", 
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "447e834c-82c3-4145-bb15-5cb4fe6f12f8"
-              }
-            }
-          ]
-    spec:
-      nodeSelector:
-        kubernetes.io/hostname: oai-01
-      containers:
-        - name: nginx
-          image: nginx:latest
-          ports:
-            - containerPort: 80
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: nginx2
-  namespace: default
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: nginx2
-  template:
-    metadata:
-      labels:
-        app: nginx2
-      annotations:
-        k8s.v1.cni.cncf.io/networks: |
-          [
-            {
-              "name": "iml-cni", 
-              "cni-args": {
-                "app_type": "application_function",
-                "app_id": "447e834c-82c3-4145-bb15-5cb4fe6f12f8"
+                "app_id": "face-feed"
               }
             }
           ]
@@ -87,7 +53,7 @@ spec:
               "name": "iml-cni",
               "cni-args": {
                 "app_type": "application_function",
-                "app_id": "bf1f9d15-40a1-49c7-8d4e-57df6bbaa63c"
+                "app_id": "dead-beef"
               }
             }
           ]

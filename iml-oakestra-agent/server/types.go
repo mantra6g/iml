@@ -16,7 +16,6 @@ type NetworkServiceDescriptor struct {
 type NetworkFunctionDescriptor struct {
 	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Alias     string `json:"alias,omitempty" yaml:"alias,omitempty"`
 	Image     string `json:"image,omitempty" yaml:"image,omitempty"`
 }
 
@@ -24,7 +23,6 @@ type ApplicationFunctionDescriptor struct {
 	ID        string `json:"id,omitempty" yaml:"id,omitempty"`
 	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Alias     string `json:"alias,omitempty" yaml:"alias,omitempty"`
 }
 
 type ServiceChainDescriptor struct {

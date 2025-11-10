@@ -13,14 +13,15 @@ import (
 	"github.com/eclipse/paho.golang/paho"
 	"github.com/r3labs/diff"
 )
-	
+
 const (
-	APP_SERVICES_TOPIC_STR     = "^apps/(" + UUID_REGEX_STR + ")/services$"
+	APP_SERVICES_TOPIC_STR = "^apps/(" + ID_REGEX_STR + ")/services$"
 )
 
 type ApplicationServicesTopic struct {
 	AppID string
 }
+
 func (t ApplicationServicesTopic) String() string {
 	return fmt.Sprintf("apps/%s/services", t.AppID)
 }
@@ -39,7 +40,6 @@ type AppServicesController struct {
 	topicRegex *regexp.Regexp
 }
 
-
 func (c *AppServicesController) SetupWithMQTT(client *mqtt.Client) error {
 	c.topics = make(map[ApplicationServicesTopic]ApplicationServicesTopicData)
 	c.eventQueue = &SliceQueue{}
@@ -55,7 +55,6 @@ func (c *AppServicesController) SetupWithMQTT(client *mqtt.Client) error {
 	}
 	return nil
 }
-
 
 func (c *AppServicesController) HandleMessage(msg *paho.Publish) {
 	logger.DebugLogger().Printf("Handling Remote App Services message on topic %s: %s\n", msg.Topic, string(msg.Payload))
@@ -98,7 +97,6 @@ func (c *AppServicesController) HandleMessage(msg *paho.Publish) {
 
 	go c.processQueue()
 }
-
 
 func (c *AppServicesController) processQueue() {
 	for {
@@ -169,7 +167,6 @@ func (c *AppServicesController) processQueue() {
 	}
 }
 
-
 func (c *AppServicesController) OnUpdate(topic ApplicationServicesTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for Services of App ID %s: %+v", topic.AppID, update)
 	newAppServices, ok := update.NewMessage.(*mqtt.ApplicationServiceChains)
@@ -215,15 +212,13 @@ func (c *AppServicesController) OnUpdate(topic ApplicationServicesTopic, update 
 	return Result{}, nil
 }
 
-
-
 func (c *AppServicesController) OnDelete(topic ApplicationServicesTopic, lastMsg mqtt.Message) (Result, error) {
 	logger.InfoLogger().Printf("Received delete for Services of App ID %s with last message: %+v", topic.AppID, lastMsg)
 	last, ok := lastMsg.(*mqtt.ApplicationServiceChains)
 	if !ok {
 		return Result{}, fmt.Errorf("failed to cast last message to ApplicationServiceChains for App ID %s", topic.AppID)
 	}
-	
+
 	sub, exists := c.SubManager.GetSubscription(subscriptions.SubscriptionKey{
 		ID:   topic.AppID,
 		Type: subscriptions.AppServices,
@@ -240,7 +235,7 @@ func (c *AppServicesController) OnDelete(topic ApplicationServicesTopic, lastMsg
 		err := c.SubManager.RemoveDependency(&subscriptions.ServiceChainDependency{ChainID: chainID})
 		if err != nil {
 			logger.ErrorLogger().Printf("Failed to remove dependency for Service Chain ID %s of App ID %s: %v", chainID, topic.AppID, err)
-			continue 
+			continue
 		}
 	}
 	if err := c.SubManager.OnSubscriptionEnded(sub); err != nil {

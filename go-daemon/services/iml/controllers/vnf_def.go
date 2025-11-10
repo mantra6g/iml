@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	VNF_DEFINITION_TOPIC_STR   = "^nfs/(" + UUID_REGEX_STR + ")/definition$"
+	VNF_DEFINITION_TOPIC_STR = "^nfs/(" + ID_REGEX_STR + ")/definition$"
 )
 
 type VnfDefinitionTopic struct {
 	VnfID string
 }
+
 func (t VnfDefinitionTopic) String() string {
 	return fmt.Sprintf("nfs/%s/definition", t.VnfID)
 }
@@ -55,8 +56,6 @@ func (c *VNFDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
 	}
 	return nil
 }
-
-
 
 func (c *VNFDefinitionController) HandleMessage(msg *paho.Publish) {
 	logger.DebugLogger().Printf("Handling Vnf definition message on topic %s: %s\n", msg.Topic, string(msg.Payload))
@@ -99,9 +98,6 @@ func (c *VNFDefinitionController) HandleMessage(msg *paho.Publish) {
 
 	go c.processQueue()
 }
-
-
-
 
 func (c *VNFDefinitionController) processQueue() {
 	for {
@@ -169,9 +165,6 @@ func (c *VNFDefinitionController) processQueue() {
 	}
 }
 
-
-
-
 func (c *VNFDefinitionController) OnUpdate(topic VnfDefinitionTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for VNF ID %s: %+v", topic.VnfID, update)
 	newVnfDef, ok := update.NewMessage.(*mqtt.NetworkFunctionDefinition)
@@ -196,9 +189,6 @@ func (c *VNFDefinitionController) OnUpdate(topic VnfDefinitionTopic, update Upda
 	}
 	return Result{}, nil
 }
-
-
-
 
 func (c *VNFDefinitionController) OnDelete(topic VnfDefinitionTopic, lastMsg mqtt.Message) (Result, error) {
 	logger.InfoLogger().Printf("Received delete for Vnf ID %s with last processed message: %+v", topic.VnfID, lastMsg)

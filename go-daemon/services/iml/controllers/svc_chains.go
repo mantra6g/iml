@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	CHAIN_DEFINITION_TOPIC_STR = "^chains/(" + UUID_REGEX_STR + ")/definition$"
+	CHAIN_DEFINITION_TOPIC_STR = "^chains/(" + ID_REGEX_STR + ")/definition$"
 )
 
 type ChainDefinitionTopic struct {
 	ChainID string
 }
+
 func (t ChainDefinitionTopic) String() string {
 	return fmt.Sprintf("chains/%s/definition", t.ChainID)
 }
@@ -42,7 +43,6 @@ type ChainDefinitionController struct {
 	topicRegex *regexp.Regexp
 }
 
-
 func (c *ChainDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
 	c.topics = make(map[ChainDefinitionTopic]ChainDefinitionTopicData)
 	c.eventQueue = &SliceQueue{}
@@ -58,8 +58,6 @@ func (c *ChainDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
 	}
 	return nil
 }
-
-
 
 func (c *ChainDefinitionController) HandleMessage(msg *paho.Publish) {
 	logger.DebugLogger().Printf("Handling chain definition message on topic %s: %s\n", msg.Topic, string(msg.Payload))
@@ -102,8 +100,6 @@ func (c *ChainDefinitionController) HandleMessage(msg *paho.Publish) {
 
 	go c.processQueue()
 }
-
-
 
 func (c *ChainDefinitionController) processQueue() {
 	for {
@@ -172,7 +168,6 @@ func (c *ChainDefinitionController) processQueue() {
 		}
 	}
 }
-
 
 func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for Service Chain ID %s: %+v", topic.ChainID, update)
@@ -293,7 +288,6 @@ func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update 
 	logger.InfoLogger().Printf("Successfully processed update for Service Chain ID %s", topic.ChainID)
 	return Result{}, nil
 }
-
 
 func (c *ChainDefinitionController) OnDelete(topic ChainDefinitionTopic, lastMsg mqtt.Message) (Result, error) {
 	logger.InfoLogger().Printf("Received delete for Service Chain ID %s: %+v", topic.ChainID, lastMsg)
