@@ -16,13 +16,14 @@ import (
 )
 
 const (
-	UUID_REGEX_STR = "[0-9a-fA-F]{8}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{12}"
-	APP_DEFINITION_TOPIC_STR   = "^apps/(" + UUID_REGEX_STR + ")/definition$"
+	ID_REGEX_STR             = "[A-Fa-f0-9-]{3,36}" // Can match mongo's object IDs and UUIDs
+	APP_DEFINITION_TOPIC_STR = "^apps/(" + ID_REGEX_STR + ")/definition$"
 )
 
 type ApplicationDefinitionTopic struct {
 	AppID string
 }
+
 func (t ApplicationDefinitionTopic) String() string {
 	return fmt.Sprintf("apps/%s/definition", t.AppID)
 }
@@ -41,8 +42,6 @@ type AppDefinitionController struct {
 	topicRegex *regexp.Regexp
 }
 
-
-
 func (c *AppDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
 	c.topics = make(map[ApplicationDefinitionTopic]ApplicationDefinitionTopicData)
 	c.eventQueue = &SliceQueue{}
@@ -59,12 +58,9 @@ func (c *AppDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
 	return nil
 }
 
-
-
-
 func (c *AppDefinitionController) HandleMessage(msg *paho.Publish) {
 	logger.DebugLogger().Printf("Handling App definition message on topic %s: %s\n", msg.Topic, string(msg.Payload))
-	
+
 	var topicObj ApplicationDefinitionTopic
 	matches := c.topicRegex.FindStringSubmatch(msg.Topic)
 	if matches == nil {
@@ -103,8 +99,6 @@ func (c *AppDefinitionController) HandleMessage(msg *paho.Publish) {
 
 	go c.processQueue()
 }
-
-
 
 func (c *AppDefinitionController) processQueue() {
 	for {
@@ -175,9 +169,6 @@ func (c *AppDefinitionController) processQueue() {
 	}
 }
 
-
-
-
 func (c *AppDefinitionController) OnUpdate(topic ApplicationDefinitionTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for App ID %s: %+v", topic.AppID, update)
 	newAppDef, ok := update.NewMessage.(*mqtt.ApplicationDefinition)
@@ -203,10 +194,6 @@ func (c *AppDefinitionController) OnUpdate(topic ApplicationDefinitionTopic, upd
 
 	return Result{}, nil
 }
-
-
-
-
 
 func (c *AppDefinitionController) OnDelete(topic ApplicationDefinitionTopic, lastMsg mqtt.Message) (Result, error) {
 	logger.InfoLogger().Printf("Received delete for App ID %s with last processed message: %+v", topic.AppID, lastMsg)

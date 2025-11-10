@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	VNF_INSTANCES_TOPIC_STR    = "^nfs/(" + UUID_REGEX_STR + ")/nodes/(" + UUID_REGEX_STR + ")/groups/(" + UUID_REGEX_STR + ")$"
+	VNF_INSTANCES_TOPIC_STR = "^nfs/(" + ID_REGEX_STR + ")/nodes/(" + ID_REGEX_STR + ")/groups/(" + ID_REGEX_STR + ")$"
 )
 
 type RemoteVnfGroupsTopic struct {
@@ -24,6 +24,7 @@ type RemoteVnfGroupsTopic struct {
 	NodeID  string
 	GroupID string
 }
+
 func (t RemoteVnfGroupsTopic) String() string {
 	return fmt.Sprintf("nfs/%s/nodes/%s/groups/%s", t.VnfID, t.NodeID, t.GroupID)
 }
@@ -57,8 +58,6 @@ func (c *VnfGroupsController) SetupWithMQTT(client *mqtt.Client) error {
 	}
 	return nil
 }
-
-
 
 func (c *VnfGroupsController) HandleMessage(pub *paho.Publish) {
 	logger.DebugLogger().Printf("Handling Remote Vnf Groups message on topic %s: %s\n", pub.Topic, string(pub.Payload))
@@ -103,7 +102,6 @@ func (c *VnfGroupsController) HandleMessage(pub *paho.Publish) {
 
 	go c.processQueue()
 }
-
 
 func (c *VnfGroupsController) processQueue() {
 	for {
@@ -173,9 +171,6 @@ func (c *VnfGroupsController) processQueue() {
 	}
 }
 
-
-
-
 func (c *VnfGroupsController) OnUpdate(topic RemoteVnfGroupsTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for remote Vnf groups of Vnf ID %s: %+v", topic.VnfID, update)
 	newVnfGroup, ok := update.NewMessage.(*mqtt.VnfInstances)
@@ -185,7 +180,7 @@ func (c *VnfGroupsController) OnUpdate(topic RemoteVnfGroupsTopic, update Update
 	vnfGroupEntry, _ := c.Registry.FindRemoteVnfGroupByNodeAndExternalID(newVnfGroup.NodeID, newVnfGroup.GroupID)
 	if vnfGroupEntry == nil {
 		vnfGroupEntry = &models.RemoteVnfGroup{
-			ExternalGroupID:  newVnfGroup.GroupID,
+			ExternalGroupID: newVnfGroup.GroupID,
 		}
 	}
 	var addedNodeID string
@@ -233,9 +228,6 @@ func (c *VnfGroupsController) OnUpdate(topic RemoteVnfGroupsTopic, update Update
 	return Result{}, nil
 }
 
-
-
-
 func (c *VnfGroupsController) OnDelete(topic RemoteVnfGroupsTopic, lastMsg mqtt.Message) (Result, error) {
 	logger.InfoLogger().Printf("Received delete for remote VNF groups of VNF ID %s with last processed message: %+v", topic.VnfID, lastMsg)
 
@@ -260,4 +252,3 @@ func (c *VnfGroupsController) OnDelete(topic RemoteVnfGroupsTopic, lastMsg mqtt.
 	logger.InfoLogger().Printf("Successfully stopped subscription for remote VNF groups of VNF ID %s", topic.VnfID)
 	return Result{}, nil
 }
-

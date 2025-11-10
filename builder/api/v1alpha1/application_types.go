@@ -17,6 +17,10 @@ type ApplicationSpec struct {
 	// foo is an example field of Application. Edit application_types.go to remove/update
 	// +optional
 	// Foo *string `json:"foo,omitempty"`
+
+	// Instead of letting the system generate an ID, use this field to override it
+	// +optional
+	OverrideID string `json:"override_id,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.

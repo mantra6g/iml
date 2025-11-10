@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	NODE_DEFINITION_TOPIC_STR   = "^nodes/(" + UUID_REGEX_STR + ")/definition$"
+	NODE_DEFINITION_TOPIC_STR = "^nodes/(" + ID_REGEX_STR + ")/definition$"
 )
-	
+
 type NodeDefinitionTopic struct {
 	NodeID string
 }
+
 func (t NodeDefinitionTopic) String() string {
 	return fmt.Sprintf("nodes/%s/definition", t.NodeID)
 }
@@ -55,8 +56,6 @@ func (c *NodeDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
 	}
 	return nil
 }
-
-
 
 func (c *NodeDefinitionController) HandleMessage(pub *paho.Publish) {
 	logger.DebugLogger().Printf("Handling Node definition message on topic %s: %s\n", pub.Topic, string(pub.Payload))
@@ -99,7 +98,6 @@ func (c *NodeDefinitionController) HandleMessage(pub *paho.Publish) {
 
 	go c.processQueue()
 }
-
 
 func (c *NodeDefinitionController) processQueue() {
 	for {
@@ -168,7 +166,6 @@ func (c *NodeDefinitionController) processQueue() {
 		}
 	}
 }
-
 
 func (c *NodeDefinitionController) OnUpdate(topic NodeDefinitionTopic, update Update) (Result, error) {
 	logger.InfoLogger().Printf("Received update for Node ID %s: %+v", topic.NodeID, update)

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -109,8 +110,18 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Update the status fields
-	serviceChain.Status.SourceAppUID = srcApp.UID
-	serviceChain.Status.DestinationAppUID = dstApp.UID
+	srcAppID := srcApp.UID
+	if srcApp.Spec.OverrideID != "" {
+		srcAppID = types.UID(srcApp.Spec.OverrideID)
+	}
+	serviceChain.Status.SourceAppUID = srcAppID
+
+	dstAppID := dstApp.UID
+	if dstApp.Spec.OverrideID != "" {
+		dstAppID = types.UID(dstApp.Spec.OverrideID)
+	}
+	serviceChain.Status.DestinationAppUID = dstAppID
+	
 	for _, fn := range nfs {
 		serviceChain.Status.Functions = append(serviceChain.Status.Functions, fn.UID)
 	}

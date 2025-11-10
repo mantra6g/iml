@@ -48,7 +48,11 @@ func (s *Service) handleAppUpdatedEvent(event events.Event) {
 		s.logger.Error(fmt.Errorf("invalid payload for AppUpdated event"), "handleAppUpdatedEvent error")
 		return
 	}
-	if err := s.UpdateApp(app.UID, app); err != nil {
+	appID := app.UID
+	if app.Spec.OverrideID != "" {
+		appID = types.UID(app.Spec.OverrideID)
+	}
+	if err := s.UpdateApp(appID, app); err != nil {
 		s.logger.Error(fmt.Errorf("error updating app in cache: %v", err), "handleAppUpdatedEvent error")
 	}
 }
@@ -60,7 +64,11 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 		s.logger.Error(fmt.Errorf("invalid payload for AppDeleted event"), "handleAppDeletedEvent error")
 		return
 	}
-	if err := s.DeleteApp(app.UID); err != nil {
+	appID := app.UID
+	if app.Spec.OverrideID != "" {
+		appID = types.UID(app.Spec.OverrideID)
+	}
+	if err := s.DeleteApp(appID); err != nil {
 		s.logger.Error(fmt.Errorf("error deleting app from cache: %v", err), "handleAppDeletedEvent error")
 	}
 }
