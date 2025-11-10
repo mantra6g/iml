@@ -16,7 +16,7 @@ var Resource = schema.GroupVersionResource{
 type ApplicationSpec struct {
 	// OverrideID allows specifying a custom identifier for the application.
 	// Necessary when inheriting IDs from another system.
-	OverrideID string `json:"overrideId"`
+	OverrideID string `json:"override_id"`
 }
 
 type Application struct {
