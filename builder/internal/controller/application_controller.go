@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,10 +40,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger.Info("Reconciling Application", "request", req)
 	var app cachev1alpha1.Application
 	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
-		logger.Error(err, "unable to fetch Application")
-		// Application was deleted.
-		logger.Error(err, "unable to fetch Application")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if apierrors.IsNotFound(err) {
+			logger.Info("Application resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "Failed to get Application")
+		return ctrl.Result{}, err
 	}
 
 	// Check if being deleted

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,9 +47,12 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	logger.Info("Reconciling ServiceChain", "request", req)
 	var serviceChain cachev1alpha1.ServiceChain
 	if err := r.Get(ctx, req.NamespacedName, &serviceChain); err != nil {
-		// Service chain was deleted.
-		logger.Error(err, "unable to fetch ServiceChain")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if apierrors.IsNotFound(err) {
+			logger.Info("ServiceChain resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "Failed to get ServiceChain")
+		return ctrl.Result{}, err
 	}
 
 	// Check if being deleted
@@ -79,32 +83,38 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	var srcApp, dstApp cachev1alpha1.Application
 	if err := r.Get(ctx, serviceChain.Spec.From.ToObjectKey(), &srcApp); err != nil {
-		// Source app was deleted.
-		logger.Error(err, "Unable to fetch source application. Deleting service chain.")
-		if err := r.Delete(ctx, &serviceChain); err != nil {
-			return ctrl.Result{}, err
+		if apierrors.IsNotFound(err) {
+			// Source app was deleted.
+			logger.Info("Source application not found. Deleting service chain.")
+			if err := r.Delete(ctx, &serviceChain); err != nil {
+				return ctrl.Result{}, nil
+			}
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
 	}
 	if err := r.Get(ctx, serviceChain.Spec.To.ToObjectKey(), &dstApp); err != nil {
-		// Destination app was deleted.
-		logger.Error(err, "Unable to fetch destination application. Deleting service chain.")
-		if err := r.Delete(ctx, &serviceChain); err != nil {
-			return ctrl.Result{}, err
+		if apierrors.IsNotFound(err) {
+			// Destination app was deleted.
+			logger.Info("Destination application not found. Deleting service chain.")
+			if err := r.Delete(ctx, &serviceChain); err != nil {
+				return ctrl.Result{}, nil
+			}
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
 	}
 
 	var nfs []cachev1alpha1.NetworkFunction
 	for _, fn := range serviceChain.Spec.Functions {
 		var nf cachev1alpha1.NetworkFunction
 		if err := r.Get(ctx, fn.ToObjectKey(), &nf); err != nil {
-			// Network function was deleted.
-			logger.Error(err, "Unable to fetch network function. Deleting service chain.")
-			if err := r.Delete(ctx, &serviceChain); err != nil {
-				return ctrl.Result{}, err
+			if apierrors.IsNotFound(err) {
+				// Network function was deleted.
+				logger.Info("Network function not found. Deleting service chain.")
+				if err := r.Delete(ctx, &serviceChain); err != nil {
+					return ctrl.Result{}, nil
+				}
 			}
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
 		nfs = append(nfs, nf)
 	}

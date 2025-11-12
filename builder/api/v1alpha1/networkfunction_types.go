@@ -17,12 +17,26 @@ type NetworkFunctionSpec struct {
 	// foo is an example field of NetworkFunction. Edit networkfunction_types.go to remove/update
 	// +optional
 	// Foo *string `json:"foo,omitempty"`
+
+	// Image is the container image for the network function
+	// +required
+	Image string `json:"image"`
+
+	// Replicas is the number of desired replicas of the network function
+	// +optional
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // NetworkFunctionStatus defines the observed state of NetworkFunction.
 type NetworkFunctionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// AvailableReplicas is the number of available replicas of the network function
+	// +optional
+	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
 }
 
 // +kubebuilder:object:root=true
