@@ -20,6 +20,7 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 		&models.AppInstance{},
 		&models.VirtualNetworkFunction{},
 		&models.VnfGroup{},
+		&models.VnfInstance{},
 		&models.ServiceChain{},
 		&models.ServiceChainVnfs{},
 		&models.RouteStage{},

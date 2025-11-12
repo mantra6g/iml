@@ -78,7 +78,7 @@ func (f *InstanceFactory) NewLocalInstance(nfUID string, containerID string, ifa
 		return nil, fmt.Errorf("failed to save VNF instance: %v", err)
 	}
 
-	instanceIPNet, err := f.dataplane.AddVNFInstance(vnf.ID, instance.ID, )
+	instanceIPNet, err := f.dataplane.AddVNFInstance(vnfGroup.ID, instance.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add VNF instance to dataplane: %v", err)
 	}
