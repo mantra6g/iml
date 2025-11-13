@@ -100,7 +100,7 @@ func (f *InstanceFactory) DeleteInstance(instance *models.VnfInstance) error {
 		return fmt.Errorf("failed to delete VNF instance %s: %v", instance.ID, err)
 	}
 
-	vnfGroup, err := f.repo.FindVnfGroupByID(instance.GroupID)
+	vnfGroup, err := f.repo.FindVnfGroupByIDWithPrepopulatedInstanceList(instance.GroupID)
 	if err != nil {
 		return fmt.Errorf("VNF group of instance %s not found: %v", instance.ID, err)
 	}

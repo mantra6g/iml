@@ -136,6 +136,14 @@ func (r *Registry) FindVnfGroupByID(id uuid.UUID) (*models.VnfGroup, error) {
 	return &group, nil
 }
 
+func (r *Registry) FindVnfGroupByIDWithPrepopulatedInstanceList(id uuid.UUID) (*models.VnfGroup, error) {
+	var group models.VnfGroup
+	if err := r.dbHandle.Preload("Instances").First(&group, "id = ?", id).Error; err != nil {
+		return nil, fmt.Errorf("VNF group with id %s not found: %w", id, err)
+	}
+	return &group, nil
+}
+
 func (r *Registry) FindLocalVnfGroupByVnfID(globalVnfID string) (*models.VnfGroup, error) {
 	var group models.VnfGroup
 	if err := r.dbHandle.Joins("JOIN virtual_network_functions ON virtual_network_functions.id = vnf_groups.vnf_id").Where("virtual_network_functions.global_id = ?", globalVnfID).First(&group).Error; err != nil {
