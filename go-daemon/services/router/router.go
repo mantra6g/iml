@@ -88,9 +88,9 @@ func (r *RouterService) Add(route *models.Route) error {
 		if err != nil {
 			return fmt.Errorf("error parsing SID %s: %v", vnfGroup.SID, err)
 		}
-		sids = append(sids, sid.IP)
+		sids = append([]net.IP{sid.IP}, sids...)
 	}
-	sids = append(sids, globalConfig.DecapSID.IP)
+	sids = append([]net.IP{globalConfig.DecapSID.IP}, sids...)
 
 	err = r.dataplane.AddRoute(srcAppGroup.ID, dstAppGroup.Subnet, sids)
 	if err != nil {

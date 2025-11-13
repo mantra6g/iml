@@ -565,7 +565,8 @@ func (d *Dataplane) AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate vnf subnet next hops: %w", err)
 	}
-	err = d.updateVNFSubnetRoute(subnet, nextHops)
+	logger.DebugLogger().Printf("VNF subnet %s next hops after adding instance %s: %v", subnet.Network.String(), vnfInstanceID, nextHops)
+	err = d.updateVNFSubnetSIDRoute(subnet, nextHops)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update vnf subnet routes: %w", err)
 	}
@@ -587,7 +588,7 @@ func (d *Dataplane) RemoveVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.U
 	if err != nil {
 		return fmt.Errorf("failed to regenerate vnf subnet next hops: %w", err)
 	}
-	err = d.updateVNFSubnetRoute(subnet, nextHops)
+	err = d.updateVNFSubnetSIDRoute(subnet, nextHops)
 	if err != nil {
 		return fmt.Errorf("failed to update vnf subnet routes: %w", err)
 	}
@@ -687,29 +688,35 @@ func (*Dataplane) regenerateVNFSubnetNextHops(subnet *VNFSubnet) ([]*netlink.Nex
 	return nextHops, nil
 }
 
-func (d *Dataplane) updateVNFSubnetRoute(subnet *VNFSubnet, nextHops []*netlink.NexthopInfo) error {
+func (d *Dataplane) updateVNFSubnetSIDRoute(subnet *VNFSubnet, nextHops []*netlink.NexthopInfo) error {
 	var route *netlink.Route
 	routes, err := netlink.RouteListFiltered(nl.FAMILY_V6, &netlink.Route{
-		Dst:   subnet.Network,
+		Dst:   subnet.SID,
 		Table: int(d.routerVrf.Table),
 	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE)
+	logger.DebugLogger().Printf("Existing routes for VNF subnet %s: %v", subnet.SID.String(), routes)
 	if err != nil {
-		return fmt.Errorf("failed to list routes for VNF subnet %s: %w", subnet.Network.String(), err)
+		return fmt.Errorf("failed to list routes for VNF subnet %s: %w", subnet.SID.String(), err)
 	}
 	if len(routes) == 0 {
+		logger.DebugLogger().Printf("No existing route for VNF subnet %s, creating a new one", subnet.SID.String())
 		// No existing route, create a new one
 		route = &netlink.Route{
-			Dst:       subnet.Network,
+			Dst:       subnet.SID,
 			Table:     int(d.routerVrf.Table),
 			MultiPath: nextHops,
 		}
+		logger.DebugLogger().Printf("Creating new route for VNF subnet %s: %v", subnet.SID.String(), route)
 	} else {
+		logger.DebugLogger().Printf("Found existing route(s) for VNF subnet %s: %v", subnet.SID.String(), routes)
+		logger.DebugLogger().Printf("Updating existing route for VNF subnet %s: %v", subnet.SID.String(), routes[0])
 		// Update existing route
 		route = &routes[0]
 		route.MultiPath = nextHops
+		logger.DebugLogger().Printf("Updated route for VNF subnet %s: %v", subnet.SID.String(), route)
 	}
 	if err := netlink.RouteReplace(route); err != nil {
-		return fmt.Errorf("failed to update route for VNF subnet %s: %w", subnet.Network.String(), err)
+		return fmt.Errorf("failed to update route for VNF subnet %s: %w", subnet.SID.String(), err)
 	}
 	return nil
 }
