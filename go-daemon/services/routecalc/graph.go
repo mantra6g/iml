@@ -191,14 +191,10 @@ func (g *Graph) addEdge(nodeA, nodeB uuid.UUID, cost int) {
 }
 
 func (g *Graph) FindLocalAppGroupNode(appID uuid.UUID) *AppNode {
-	logger.DebugLogger().Printf("Finding local AppGroupNode for AppID: %s", appID)
-	logger.DebugLogger().Printf("Graph state: %+v", g)
 	for _, node := range g.nodes {
-		logger.DebugLogger().Printf("Checking node: %+v", node)
 		appNode, ok := node.(AppNode)
 		if !ok || appNode.appID != appID {continue}
 		hubNode, exists := g.hub[appNode.id]
-		logger.DebugLogger().Printf("Hub node for AppNode %s: %+v, exists: %v", appNode.id, hubNode, exists)
 		if exists && hubNode.id == g.srcNode {
 			return &appNode
 		}
@@ -256,13 +252,12 @@ type pathIndex struct {
 // Dijkstra's implementation using heap
 func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, error) {
 	logger.DebugLogger().Printf("Starting ShortestPath to %s with VNFs: %+v", dstID, vnfs)
-	logger.DebugLogger().Printf("Graph state: %+v", g)
 	// Set the source node
 	srcID := g.srcNode
 
 	// Initialize bests and prev maps
 	bests := make(map[pathIndex]int)
-	prev := make(map[uuid.UUID]uuid.UUID)
+	prev := make(map[pathIndex]pathIndex)
 	for node := range g.nodes {
 		for vnfIndex := 0; vnfIndex < len(vnfs)+1; vnfIndex++ {
 			bests[pathIndex{node: node, vnfIndex: vnfIndex}] = int(^uint(0) >> 1) // max int
@@ -284,11 +279,6 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 			logger.DebugLogger().Printf("Reached destination %s with all VNFs traversed.", dstID)
 			break 
 		}
-
-		// Check if we need to move to the next category
-		if vnf, ok := g.nodes[u.node].(VnfNode); ok && u.catIndex < len(vnfs) && vnf.VnfID == vnfs[u.catIndex] {
-			u.catIndex++ // Move to the next category
-		}
 		
 		// If we have already found a better path to this node, skip it
 		pIndx := pathIndex{node: u.node, vnfIndex: u.catIndex}
@@ -300,33 +290,39 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 		bests[pIndx] = u.dist
 
 		// Explore neighbors
-		logger.DebugLogger().Printf("Exploring neighbors of node %s with category index %d.", u.node, u.catIndex)
+		// logger.DebugLogger().Printf("Exploring neighbors of node %s with category index %d.", u.node, u.catIndex)
 		for _, edge := range g.adj[u.node] {
-			logger.DebugLogger().Printf("Checking edge from %s to %s", u.node, edge.To)
+			// logger.DebugLogger().Printf("Checking edge from %s to %s", u.node, edge.To)
 			alt := u.dist + edge.Cost
-			if alt < bests[pathIndex{node: edge.To, vnfIndex: u.catIndex}] {
-				logger.DebugLogger().Printf("Found better path to %s with category index %d: %d", edge.To, u.catIndex, alt)
-				bests[pathIndex{node: edge.To, vnfIndex: u.catIndex}] = alt
-				prev[edge.To] = u.node
-				heap.Push(pq, &item{node: edge.To, dist: alt, catIndex: u.catIndex})
+			if alt >= bests[pathIndex{node: edge.To, vnfIndex: u.catIndex}] {
+				continue
 			}
+			nextCatIndex := u.catIndex
+			if vnf, ok := g.nodes[edge.To].(VnfNode); ok && u.catIndex < len(vnfs) && vnf.VnfID == vnfs[u.catIndex] {
+				nextCatIndex++ // Move to the next category
+			}
+			bests[pathIndex{node: edge.To, vnfIndex: nextCatIndex}] = alt
+			prev[pathIndex{node: edge.To, vnfIndex: nextCatIndex}] = pathIndex{node: u.node, vnfIndex: u.catIndex}
+			heap.Push(pq, &item{node: edge.To, dist: alt, catIndex: nextCatIndex})
 		}
 	}
 	
 	if u.node != dstID {
-		logger.DebugLogger().Printf("No path found to %s after exploring all nodes.", dstID)
-		logger.DebugLogger().Printf("Best distances: %+v", bests)
-		logger.DebugLogger().Printf("Previous nodes: %+v", prev)
-		logger.DebugLogger().Printf("Final node reached: %s with category index %d", u.node, u.catIndex)
+		// logger.DebugLogger().Printf("No path found to %s after exploring all nodes.", dstID)
+		// logger.DebugLogger().Printf("Best distances: %+v", bests)
+		// logger.DebugLogger().Printf("Previous nodes: %+v", prev)
+		// logger.DebugLogger().Printf("Final node reached: %s with category index %d", u.node, u.catIndex)
 		return nil, fmt.Errorf("no path found to %s", dstID)
 	}
 
 	// reconstruct path
+	logger.DebugLogger().Printf("Reconstructing path to %s with previous nodes %+v", dstID, prev)
 	var path []GraphNode
-	for u, ok := prev[dstID]; ok; u, ok = prev[u] {
-		if node, exists := g.nodes[u]; exists {
+	for u, ok := prev[pathIndex{node: dstID, vnfIndex: len(vnfs)}]; ok; u, ok = prev[u] {
+		if node, exists := g.nodes[u.node]; exists {
 			path = append([]GraphNode{node}, path...)
 		}
 	}
+	logger.DebugLogger().Printf("Reconstructed path: %+v", path)
 	return path, nil
 }

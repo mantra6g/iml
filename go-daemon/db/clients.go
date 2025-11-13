@@ -14,6 +14,12 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 		return nil, fmt.Errorf("failed to connect to the database: %w", err)
 	}
 
+	// Auto-migrate the RouteStage model first to ensure its "position" field is created
+	err = db.AutoMigrate(&models.RouteStage{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to auto migrate database: %w", err)
+	}
+
 	// Migrate the schema
 	err = db.AutoMigrate(
 		&models.Application{},
@@ -23,7 +29,6 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 		&models.VnfInstance{},
 		&models.ServiceChain{},
 		&models.ServiceChainVnfs{},
-		&models.RouteStage{},
 		&models.Route{},
 		&models.Worker{},
 		&models.RemoteAppGroup{},
@@ -35,7 +40,10 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 	}
 
 	// Setup many-to-many relationship for Route and Segment
-	db.SetupJoinTable(&models.Route{}, "RouteSegments", &models.RouteStage{})
+	err = db.SetupJoinTable(&models.Route{}, "Stages", &models.RouteStage{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup join table for Route and RouteStage: %w", err)
+	}
 
 	return &Registry{
 		dbHandle: db,

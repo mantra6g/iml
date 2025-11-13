@@ -8,7 +8,6 @@ import (
 type VnfGroup struct {
 	ID         uuid.UUID `gorm:"primaryKey"`
 	VnfID      uuid.UUID
-	WorkerID   *uuid.UUID `gorm:"default:null"` // Nullable foreign key to Worker
 	SID        string // in "IP/prefix" format
 	Instances  []VnfInstance `gorm:"foreignKey:group_id"`
 	Subnet     string

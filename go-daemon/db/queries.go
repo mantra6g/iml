@@ -42,7 +42,7 @@ func (r *Registry) FindAllApps() ([]*models.Application, error) {
 func (r *Registry) FindLocalAppGroupByGlobalID(globalAppID string) (*models.AppGroup, error) {
 	// As the app group model does not have global_id directly, we obtain it by joining with the applications table.
 	var group models.AppGroup
-	if err := r.dbHandle.Joins("JOIN applications ON applications.id = app_groups.app_id").Where("applications.global_id = ? AND app_groups.worker_id IS NULL", globalAppID).First(&group).Error; err != nil {
+	if err := r.dbHandle.Joins("JOIN applications ON applications.id = app_groups.app_id").Where("applications.global_id = ?", globalAppID).First(&group).Error; err != nil {
 		return nil, fmt.Errorf("local app group with global ID %s not found: %w", globalAppID, err)
 	}
 	return &group, nil
@@ -138,15 +138,15 @@ func (r *Registry) FindVnfGroupByID(id uuid.UUID) (*models.VnfGroup, error) {
 
 func (r *Registry) FindLocalVnfGroupByVnfID(globalVnfID string) (*models.VnfGroup, error) {
 	var group models.VnfGroup
-	if err := r.dbHandle.Joins("JOIN vnfs ON vnfs.id = vnf_groups.vnf_id").Where("vnfs.global_id = ? AND vnf_groups.worker_id IS NULL", globalVnfID).First(&group).Error; err != nil {
+	if err := r.dbHandle.Joins("JOIN virtual_network_functions ON virtual_network_functions.id = vnf_groups.vnf_id").Where("virtual_network_functions.global_id = ?", globalVnfID).First(&group).Error; err != nil {
 		return nil, fmt.Errorf("local VNF group with VNF ID %s not found: %w", globalVnfID, err)
 	}
 	return &group, nil
 }
 
-func (r *Registry) FindAllNetworkServiceChains() ([]*models.ServiceChain, error) {
-	var chains []*models.ServiceChain
-	if err := r.dbHandle.Find(&chains).Error; err != nil {
+func (r *Registry) FindAllNetworkServiceChains() ([]models.ServiceChain, error) {
+	var chains []models.ServiceChain
+	if err := r.dbHandle.Preload("Elements").Find(&chains).Error; err != nil {
 		return nil, fmt.Errorf("failed to find all network service chains: %w", err)
 	}
 	return chains, nil
@@ -300,7 +300,7 @@ func (r *Registry) RemoveVnfInstanceByContainerID(containerID string) error {
 
 func (r *Registry) FindAllRoutes() ([]*models.Route, error) {
 	var routes []*models.Route
-	if err := r.dbHandle.Find(&routes).Error; err != nil {
+	if err := r.dbHandle.Preload("Stages").Find(&routes).Error; err != nil {
 		return nil, fmt.Errorf("failed to find all routes: %w", err)
 	}
 	return routes, nil

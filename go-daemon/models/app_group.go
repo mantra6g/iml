@@ -9,7 +9,6 @@ import (
 type AppGroup struct {
 	ID         uuid.UUID `gorm:"primaryKey"` // Surrogate key
 	AppID      uuid.UUID
-	WorkerID   *uuid.UUID `gorm:"default:null"` // Nullable foreign key to Worker
 	Instances  []AppInstance `gorm:"foreignKey:group_id"`
 	Subnet     string
 	GatewayIP  string

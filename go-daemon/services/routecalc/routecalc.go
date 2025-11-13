@@ -36,7 +36,7 @@ func NewRouteCalcService(registry *db.Registry, eb *events.EventBus) (*RouteCalc
 		return nil, fmt.Errorf("failed to create new graph: %w", err)
 	}
 	rc := &RouteCalcService{
-		eventBus:       eb,
+		eventBus: eb,
 		registry: registry,
 		graph:    g,
 	}
@@ -142,7 +142,7 @@ func (rc *RouteCalcService) handleEvent(evt events.Event) {
 			break
 		}
 		rc.graph.RemoveNode(inst.ID)
-		// When removing a local app group, 
+		// When removing a local app group,
 		// this means that there is no longer a source for routes
 		// rc.invalidateRoutesWhereAppGroupIsSrc(inst.ID)
 	case events.EventRemoteAppGroupRemoved:
@@ -164,7 +164,7 @@ func (rc *RouteCalcService) handleEvent(evt events.Event) {
 			break
 		}
 		rc.graph.RemoveNode(inst.ID)
-		// When removing a worker, we need to recalculate 
+		// When removing a worker, we need to recalculate
 		// all routes that might have used this worker
 		// This is a more complex operation, so we will just recalculate all routes
 		// In the future, we might want to optimize this
@@ -206,7 +206,7 @@ func (rc *RouteCalcService) recalculateAll() error {
 	// Recompute routes for each chain
 	logger.DebugLogger().Printf("Recomputing routes for %d chains", len(chains))
 	for _, chain := range chains {
-		routes, err := rc.computeRoutes(chain)
+		routes, err := rc.computeRoutes(&chain)
 		if err != nil {
 			logger.ErrorLogger().Printf("failed to compute route for chain %d: %v", chain.ID, err)
 			continue
@@ -265,9 +265,11 @@ func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*models
 		var stages []*models.RouteStage
 		pos := uint8(0)
 		for _, node := range path {
-			if node.Type() != "VNF" {continue}
+			if node.Type() != "VNF" {
+				continue
+			}
 			stages = append(stages, &models.RouteStage{
-				RouteID: 	route.ID,
+				RouteID:    route.ID,
 				VnfGroupID: node.ID(),
 				Position:   pos,
 			})

@@ -84,11 +84,11 @@ func (r *RouterService) Add(route *models.Route) error {
 
 	var sids []net.IP
 	for _, vnfGroup := range route.Stages {
-		sid := net.ParseIP(vnfGroup.SID)
-		if sid == nil {
+		_, sid, err := net.ParseCIDR(vnfGroup.SID)
+		if err != nil {
 			return fmt.Errorf("error parsing SID %s: %v", vnfGroup.SID, err)
 		}
-		sids = append(sids, sid)
+		sids = append(sids, sid.IP)
 	}
 	sids = append(sids, globalConfig.DecapSID.IP)
 

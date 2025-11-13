@@ -4,6 +4,7 @@ import (
 	"builder/pkg/cache"
 	"builder/pkg/cache/dto"
 	"builder/pkg/events"
+	"context"
 	"fmt"
 	"time"
 
@@ -12,9 +13,16 @@ import (
 )
 
 type Service struct {
-	cache *cache.Service
-	bus   *events.EventBus
+	cache  *cache.Service
+	bus    *events.EventBus
 	logger logr.Logger
+	eventChannel chan events.Event
+	ctx    context.Context
+	ctxCancel context.CancelFunc
+}
+
+type Result struct {
+	Requeue      bool
 }
 
 func NewService(cache *cache.Service, bus *events.EventBus, logger logr.Logger) (*Service, error) {
@@ -25,203 +33,110 @@ func NewService(cache *cache.Service, bus *events.EventBus, logger logr.Logger) 
 		return nil, fmt.Errorf("event bus is required")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	service := &Service{
 		cache: cache,
 		bus:   bus,
 		logger: logger,
+		ctx: ctx,
+		ctxCancel: cancel,
+		eventChannel: make(chan events.Event),
 	}
 
-	bus.Subscribe(events.EventAppUpdated, service.handleAppUpdatedEvent)
-	bus.Subscribe(events.EventAppDeleted, service.handleAppDeletedEvent)
-	bus.Subscribe(events.EventChainUpdated, service.handleChainUpdatedEvent)
-	bus.Subscribe(events.EventChainDeleted, service.handleChainDeletedEvent)
+	bus.Subscribe(events.EventAppUpdated, service.enqueueEvent)
+	bus.Subscribe(events.EventAppDeleted, service.enqueueEvent)
+	bus.Subscribe(events.EventChainUpdated, service.enqueueEvent)
+	bus.Subscribe(events.EventChainDeleted, service.enqueueEvent)
+
+	go service.dispatchEvents()
 
 	return service, nil
 }
 
-func (s *Service) handleAppUpdatedEvent(event events.Event) {
-	s.logger.Info("Handling AppUpdated event")
-	app, ok := event.Payload.(*dto.ApplicationDefinition)
-	if !ok {
-		s.logger.Error(fmt.Errorf("invalid payload for AppUpdated event"), "error casting event payload to Application")
-		return
+// Why a Reconcile function?
+// Because events can come at random times, out of order and concurrently.
+// Obtaining the current state from the cache and reconciling it ensures that
+// we always work with the latest data and can handle events in any order.
+func (s *Service) Reconcile(e events.Event) (Result, error) {
+	var appID types.UID
+	switch payload := e.Payload.(type) {
+	case *dto.ApplicationDefinition:
+		appID = types.UID(payload.ID)
+	case *dto.ServiceChainDefinition:
+		appID = types.UID(payload.SrcAppID)
+	default:
+		return Result{}, fmt.Errorf("unknown event payload type: %T", e.Payload)
 	}
 
-	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(types.UID(app.ID))
-	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
+	app, err := s.cache.GetApp(appID)
 	if err != nil {
-		// App chains does not exist, create new
-		appChainsPtr = &dto.ApplicationServiceChains{
-			ObjectMetadata: dto.ObjectMetadata{
-				Version:   "1.0",
-				Status:    "active",
-				Seq:       1,
-				Timestamp: time.Now(),
-			},
-			AppID:  app.ID,
-			Chains: []string{},
-		}
-	} else {
-		appChainsPtr = &appChains
-		appChainsPtr.ObjectMetadata = dto.ObjectMetadata{
-			Version:   appChainsPtr.Version,
-			Status:    "active",
-			Seq:       appChainsPtr.Seq + 1,
-			Timestamp: time.Now(),
-		}
+		return Result{}, fmt.Errorf("failed to get application definition for appID %s: %w", appID, err)
 	}
 
-	s.logger.Info("Publishing app chains pre-updated event", "appChains", appChainsPtr)
-	s.bus.Publish(events.Event{
-		Name:    events.EventAppChainsPreUpdated,
-		Payload: appChainsPtr,
-	})
-	s.logger.Info("Successfully published app chains pre-updated event", "appID", appChainsPtr.AppID)
-}
-
-func (s *Service) handleAppDeletedEvent(event events.Event) {
-	s.logger.Info("Handling AppDeleted event")
-	app, ok := event.Payload.(*dto.ApplicationDefinition)
-	if !ok {
-		s.logger.Error(fmt.Errorf("invalid payload for AppDeleted event"), "error casting event payload to Application")
-		return
-	}
-	
-	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(types.UID(app.ID))
-	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
-	if err != nil {
-		// App chains does not exist, create new with deleted status
-		appChainsPtr = &dto.ApplicationServiceChains{
-			ObjectMetadata: dto.ObjectMetadata{
-				Version:   "1.0",
-				Status:    "deleted",
-				Seq:       1,
-				Timestamp: time.Now(),
-			},
-			AppID:  app.ID,
-			Chains: []string{},
-		}
-	} else {
-		appChainsPtr = &appChains
-		appChainsPtr.ObjectMetadata = dto.ObjectMetadata{
-			Version:   appChainsPtr.Version,
-			Status:    "deleted",
-			Seq:       appChainsPtr.Seq + 1,
-			Timestamp: time.Now(),
-		}
-		appChainsPtr.AppID = app.ID
-		appChainsPtr.Chains = []string{} // Clear chains on deletion
-	}
-
-	s.logger.Info("Publishing app chains pre-updated event for deletion", "appChains", appChainsPtr)
-	s.bus.Publish(events.Event{
-		Name:    events.EventAppChainsPreUpdated,
-		Payload: appChainsPtr,
-	})
-	s.logger.Info("Successfully published app chains pre-updated event for deletion", "appID", appChainsPtr.AppID)
-}
-
-func (s *Service) handleChainUpdatedEvent(event events.Event) {
-	s.logger.Info("Handling ChainUpdated event")
-	chain, ok := event.Payload.(*dto.ServiceChainDefinition)
-	if !ok {
-		s.logger.Error(fmt.Errorf("invalid payload for ChainUpdated event"), "error casting event payload to ServiceChainDefinition")
-		return
-	}
-
-	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(types.UID(chain.SrcAppID))
-	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
-	if err != nil {
-		// App chains does not exist, create new
-		appChainsPtr = &dto.ApplicationServiceChains{
-			ObjectMetadata: dto.ObjectMetadata{
-				Version:   "1.0",
-				Status:    "active",
-				Seq:       1,
-				Timestamp: time.Now(),
-			},
-			AppID:  chain.SrcAppID,
-			Chains: []string{chain.ID},
-		}
-	} else {
-		appChainsPtr = &appChains
-		appChainsPtr.ObjectMetadata = dto.ObjectMetadata{
-			Version:   appChainsPtr.Version,
-			Status:    "active",
-			Seq:       appChainsPtr.Seq + 1,
-			Timestamp: time.Now(),
-		}
-		appChainsPtr.AppID = chain.SrcAppID
-
-		// Add chain if not already present
-		found := false
-		for _, c := range appChainsPtr.Chains {
-			if c == chain.ID {
-				found = true
-				break
+	var relevantChainIDs []string
+	if app.Status == "active" {
+		chains := s.cache.ListServiceChains()
+		for _, chain := range chains {
+			if chain.SrcAppID == string(appID) {
+				relevantChainIDs = append(relevantChainIDs, chain.ID)
 			}
 		}
-		if found {
-			return // No need to publish if chain already exists
-		}
-		appChainsPtr.Chains = append(appChainsPtr.Chains, chain.ID)
 	}
 
-	s.logger.Info("Publishing app chains pre-updated event", "appChains", appChainsPtr)
+	var seq uint = 1
+	lastAppChainsDto, err := s.cache.GetAppServiceChains(appID)
+	if err == nil {
+		seq = lastAppChainsDto.Seq + 1
+	}
+
+	appChainsDto := &dto.ApplicationServiceChains{
+		ObjectMetadata: dto.ObjectMetadata{
+			Version:   "1.0",
+			Status:    app.Status,
+			Seq:       seq,
+			Timestamp: time.Now(),
+		},
+		AppID:  string(appID),
+		Chains: relevantChainIDs,
+	}
+
 	s.bus.Publish(events.Event{
 		Name:    events.EventAppChainsPreUpdated,
-		Payload: appChainsPtr,
+		Payload: appChainsDto,
 	})
-	s.logger.Info("Successfully published app chains pre-updated event", "appID", appChainsPtr.AppID)
+
+	return Result{}, nil
 }
 
-func (s *Service) handleChainDeletedEvent(event events.Event) {
-	s.logger.Info("Handling ChainDeleted event")
-	chain, ok := event.Payload.(*dto.ServiceChainDefinition)
-	if !ok {
-		s.logger.Error(fmt.Errorf("invalid payload for ChainDeleted event"), "error casting event payload to ServiceChain")
-		return
-	}
+func (s *Service) Shutdown() {
+	s.ctxCancel()
+}
 
-	var appChainsPtr *dto.ApplicationServiceChains
-	appChains, err := s.cache.GetAppServiceChains(types.UID(chain.SrcAppID))
-	s.logger.Info("Got app service chains", "appChains", appChains, "err", err)
-	if err != nil {
-		// App chains does not exist, nothing to delete
-		return
-	}
-	appChainsPtr = &appChains
-	appChainsPtr.ObjectMetadata = dto.ObjectMetadata{
-		Version:   appChainsPtr.Version,
-		Status:    "active",
-		Seq:       appChainsPtr.Seq + 1,
-		Timestamp: time.Now(),
-	}
-	appChainsPtr.AppID = chain.SrcAppID
+func (s *Service) enqueueEvent(evt events.Event) {
+	s.logger.Info("Enqueuing event", "event", evt)
+	s.eventChannel <- evt
+}
 
-	// Remove the chain from the list
-	newChains := []string{}
-	found := false
-	for _, c := range appChainsPtr.Chains {
-		if c != chain.ID {
-			newChains = append(newChains, c)
-			continue
+func (s *Service) dispatchEvents() {
+	for {
+		select {
+		case evt := <-s.eventChannel:
+			s.logger.Info("Processing event", "event", evt)
+			res, err := s.Reconcile(evt)
+			if res.Requeue {
+				s.logger.Info("Requeuing event", "event", evt)
+				go func() {
+					time.Sleep(1 * time.Second) // Simple backoff
+					s.eventChannel <- evt
+				}()
+			}
+			if err != nil {
+				s.logger.Error(err, "Error reconciling event", "event", evt)
+				continue
+			}
+		case <-s.ctx.Done():
+			s.logger.Info("Shutting down event processing")
+			return
 		}
-		found = true
 	}
-	if !found {
-		// Chain not found, nothing to do
-		return
-	}
-	appChainsPtr.Chains = newChains
-
-	s.logger.Info("Publishing app chains pre-updated event", "appChains", appChainsPtr)
-	s.bus.Publish(events.Event{
-		Name:    events.EventAppChainsPreUpdated,
-		Payload: appChainsPtr,
-	})
-	s.logger.Info("Successfully published app chains pre-updated event", "appID", appChainsPtr.AppID)
 }
