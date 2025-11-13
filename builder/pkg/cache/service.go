@@ -143,8 +143,8 @@ func (s *Service) GetApp(uid types.UID) (dto.ApplicationDefinition, error) {
 	return getEntry(s.appCache, uid)
 }
 
-func (s *Service) UpdateApp(uid types.UID, app *v1alpha1.Application) error {
-	seq := getNextSeq(s.appCache, uid)
+func (s *Service) UpdateApp(appID types.UID, app *v1alpha1.Application) error {
+	seq := getNextSeq(s.appCache, appID)
 	appDef := dto.ApplicationDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
@@ -152,11 +152,11 @@ func (s *Service) UpdateApp(uid types.UID, app *v1alpha1.Application) error {
 			Seq:       seq,
 			Timestamp: time.Now(),
 		},
-		ID:        string(app.UID),
+		ID:        string(appID),
 		Name:      app.Name,
 		Namespace: app.Namespace,
 	}
-	err := updateEntry(s.appCache, uid, appDef)
+	err := updateEntry(s.appCache, appID, appDef)
 	if err != nil {
 		return fmt.Errorf("failed to update app: %w", err)
 	}
@@ -167,16 +167,16 @@ func (s *Service) UpdateApp(uid types.UID, app *v1alpha1.Application) error {
 	return nil
 }
 
-func (s *Service) DeleteApp(uid types.UID) error {
+func (s *Service) DeleteApp(appID types.UID) error {
 	appDef := dto.ApplicationDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
 			Status:    "deleted",
-			Seq:       getNextSeq(s.appCache, uid),
+			Seq:       getNextSeq(s.appCache, appID),
 			Timestamp: time.Now(),
 		},
 	}
-	err := updateEntry(s.appCache, uid, appDef)
+	err := updateEntry(s.appCache, appID, appDef)
 	if err != nil {
 		return fmt.Errorf("failed to delete app: %w", err)
 	}
@@ -187,23 +187,23 @@ func (s *Service) DeleteApp(uid types.UID) error {
 	return nil
 }
 
-func (s *Service) GetNF(uid types.UID) (dto.NetworkFunctionDefinition, error) {
-	return getEntry(s.nfCache, uid)
+func (s *Service) GetNF(nfID types.UID) (dto.NetworkFunctionDefinition, error) {
+	return getEntry(s.nfCache, nfID)
 }
 
-func (s *Service) UpdateNF(uid types.UID, nf *v1alpha1.NetworkFunction) error {
+func (s *Service) UpdateNF(nfID types.UID, nf *v1alpha1.NetworkFunction) error {
 	nfDef := dto.NetworkFunctionDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
 			Status:    "active",
-			Seq:       getNextSeq(s.nfCache, uid),
+			Seq:       getNextSeq(s.nfCache, nfID),
 			Timestamp: time.Now(),
 		},
-		ID:        string(nf.UID),
+		ID:        string(nfID),
 		Name:      nf.Name,
 		Namespace: nf.Namespace,
 	}
-	err := updateEntry(s.nfCache, uid, nfDef)
+	err := updateEntry(s.nfCache, nfID, nfDef)
 	if err != nil {
 		return fmt.Errorf("failed to update network function: %w", err)
 	}
@@ -214,16 +214,16 @@ func (s *Service) UpdateNF(uid types.UID, nf *v1alpha1.NetworkFunction) error {
 	return nil
 }
 
-func (s *Service) DeleteNF(uid types.UID) error {
+func (s *Service) DeleteNF(nfID types.UID) error {
 	nfDef := dto.NetworkFunctionDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
 			Status:    "deleted",
-			Seq:       getNextSeq(s.nfCache, uid),
+			Seq:       getNextSeq(s.nfCache, nfID),
 			Timestamp: time.Now(),
 		},
 	}
-	err := updateEntry(s.nfCache, uid, nfDef)
+	err := updateEntry(s.nfCache, nfID, nfDef)
 	if err != nil {
 		return fmt.Errorf("failed to delete network function: %w", err)
 	}
@@ -238,12 +238,16 @@ func (s *Service) GetAppServiceChains(appID types.UID) (dto.ApplicationServiceCh
 	return getEntry(s.appChainsCache, appID)
 }
 
-func (s *Service) GetServiceChain(uid types.UID) (dto.ServiceChainDefinition, error) {
-	return getEntry(s.chainCache, uid)
+func (s *Service) GetServiceChain(chainID types.UID) (dto.ServiceChainDefinition, error) {
+	return getEntry(s.chainCache, chainID)
 }
 
-func (s *Service) UpdateServiceChain(uid types.UID, chain *v1alpha1.ServiceChain) error {
-	seq := getNextSeq(s.chainCache, uid)
+func (s *Service) ListServiceChains() []dto.ServiceChainDefinition {
+	return s.chainCache.List()
+}
+
+func (s *Service) UpdateServiceChain(chainID types.UID, chain *v1alpha1.ServiceChain) error {
+	seq := getNextSeq(s.chainCache, chainID)
 	chainDef := dto.ServiceChainDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
@@ -251,7 +255,7 @@ func (s *Service) UpdateServiceChain(uid types.UID, chain *v1alpha1.ServiceChain
 			Seq:       seq,
 			Timestamp: time.Now(),
 		},
-		ID:   string(chain.UID),
+		ID:   string(chainID),
 		Name: chain.Name,
 		Namespace: chain.Namespace,
 		SrcAppID: string(chain.Status.SourceAppUID),
@@ -264,7 +268,7 @@ func (s *Service) UpdateServiceChain(uid types.UID, chain *v1alpha1.ServiceChain
 			return strs
 		}(chain.Status.Functions),
 	}
-	err := updateEntry(s.chainCache, uid, chainDef)
+	err := updateEntry(s.chainCache, chainID, chainDef)
 	if err != nil {
 		return fmt.Errorf("failed to update service chain: %w", err)
 	}
@@ -275,16 +279,16 @@ func (s *Service) UpdateServiceChain(uid types.UID, chain *v1alpha1.ServiceChain
 	return nil
 }
 
-func (s *Service) DeleteServiceChain(uid types.UID) error {
+func (s *Service) DeleteServiceChain(chainID types.UID) error {
 	chainDef := dto.ServiceChainDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
 			Status:    "deleted",
-			Seq:       getNextSeq(s.chainCache, uid),
+			Seq:       getNextSeq(s.chainCache, chainID),
 			Timestamp: time.Now(),
 		},
 	}
-	err := updateEntry(s.chainCache, uid, chainDef)
+	err := updateEntry(s.chainCache, chainID, chainDef)
 	if err != nil {
 		return fmt.Errorf("failed to delete service chain: %w", err)
 	}

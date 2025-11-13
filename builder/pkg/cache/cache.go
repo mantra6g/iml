@@ -36,3 +36,14 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 	var zero V
 	return zero, false
 }
+
+// List returns all values in the cache as a slice of safe copies.
+func (c *Cache[K, V]) List() []V {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	results := make([]V, 0, len(c.data))
+	for _, vPtr := range c.data {
+		results = append(results, *vPtr)
+	}
+	return results
+}
