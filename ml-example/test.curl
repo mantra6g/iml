@@ -1,0 +1,2 @@
+curl -X POST -H 'Content-Type: application/json' iris-inference-vfr9z-head-svc:8000/ -d '{"sepal length (cm)":5.1, "sepal width
+ (cm)":3.5,"petal length (cm)": 1.4,"petal width (cm)":0.2}'
