@@ -17,6 +17,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
@@ -216,9 +217,13 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 	}
 
 	// Parse the SID address from the response
-	sid, err := netlink.ParseIPNet(netConfig.SID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse SID address: %s", netConfig.SID)
+	var sidList = []*net.IPNet{}
+	for _, sidStr := range netConfig.SIDs {
+		sid, err := netlink.ParseIPNet(sidStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SID address: %s", sidStr)
+		}
+		sidList = append(sidList, sid)
 	}
 
 	// Parse the destination network from the response
@@ -277,10 +282,20 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		if err := netlink.LinkSetUp(imlInterface); err != nil {
 			return fmt.Errorf("failed to set container interface up: %w", err)
 		}
-		// Set the peer interface's IP address
-		// ip -6 addr add <IP>/<PREFIXLEN> dev iml0 anycast
+		// Set the container interface's subnet IP address
+		// ip -6 addr add <IP>/<PREFIXLEN> dev iml0
 		if err := netlink.AddrAdd(imlInterface, &netlink.Addr{IPNet: ipNet}); err != nil {
 			return fmt.Errorf("failed to add IP address to container interface %s: %w", imlInterface.Name, err)
+		}
+		// Set the container interface's SID address
+		// ip -6 addr add <SID>/<PREFIXLEN> dev iml0 anycast
+		for _, sid := range sidList {
+			if err := netlink.AddrAdd(imlInterface, &netlink.Addr{
+				IPNet: sid,
+				Flags: unix.IFA_ANYCAST,
+			}); err != nil {
+				return fmt.Errorf("failed to add SID address to container interface %s: %w", imlInterface.Name, err)
+			}
 		}
 		// Create route to the destination network
 		// ip -6 route add <DESTINATION> via <GATEWAY> src <IP>
@@ -294,24 +309,25 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		if err := netlink.RouteAdd(routeLink); err != nil {
 			return fmt.Errorf("failed to add route: %w", err)
 		}
-		// Add SRv6 End.X route
-		// ip -6 route add <SID> dev lo encap seg6local action End.X nh6 <Gateway> dev <Container interface>
-		end_x_flags := [nl.SEG6_LOCAL_MAX]bool{}
-		end_x_flags[nl.SEG6_LOCAL_ACTION] = true
-		end_x_flags[nl.SEG6_LOCAL_NH6] = true
-		srv6EndRoute := &netlink.Route{
-			Dst:      sid,
-			LinkIndex: imlInterface.Attrs().Index,
-			Scope: netlink.SCOPE_UNIVERSE,
-			Encap: &netlink.SEG6LocalEncap{
-				Flags:     end_x_flags,
-				Action: nl.SEG6_LOCAL_ACTION_END_X,
-				In6Addr: gwIP,
-			},
-		}
-		if err := netlink.RouteAdd(srv6EndRoute); err != nil {
-			return fmt.Errorf("failed to add SRv6 End route: %w", err)
-		}
+		// Removed because this needs to be implemented by the NF itself
+		// // Add SRv6 End.X route
+		// // ip -6 route add <SID> dev lo encap seg6local action End.X nh6 <Gateway> dev <Container interface>
+		// end_x_flags := [nl.SEG6_LOCAL_MAX]bool{}
+		// end_x_flags[nl.SEG6_LOCAL_ACTION] = true
+		// end_x_flags[nl.SEG6_LOCAL_NH6] = true
+		// srv6EndRoute := &netlink.Route{
+		// 	Dst:      sid,
+		// 	LinkIndex: imlInterface.Attrs().Index,
+		// 	Scope: netlink.SCOPE_UNIVERSE,
+		// 	Encap: &netlink.SEG6LocalEncap{
+		// 		Flags:     end_x_flags,
+		// 		Action: nl.SEG6_LOCAL_ACTION_END_X,
+		// 		In6Addr: gwIP,
+		// 	},
+		// }
+		// if err := netlink.RouteAdd(srv6EndRoute); err != nil {
+		// 	return fmt.Errorf("failed to add SRv6 End route: %w", err)
+		// }
 		return nil
 	})
 	hostNs.Close()

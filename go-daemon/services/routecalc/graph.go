@@ -25,9 +25,9 @@ func NewGraph() (*Graph, error) {
 		return nil, fmt.Errorf("failed to create source hub ID: %w", err)
 	}
 	graph := &Graph{
-		nodes: make(map[uuid.UUID]GraphNode),
-		adj:   make(map[uuid.UUID][]GraphEdge),
-		hub:   make(map[uuid.UUID]WorkerNode),
+		nodes:   make(map[uuid.UUID]GraphNode),
+		adj:     make(map[uuid.UUID][]GraphEdge),
+		hub:     make(map[uuid.UUID]WorkerNode),
 		srcNode: srcNodeID,
 	}
 	globalConfig, err := env.Config()
@@ -43,7 +43,7 @@ func NewGraph() (*Graph, error) {
 	return graph, nil
 }
 
-func (g *Graph) AddLocalVNFGroup(vnfGroup *models.VnfGroup) error {
+func (g *Graph) AddSimpleVNFGroup(vnfGroup *models.SimpleVnfGroup) error {
 	if vnfGroup == nil {
 		return fmt.Errorf("vnfGroup is nil")
 	}
@@ -55,9 +55,10 @@ func (g *Graph) AddLocalVNFGroup(vnfGroup *models.VnfGroup) error {
 	if !ok {
 		return fmt.Errorf("worker node %s does not exist", hID)
 	}
-	g.nodes[vnfGroup.ID] = VnfNode{
+	g.nodes[vnfGroup.ID] = &SimpleVnfNode{
 		id:    vnfGroup.ID,
 		VnfID: vnfGroup.VnfID,
+		SID:   vnfGroup.GetSID(),
 	}
 	g.hub[vnfGroup.ID] = hNode
 	g.addEdge(vnfGroup.ID, hID, 1)
@@ -65,27 +66,52 @@ func (g *Graph) AddLocalVNFGroup(vnfGroup *models.VnfGroup) error {
 	return nil
 }
 
-func (g *Graph) AddRemoteVNFGroup(vnfGroup *models.RemoteVnfGroup) error {
+func (g *Graph) AddMultiplexedVnfGroup(vnfGroup *models.MultiplexedVnfGroup) error {
 	if vnfGroup == nil {
 		return fmt.Errorf("vnfGroup is nil")
 	}
 	if vnfGroup.ID == uuid.Nil {
 		return fmt.Errorf("vnfGroup ID is nil")
 	}
-	hID := vnfGroup.WorkerID
+	hID := g.srcNode
 	hNode, ok := g.nodes[hID].(WorkerNode)
 	if !ok {
 		return fmt.Errorf("worker node %s does not exist", hID)
 	}
-	g.nodes[vnfGroup.ID] = VnfNode{
-		id:    vnfGroup.ID,
-		VnfID: vnfGroup.VnfID,
+	g.nodes[vnfGroup.ID] = &MultiplexedVnfNode{
+		id:              vnfGroup.ID,
+		VnfID:           vnfGroup.VnfID,
+		SubfunctionSids: vnfGroup.GetSubfunctionSIDs(),
 	}
+	logger.DebugLogger().Printf("Added MultiplexedVnfNode with ID %s and SubfunctionSids: %+v", vnfGroup.ID, vnfGroup.GetSubfunctionSIDs())
 	g.hub[vnfGroup.ID] = hNode
 	g.addEdge(vnfGroup.ID, hID, 1)
 
 	return nil
 }
+
+// func (g *Graph) AddRemoteVNFGroup(vnfGroup *models.RemoteVnfGroup) error {
+// 	if vnfGroup == nil {
+// 		return fmt.Errorf("vnfGroup is nil")
+// 	}
+// 	if vnfGroup.ID == uuid.Nil {
+// 		return fmt.Errorf("vnfGroup ID is nil")
+// 	}
+// 	hID := vnfGroup.WorkerID
+// 	hNode, ok := g.nodes[hID].(WorkerNode)
+// 	if !ok {
+// 		return fmt.Errorf("worker node %s does not exist", hID)
+// 	}
+// 	g.nodes[vnfGroup.ID] = &SimpleVnfNode{
+// 		id:    vnfGroup.ID,
+// 		VnfID: vnfGroup.VnfID,
+// 		SID:   vnfGroup.SID,
+// 	}
+// 	g.hub[vnfGroup.ID] = hNode
+// 	g.addEdge(vnfGroup.ID, hID, 1)
+
+// 	return nil
+// }
 
 func (g *Graph) AddLocalAppGroup(appGroup *models.AppGroup) error {
 	if appGroup == nil {
@@ -143,8 +169,8 @@ func (g *Graph) AddWorker(worker *models.Worker) error {
 		return fmt.Errorf("invalid DecapSID IP address: %s", worker.DecapSID)
 	}
 	srcNode := WorkerNode{
-		id:        worker.ID,
-		DecapSID:  sid,
+		id:       worker.ID,
+		DecapSID: sid,
 	}
 	g.nodes[worker.ID] = srcNode
 	g.addEdge(g.srcNode, worker.ID, 100) // From worker to source node
@@ -152,7 +178,9 @@ func (g *Graph) AddWorker(worker *models.Worker) error {
 }
 
 func (g *Graph) RemoveNode(id uuid.UUID) {
-	if _, exists := g.nodes[id]; !exists { return }
+	if _, exists := g.nodes[id]; !exists {
+		return
+	}
 
 	// Remove the adjacencies that point to this node
 	for _, edge := range g.adj[id] {
@@ -165,7 +193,9 @@ func (g *Graph) RemoveNode(id uuid.UUID) {
 }
 
 func (g *Graph) RemoveWorkerNode(id uuid.UUID) {
-	if _, exists := g.nodes[id]; !exists { return }
+	if _, exists := g.nodes[id]; !exists {
+		return
+	}
 	// Remove all nodes in the hub that point to this worker
 	for _, node := range g.adj[id] {
 		if hubNode, exists := g.hub[node.To]; exists && hubNode.id == id {
@@ -193,7 +223,9 @@ func (g *Graph) addEdge(nodeA, nodeB uuid.UUID, cost int) {
 func (g *Graph) FindLocalAppGroupNode(appID uuid.UUID) *AppNode {
 	for _, node := range g.nodes {
 		appNode, ok := node.(AppNode)
-		if !ok || appNode.appID != appID {continue}
+		if !ok || appNode.appID != appID {
+			continue
+		}
 		hubNode, exists := g.hub[appNode.id]
 		if exists && hubNode.id == g.srcNode {
 			return &appNode
@@ -206,7 +238,9 @@ func (g *Graph) FindAllAppGroupNodes(appID uuid.UUID) []*AppNode {
 	var nodes []*AppNode
 	for _, node := range g.nodes {
 		appNode, ok := node.(AppNode)
-		if !ok || appNode.appID != appID {continue}
+		if !ok || appNode.appID != appID {
+			continue
+		}
 		if _, exists := g.hub[appNode.id]; exists {
 			nodes = append(nodes, &appNode)
 		}
@@ -245,12 +279,13 @@ func (g *Graph) FindAllAppGroupNodes(appID uuid.UUID) []*AppNode {
 // }
 
 type pathIndex struct {
-	node uuid.UUID
+	node     uuid.UUID
 	vnfIndex int // Index of the category in the categoryIDs slice
+	Sid      *net.IPNet
 }
 
 // Dijkstra's implementation using heap
-func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, error) {
+func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []FunctionSelector) ([]GraphNode, error) {
 	logger.DebugLogger().Printf("Starting ShortestPath to %s with VNFs: %+v", dstID, vnfs)
 	// Set the source node
 	srcID := g.srcNode
@@ -277,9 +312,9 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 		// Stop if we reached the destination node and have traversed all categories
 		if u.node == dstID && u.catIndex == len(vnfs) {
 			logger.DebugLogger().Printf("Reached destination %s with all VNFs traversed.", dstID)
-			break 
+			break
 		}
-		
+
 		// If we have already found a better path to this node, skip it
 		pIndx := pathIndex{node: u.node, vnfIndex: u.catIndex}
 		if u.dist > bests[pIndx] {
@@ -290,23 +325,26 @@ func (g *Graph) ShortestPath(dstID uuid.UUID, vnfs []uuid.UUID) ([]GraphNode, er
 		bests[pIndx] = u.dist
 
 		// Explore neighbors
-		// logger.DebugLogger().Printf("Exploring neighbors of node %s with category index %d.", u.node, u.catIndex)
+		logger.DebugLogger().Printf("Exploring neighbors of node %s with category index %d.", u.node, u.catIndex)
 		for _, edge := range g.adj[u.node] {
-			// logger.DebugLogger().Printf("Checking edge from %s to %s", u.node, edge.To)
+			logger.DebugLogger().Printf("Checking edge from %s to %s", u.node, edge.To)
 			alt := u.dist + edge.Cost
 			if alt >= bests[pathIndex{node: edge.To, vnfIndex: u.catIndex}] {
 				continue
 			}
 			nextCatIndex := u.catIndex
-			if vnf, ok := g.nodes[edge.To].(VnfNode); ok && u.catIndex < len(vnfs) && vnf.VnfID == vnfs[u.catIndex] {
-				nextCatIndex++ // Move to the next category
+			var sid *net.IPNet
+			if vnf, ok := g.nodes[edge.To].(VnfNode); ok && u.catIndex < len(vnfs) {
+				if sid = vnf.GetSIDThatSatisfies(vnfs[u.catIndex]); sid != nil {
+					nextCatIndex++ // Move to the next category
+				}
 			}
 			bests[pathIndex{node: edge.To, vnfIndex: nextCatIndex}] = alt
 			prev[pathIndex{node: edge.To, vnfIndex: nextCatIndex}] = pathIndex{node: u.node, vnfIndex: u.catIndex}
 			heap.Push(pq, &item{node: edge.To, dist: alt, catIndex: nextCatIndex})
 		}
 	}
-	
+
 	if u.node != dstID {
 		// logger.DebugLogger().Printf("No path found to %s after exploring all nodes.", dstID)
 		// logger.DebugLogger().Printf("Best distances: %+v", bests)

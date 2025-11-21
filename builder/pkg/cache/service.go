@@ -202,6 +202,16 @@ func (s *Service) UpdateNF(nfID types.UID, nf *v1alpha1.NetworkFunction) error {
 		ID:        string(nfID),
 		Name:      nf.Name,
 		Namespace: nf.Namespace,
+		Type: 		 nf.Spec.Type,
+		SubFunctions: func(subFuncs []v1alpha1.SubFunctionSpec) []dto.SubFunctionDefinition {
+			defs := make([]dto.SubFunctionDefinition, len(subFuncs))
+			for i, sf := range subFuncs {
+				defs[i] = dto.SubFunctionDefinition{
+					ID:   sf.ID,
+				}
+			}
+			return defs
+		}(nf.Spec.SubFunctions),
 	}
 	err := updateEntry(s.nfCache, nfID, nfDef)
 	if err != nil {
@@ -260,13 +270,7 @@ func (s *Service) UpdateServiceChain(chainID types.UID, chain *v1alpha1.ServiceC
 		Namespace: chain.Namespace,
 		SrcAppID: string(chain.Status.SourceAppUID),
 		DstAppID: string(chain.Status.DestinationAppUID),
-		Functions: func(uids []types.UID) []string {
-			strs := make([]string, len(uids))
-			for i, uid := range uids {
-				strs[i] = string(uid)
-			}
-			return strs
-		}(chain.Status.Functions),
+		Functions: chain.Status.Functions,
 	}
 	err := updateEntry(s.chainCache, chainID, chainDef)
 	if err != nil {

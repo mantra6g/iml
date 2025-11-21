@@ -263,14 +263,15 @@ func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update 
 		return Result{RequeueAfter: 5 * time.Second}, fmt.Errorf("destination App ID %s for Service Chain ID %s not found in local database", chain.DstAppID, topic.ChainID)
 	}
 	var vnfs []models.ServiceChainVnfs
-	for i, vnfID := range chain.Functions {
-		vnfRec, err := c.Registry.FindActiveNetworkFunctionByGlobalID(vnfID)
+	for i, vnfIdentifier := range chain.Functions {
+		vnfRec, err := c.Registry.FindActiveNetworkFunctionByGlobalID(vnfIdentifier.FunctionUID)
 		if err != nil || vnfRec == nil {
-			return Result{RequeueAfter: 5 * time.Second}, fmt.Errorf("virtual Network Function ID %s for Service Chain ID %s not found in local database", vnfID, topic.ChainID)
+			return Result{RequeueAfter: 5 * time.Second}, fmt.Errorf("virtual Network Function ID %s for Service Chain ID %s not found in local database", vnfIdentifier.FunctionUID, topic.ChainID)
 		}
 		vnfs = append(vnfs, models.ServiceChainVnfs{
 			Position: uint8(i),
 			VnfID:    vnfRec.ID,
+			SubfunctionID: vnfIdentifier.SubFunctionID,
 		})
 	}
 	localChain.SrcAppID = srcApp.ID
@@ -314,10 +315,10 @@ func (c *ChainDefinitionController) OnDelete(topic ChainDefinitionTopic, lastMsg
 	if err := c.SubManager.RemoveDependency(&subscriptions.RemoteAppDependency{AppID: last.DstAppID}); err != nil {
 		logger.ErrorLogger().Printf("Failed to remove dependency for Destination App ID %s of Service Chain ID %s: %v", last.DstAppID, topic.ChainID, err)
 	}
-	for _, vnfID := range last.Functions {
-		err := c.SubManager.RemoveDependency(&subscriptions.RemoteVnfDependency{VnfID: vnfID})
+	for _, vnfIdentifier := range last.Functions {
+		err := c.SubManager.RemoveDependency(&subscriptions.RemoteVnfDependency{VnfID: vnfIdentifier.FunctionUID})
 		if err != nil {
-			logger.ErrorLogger().Printf("Failed to remove dependency for Service Chain ID %s of VNF ID %s: %v", topic.ChainID, vnfID, err)
+			logger.ErrorLogger().Printf("Failed to remove dependency for Service Chain ID %s of VNF ID %s: %v", topic.ChainID, vnfIdentifier.FunctionUID, err)
 			continue
 		}
 	}

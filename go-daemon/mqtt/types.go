@@ -21,21 +21,38 @@ func (om *ObjectMetadata) GetStatus() string       { return om.Status }
 func (om *ObjectMetadata) GetSeq() int             { return om.Seq }
 func (om *ObjectMetadata) GetTimestamp() time.Time { return om.Timestamp }
 
+type NetworkFunctionType string
+const (
+	NetworkFunctionTypeSimple     NetworkFunctionType = "simple"
+	NetworkFunctionTypeMultiplexed NetworkFunctionType = "multiplexed"
+)
+
+type SubFunctionDefinition struct {
+	ID uint32 `json:"id" diff:"id"`
+}
+
 type NetworkFunctionDefinition struct {
 	ObjectMetadata
 	ID        string `json:"id" diff:"id"`
 	Name      string `json:"name" diff:"name"`
 	Namespace string `json:"namespace" diff:"namespace"`
+	Type      NetworkFunctionType     `json:"type" diff:"type"`
+	SubFunctions []SubFunctionDefinition `json:"sub_functions" diff:"sub_functions"`
+}
+
+type FunctionIdentifier struct {
+	FunctionUID    string `json:"function_uid" diff:"function_uid"`
+	SubFunctionID *uint32 `json:"sub_function_id,omitempty" diff:"sub_function_id,omitempty"`
 }
 
 type ServiceChainDefinition struct {
 	ObjectMetadata
-	ID        string   `json:"id" diff:"id"`
-	Name      string   `json:"name" diff:"name"`
-	Namespace string   `json:"namespace" diff:"namespace"`
-	SrcAppID  string   `json:"src_app_id" diff:"src_app_id"`
-	DstAppID  string   `json:"dst_app_id" diff:"dst_app_id"`
-	Functions []string `json:"functions" diff:"functions"`
+	ID        string               `json:"id" diff:"id"`
+	Name      string               `json:"name" diff:"name"`
+	Namespace string               `json:"namespace" diff:"namespace"`
+	SrcAppID  string               `json:"src_app_id" diff:"src_app_id"`
+	DstAppID  string               `json:"dst_app_id" diff:"dst_app_id"`
+	Functions []FunctionIdentifier `json:"functions" diff:"functions"`
 }
 
 type ApplicationDefinition struct {

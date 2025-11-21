@@ -171,18 +171,53 @@ func (c *VNFDefinitionController) OnUpdate(topic VnfDefinitionTopic, update Upda
 	if !ok {
 		return Result{}, fmt.Errorf("failed to cast new message to NetworkFunctionDefinition for VNF ID %s", topic.VnfID)
 	}
-	localVnf, _ := c.Registry.FindActiveNetworkFunctionByGlobalID(newVnfDef.ID)
+	localVnf, _ := c.Registry.FindCompleteActiveNetworkFunctionByGlobalID(newVnfDef.ID)
 	if localVnf == nil {
 		localVnf = &models.VirtualNetworkFunction{
 			GlobalID: newVnfDef.ID,
 			Status:   models.VNFStatusActive,
 		}
 	}
+	var newSubfunctions []models.Subfunction
 	for _, change := range update.ChangeLog {
-		switch change.Path {
+		switch change.Path[0] {
+		case "type":
+			newType, ok := change.To.(string)
+			if !ok {
+				return Result{}, fmt.Errorf("failed to cast new type value for VNF ID %s", topic.VnfID)
+			}
+			switch newType {
+			case "simple":
+				localVnf.Type = models.NetworkFunctionTypeSimple
+			case "multiplexed":
+				localVnf.Type = models.NetworkFunctionTypeMultiplexed
+			default:
+				return Result{}, fmt.Errorf("unknown VNF type '%s' for VNF ID %s", newType, topic.VnfID)
+			}
+		case "sub_functions":
+			// Update subfunctions
+			newSubfunctions = make([]models.Subfunction, 0, len(newVnfDef.SubFunctions))
+			for _, subFuncDef := range newVnfDef.SubFunctions {
+				var exists = false
+				for _, subfunc := range localVnf.Subfunctions {
+					if subfunc.SubfunctionID == subFuncDef.ID {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					newSubfunctions = append(newSubfunctions, models.Subfunction{
+						SubfunctionID: subFuncDef.ID,
+						VnfID:         localVnf.ID,
+					})
+				}
+			}
 		default:
 			logger.DebugLogger().Printf("Unhandled change path '%s' for VNF ID %s", change.Path, topic.VnfID)
 		}
+	}
+	if localVnf.Type != models.NetworkFunctionTypeSimple {
+		localVnf.Subfunctions = newSubfunctions
 	}
 	if err := c.Registry.SaveVnf(localVnf); err != nil {
 		logger.ErrorLogger().Printf("Failed to update VNF ID %s in local database: %v", localVnf.GlobalID, err)

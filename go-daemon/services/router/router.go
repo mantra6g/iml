@@ -14,8 +14,8 @@ import (
 	"iml-daemon/db"
 	"iml-daemon/env"
 	"iml-daemon/logger"
-	"iml-daemon/models"
 	"iml-daemon/services/events"
+	"iml-daemon/services/routecalc"
 	"net"
 )
 
@@ -49,10 +49,9 @@ func New(registry *db.Registry, eventBus *events.EventBus, dataplane *Dataplane)
 }
 
 func (r *RouterService) handlerRecalculationFinished(evt events.Event) {
-	// After route recalculation, update all routes in the NFRouter
-	routes, err := r.registry.FindAllRoutes()
-	if err != nil {
-		logger.ErrorLogger().Printf("handlerRecalculationFinished: error retrieving routes: %v", err)
+	routes, ok := evt.Payload.([]*routecalc.Route)
+	if !ok {
+		logger.ErrorLogger().Printf("handlerRecalculationFinished: error casting event payload to []*routecalc.Route")
 		return
 	}
 
@@ -64,7 +63,7 @@ func (r *RouterService) handlerRecalculationFinished(evt events.Event) {
 	}
 }
 
-func (r *RouterService) Add(route *models.Route) error {
+func (r *RouterService) Add(route *routecalc.Route) error {
 	// Search for instances in the registry
 	srcAppGroup, err := r.registry.FindAppGroupByID(route.SrcAppGroupID)
 	if err != nil {
@@ -83,32 +82,16 @@ func (r *RouterService) Add(route *models.Route) error {
 	}
 
 	var sids []net.IP
-	for _, vnfGroup := range route.Stages {
-		_, sid, err := net.ParseCIDR(vnfGroup.SID)
-		if err != nil {
-			return fmt.Errorf("error parsing SID %s: %v", vnfGroup.SID, err)
-		}
+	for _, sid := range route.VnfSIDs {
 		sids = append([]net.IP{sid.IP}, sids...)
 	}
 	sids = append([]net.IP{globalConfig.DecapSID.IP}, sids...)
 
-	err = r.dataplane.AddRoute(srcAppGroup.ID, dstAppGroup.Subnet, sids)
+	err = r.dataplane.AddRoute(srcAppGroup.ID, dstAppGroup.GetSubnet(), sids)
 	if err != nil {
 		return fmt.Errorf("error adding route from group %s to group %s: %v", srcAppGroup.ID, dstAppGroup.ID, err)
 	}
 	return nil
-}
-
-func (r *RouterService) handleRouteUpdated(evt events.Event) {
-	route, ok := evt.Payload.(models.Route)
-	if !ok {
-		logger.ErrorLogger().Printf("handleRouteUpdated: error casting event payload to Route")
-		return
-	}
-
-	if err := r.Add(&route); err != nil {
-		logger.ErrorLogger().Printf("handleRouteUpdated: error adding route: %v", err)
-	}
 }
 
 func (r *RouterService) Shutdown(ctx context.Context) error {

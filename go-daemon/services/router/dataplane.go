@@ -42,7 +42,7 @@ type AppSubnet struct {
 type VNFSubnet struct {
 	Network       *net.IPNet
 	GatewayIP     net.IP
-	SID           *net.IPNet
+	SIDs          []net.IPNet
 	Bridge        *netlink.Bridge
 	VethBridgeVRF *netlink.Veth
 	IPAllocator   *IPv6Allocator
@@ -122,7 +122,7 @@ func (d *Dataplane) Close() error {
 	return nil
 }
 
-func (d *Dataplane) AddRoute(srcAppGroup uuid.UUID, dstNet string, sids []net.IP) error {
+func (d *Dataplane) AddRoute(srcAppGroup uuid.UUID, dstNet net.IPNet, sids []net.IP) error {
 	d.appMu.Lock()
 	defer d.appMu.Unlock()
 
@@ -131,15 +131,9 @@ func (d *Dataplane) AddRoute(srcAppGroup uuid.UUID, dstNet string, sids []net.IP
 		return fmt.Errorf("application subnet for group %s does not exist", srcAppGroup)
 	}
 
-	// Parse the destination network
-	dst, err := netlink.ParseAddr(dstNet)
-	if err != nil {
-		return fmt.Errorf("failed to parse destination network: %w", err)
-	}
-
 	// ip route add <dstNet> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
 	route := &netlink.Route{
-		Dst:        dst.IPNet,
+		Dst:        &dstNet,
 		Table:      int(subnet.Vrf.Table),
 		Encap:      &netlink.SEG6Encap{
 			Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
@@ -149,7 +143,7 @@ func (d *Dataplane) AddRoute(srcAppGroup uuid.UUID, dstNet string, sids []net.IP
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
-		return fmt.Errorf("failed to add route for app group %s to %s with segs %s: %w", srcAppGroup, dst.IPNet.String(), sids, err)
+		return fmt.Errorf("failed to add route for app group %s to %s with segs %s: %w", srcAppGroup, dstNet.String(), sids, err)
 	}
 
 	return nil
@@ -418,19 +412,26 @@ func (d *Dataplane) RemoveApplicationSubnet(appGroupID uuid.UUID) {
 	delete(d.AppSubnets, appGroupID)
 }
 
-func (d *Dataplane) AddApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) (*net.IPNet, error) {
+func (d *Dataplane) AddApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) (*net.IPNet, string, error) {
 	d.appMu.Lock()
 	defer d.appMu.Unlock()
 
 	subnet, exists := d.AppSubnets[appGroupID]
 	if !exists {
-		return nil, fmt.Errorf("application subnet for group %s does not exist", appGroupID)
+		return nil, "", fmt.Errorf("application subnet for group %s does not exist", appGroupID)
 	}
 	instanceIPNet, err := subnet.IPAllocator.Allocate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to allocate IP for application instance %s: %w", appInstanceID, err)
+		return nil, "", fmt.Errorf("failed to allocate IP for application instance %s: %w", appInstanceID, err)
 	}
-	return instanceIPNet, nil
+
+	randomBytes := make([]byte, 4)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return nil, "", fmt.Errorf("failed to generate random bytes for VNF interface name: %w", err)
+	}
+	ifaceName := fmt.Sprintf("nfr-%s", hex.EncodeToString(randomBytes))
+
+	return instanceIPNet, ifaceName, nil
 }
 
 func (d *Dataplane) RemoveApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) error {
@@ -438,7 +439,7 @@ func (d *Dataplane) RemoveApplicationInstance(appGroupID uuid.UUID, appInstanceI
 	return nil
 }
 
-func (d *Dataplane) AddVNFSubnet(vnfGroupID uuid.UUID) (*VNFSubnet, error) {
+func (d *Dataplane) AddVNFSubnet(vnfGroupID uuid.UUID, sidAmount int) (*VNFSubnet, error) {
 	d.vnfMu.Lock()
 	defer d.vnfMu.Unlock()
 
@@ -466,11 +467,15 @@ func (d *Dataplane) AddVNFSubnet(vnfGroupID uuid.UUID) (*VNFSubnet, error) {
 	}
 	subnet.GatewayIP = gatewayIPNet.IP
 
-	sid, err := d.sidNetAllocator.Allocate()
-	if err != nil {
-		return nil, fmt.Errorf("failed to allocate SID for VNF subnet: %w", err)
+	sids := make([]net.IPNet, sidAmount)
+	for i := 0; i < sidAmount; i++ {
+		sidNet, err := d.sidNetAllocator.Allocate()
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate SID for VNF subnet: %w", err)
+		}
+		sids[i] = *sidNet
 	}
-	subnet.SID = sid
+	subnet.SIDs = sids
 
 	// Create a bridge in the router vrf
 	b := make([]byte, 4)
@@ -544,33 +549,42 @@ func (d *Dataplane) RemoveVNFSubnet(vnfGroupID uuid.UUID) {
 	delete(d.VNFSubnets, vnfGroupID)
 }
 
-func (d *Dataplane) AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) (*net.IPNet, error) {
+func (d *Dataplane) AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) (*net.IPNet, string, error) {
 	d.vnfMu.Lock()
 	defer d.vnfMu.Unlock()
 
 	subnet, exists := d.VNFSubnets[vnfGroupID]
 	if !exists {
-		return nil, fmt.Errorf("VNF subnet for group %s does not exist", vnfGroupID)
+		return nil, "",fmt.Errorf("VNF subnet for group %s does not exist", vnfGroupID)
 	}
 	subnet.mu.Lock()
 	defer subnet.mu.Unlock()
 
 	vnfIPNet, err := subnet.IPAllocator.Allocate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to allocate IP for VNF instance %s: %w", vnfInstanceID, err)
+		return nil, "", fmt.Errorf("failed to allocate IP for VNF instance %s: %w", vnfInstanceID, err)
 	}
+
+	randomBytes := make([]byte, 4)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return nil, "", fmt.Errorf("failed to generate random bytes for VNF interface name: %w", err)
+	}
+	ifaceName := fmt.Sprintf("nfr-%s", hex.EncodeToString(randomBytes))
 
 	subnet.Instances[vnfInstanceID] = vnfIPNet.IP
 	nextHops, err := d.regenerateVNFSubnetNextHops(subnet)
 	if err != nil {
-		return nil, fmt.Errorf("failed to regenerate vnf subnet next hops: %w", err)
+		return nil, "", fmt.Errorf("failed to regenerate vnf subnet next hops: %w", err)
 	}
 	logger.DebugLogger().Printf("VNF subnet %s next hops after adding instance %s: %v", subnet.Network.String(), vnfInstanceID, nextHops)
-	err = d.updateVNFSubnetSIDRoute(subnet, nextHops)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update vnf subnet routes: %w", err)
+	
+	for _, sid := range subnet.SIDs {
+		err = d.updateVNFSubnetSIDRoute(&sid, nextHops)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to update vnf subnet routes: %w", err)
+		}
 	}
-	return vnfIPNet, nil
+	return vnfIPNet, ifaceName, nil
 }
 
 func (d *Dataplane) RemoveVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) error {
@@ -588,9 +602,11 @@ func (d *Dataplane) RemoveVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.U
 	if err != nil {
 		return fmt.Errorf("failed to regenerate vnf subnet next hops: %w", err)
 	}
-	err = d.updateVNFSubnetSIDRoute(subnet, nextHops)
-	if err != nil {
-		return fmt.Errorf("failed to update vnf subnet routes: %w", err)
+	for _, sid := range subnet.SIDs {
+		err = d.updateVNFSubnetSIDRoute(&sid, nextHops)
+		if err != nil {
+			return fmt.Errorf("failed to update vnf subnet routes: %w", err)
+		}
 	}
 	return nil
 }
@@ -688,35 +704,35 @@ func (*Dataplane) regenerateVNFSubnetNextHops(subnet *VNFSubnet) ([]*netlink.Nex
 	return nextHops, nil
 }
 
-func (d *Dataplane) updateVNFSubnetSIDRoute(subnet *VNFSubnet, nextHops []*netlink.NexthopInfo) error {
+func (d *Dataplane) updateVNFSubnetSIDRoute(sid *net.IPNet, nextHops []*netlink.NexthopInfo) error {
 	var route *netlink.Route
 	routes, err := netlink.RouteListFiltered(nl.FAMILY_V6, &netlink.Route{
-		Dst:   subnet.SID,
+		Dst:   sid,
 		Table: int(d.routerVrf.Table),
 	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE)
-	logger.DebugLogger().Printf("Existing routes for VNF subnet %s: %v", subnet.SID.String(), routes)
+	logger.DebugLogger().Printf("Existing routes for VNF subnet %s: %v", sid.String(), routes)
 	if err != nil {
-		return fmt.Errorf("failed to list routes for VNF subnet %s: %w", subnet.SID.String(), err)
+		return fmt.Errorf("failed to list routes for VNF subnet %s: %w", sid.String(), err)
 	}
 	if len(routes) == 0 {
-		logger.DebugLogger().Printf("No existing route for VNF subnet %s, creating a new one", subnet.SID.String())
+		logger.DebugLogger().Printf("No existing route for VNF subnet %s, creating a new one", sid.String())
 		// No existing route, create a new one
 		route = &netlink.Route{
-			Dst:       subnet.SID,
+			Dst:       sid,
 			Table:     int(d.routerVrf.Table),
 			MultiPath: nextHops,
 		}
-		logger.DebugLogger().Printf("Creating new route for VNF subnet %s: %v", subnet.SID.String(), route)
+		logger.DebugLogger().Printf("Creating new route for VNF subnet %s: %v", sid.String(), route)
 	} else {
-		logger.DebugLogger().Printf("Found existing route(s) for VNF subnet %s: %v", subnet.SID.String(), routes)
-		logger.DebugLogger().Printf("Updating existing route for VNF subnet %s: %v", subnet.SID.String(), routes[0])
+		logger.DebugLogger().Printf("Found existing route(s) for VNF subnet %s: %v", sid.String(), routes)
+		logger.DebugLogger().Printf("Updating existing route for VNF subnet %s: %v", sid.String(), routes[0])
 		// Update existing route
 		route = &routes[0]
 		route.MultiPath = nextHops
-		logger.DebugLogger().Printf("Updated route for VNF subnet %s: %v", subnet.SID.String(), route)
+		logger.DebugLogger().Printf("Updated route for VNF subnet %s: %v", sid.String(), route)
 	}
 	if err := netlink.RouteReplace(route); err != nil {
-		return fmt.Errorf("failed to update route for VNF subnet %s: %w", subnet.SID.String(), err)
+		return fmt.Errorf("failed to update route for VNF subnet %s: %w", sid.String(), err)
 	}
 	return nil
 }

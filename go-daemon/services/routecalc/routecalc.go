@@ -7,10 +7,9 @@ import (
 	"iml-daemon/logger"
 	"iml-daemon/models"
 	"iml-daemon/services/events"
+	"net"
 	"runtime/debug"
 	"sync"
-
-	"github.com/google/uuid"
 )
 
 // RouteCalcService listens for topology events and recalculates routes.
@@ -44,7 +43,8 @@ func NewRouteCalcService(registry *db.Registry, eb *events.EventBus) (*RouteCalc
 	// subscribe to instance lifecycle events
 	eb.Subscribe(events.EventLocalAppGroupCreated, rc.handleEvent)
 	eb.Subscribe(events.EventRemoteAppGroupCreated, rc.handleEvent)
-	eb.Subscribe(events.EventLocalVnfGroupCreated, rc.handleEvent)
+	eb.Subscribe(events.EventLocalSimpleVnfGroupCreated, rc.handleEvent)
+	eb.Subscribe(events.EventLocalVnfMultiplexedGroupCreated, rc.handleEvent)
 	eb.Subscribe(events.EventRemoteVnfGroupCreated, rc.handleEvent)
 	eb.Subscribe(events.EventChainCreated, rc.handleEvent)
 	eb.Subscribe(events.EventChainUpdated, rc.handleEvent)
@@ -52,7 +52,8 @@ func NewRouteCalcService(registry *db.Registry, eb *events.EventBus) (*RouteCalc
 
 	eb.Subscribe(events.EventLocalAppGroupRemoved, rc.handleEvent)
 	eb.Subscribe(events.EventRemoteAppGroupRemoved, rc.handleEvent)
-	eb.Subscribe(events.EventLocalVnfGroupRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventLocalSimpleVnfGroupRemoved, rc.handleEvent)
+	eb.Subscribe(events.EventLocalVnfMultiplexedGroupRemoved, rc.handleEvent)
 	eb.Subscribe(events.EventRemoteVnfGroupRemoved, rc.handleEvent)
 	eb.Subscribe(events.EventChainRemoved, rc.handleEvent)
 	eb.Subscribe(events.EventNodeRemoved, rc.handleEvent)
@@ -76,22 +77,35 @@ func (rc *RouteCalcService) handleEvent(evt events.Event) {
 
 	var err error
 	switch evt.Name {
-	case events.EventLocalVnfGroupCreated:
-		inst, ok := evt.Payload.(models.VnfGroup)
+	case events.EventLocalSimpleVnfGroupCreated:
+		inst, ok := evt.Payload.(models.SimpleVnfGroup)
 		if !ok {
 			err = fmt.Errorf("invalid payload type for EventLocalVnfGroupCreated")
 			break
 		}
-		err = rc.graph.AddLocalVNFGroup(&inst)
-		// rc.recalculateRoutesWithVnf(inst.ID)
-	case events.EventRemoteVnfGroupCreated:
-		inst, ok := evt.Payload.(models.RemoteVnfGroup)
+		err = rc.graph.AddSimpleVNFGroup(&inst)
+	case events.EventLocalVnfMultiplexedGroupCreated:
+		inst, ok := evt.Payload.(models.MultiplexedVnfGroup)
 		if !ok {
-			err = fmt.Errorf("invalid payload type for EventRemoteVnfGroupCreated")
+			err = fmt.Errorf("invalid payload type for EventLocalVnfGroupCreated")
 			break
 		}
-		err = rc.graph.AddRemoteVNFGroup(&inst)
+		var group *models.MultiplexedVnfGroup
+		group, err = rc.registry.FindSubfunctionPreloadedVnfMultiplexedGroupByID(inst.ID)
+		if err != nil {
+			err = fmt.Errorf("failed to retrieve multiplexed VNF group from registry: %v", err)
+			break
+		}
+		err = rc.graph.AddMultiplexedVnfGroup(group)
 		// rc.recalculateRoutesWithVnf(inst.ID)
+	// case events.EventRemoteVnfGroupCreated:
+	// 	inst, ok := evt.Payload.(models.RemoteVnfGroup)
+	// 	if !ok {
+	// 		err = fmt.Errorf("invalid payload type for EventRemoteVnfGroupCreated")
+	// 		break
+	// 	}
+	// 	err = rc.graph.AddRemoteVNFGroup(&inst)
+	// 	// rc.recalculateRoutesWithVnf(inst.ID)
 	case events.EventLocalAppGroupCreated:
 		inst, ok := evt.Payload.(models.AppGroup)
 		if !ok {
@@ -119,8 +133,8 @@ func (rc *RouteCalcService) handleEvent(evt events.Event) {
 			break
 		}
 		err = rc.graph.AddWorker(&inst)
-	case events.EventLocalVnfGroupRemoved:
-		inst, ok := evt.Payload.(models.VnfGroup)
+	case events.EventLocalSimpleVnfGroupRemoved:
+		inst, ok := evt.Payload.(models.SimpleVnfGroup)
 		if !ok {
 			err = fmt.Errorf("invalid payload type for EventLocalVnfGroupRemoved")
 			break
@@ -192,10 +206,10 @@ func (rc *RouteCalcService) recalculateAll() error {
 	}
 	logger.DebugLogger().Printf("Got the following service chains: %+v", chains)
 
-	// Remove all old routes
-	if err := rc.registry.RemoveAllRoutes(); err != nil {
-		return fmt.Errorf("failed to remove old routes: %v", err)
-	}
+	// // Remove all old routes
+	// if err := rc.registry.RemoveAllRoutes(); err != nil {
+	// 	return fmt.Errorf("failed to remove old routes: %v", err)
+	// }
 
 	// Notify that routes are being recalculated
 	rc.eventBus.Publish(events.Event{
@@ -211,23 +225,19 @@ func (rc *RouteCalcService) recalculateAll() error {
 			logger.ErrorLogger().Printf("failed to compute route for chain %d: %v", chain.ID, err)
 			continue
 		}
-		if err := rc.registry.SaveRoutes(routes); err != nil {
-			return fmt.Errorf("failed to save routes for chain %d: %v", chain.ID, err)
-		}
+		// Notify that routes finished recalculation
+		rc.eventBus.Publish(events.Event{
+			Name:    events.EventRouteRecalculationFinished,
+			Payload: routes,
+		})
 	}
 	logger.DebugLogger().Printf("Route recomputation completed")
-
-	// Notify that routes finished recalculation
-	rc.eventBus.Publish(events.Event{
-		Name:    events.EventRouteRecalculationFinished,
-		Payload: nil,
-	})
 
 	return nil
 }
 
 // computeRoute finds shortest path for a single chain.
-func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*models.Route, error) {
+func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*Route, error) {
 
 	srcAppNode := rc.graph.FindLocalAppGroupNode(chain.SrcAppID)
 	if srcAppNode == nil {
@@ -239,43 +249,42 @@ func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*models
 		return nil, fmt.Errorf("no destination app groups with id %s found for chain %s", chain.DstAppID, chain.ID)
 	}
 
-	var vnfIDChain []uuid.UUID
+	var nfs []FunctionSelector
 	for _, elem := range chain.Elements {
-		vnfIDChain = append(vnfIDChain, elem.VnfID)
+		nfs = append(nfs, FunctionSelector{
+			FunctionID:    elem.VnfID,
+			SubfunctionID: elem.SubfunctionID,
+		})
 	}
 
-	var routes []*models.Route
+	var routes []*Route
 	for _, dstAppNode := range dstAppNodes {
-
-		path, err := rc.graph.ShortestPath(dstAppNode.ID(), vnfIDChain)
+		path, err := rc.graph.ShortestPath(dstAppNode.ID(), nfs)
 		if err != nil {
 			logger.InfoLogger().Printf("failed to compute shortest path for chain %s: %v", chain.ID, err)
 			continue
 		}
 
 		// Save route
-		route := &models.Route{
+		route := &Route{
 			ChainID:       chain.ID,
 			SrcAppGroupID: srcAppNode.ID(),
 			DstAppGroupID: dstAppNode.ID(),
 		}
-		rc.registry.SaveRoute(route)
 
 		// Set the stages for the route
-		var stages []*models.RouteStage
-		pos := uint8(0)
+		var vnfSids []net.IPNet
+		vnfIndex := 0
 		for _, node := range path {
-			if node.Type() != "VNF" {
+			switch n := node.(type) {
+			case VnfNode:
+				vnfSids = append(vnfSids, *n.GetSIDThatSatisfies(nfs[vnfIndex]))
+				vnfIndex++
+			default:
 				continue
 			}
-			stages = append(stages, &models.RouteStage{
-				RouteID:    route.ID,
-				VnfGroupID: node.ID(),
-				Position:   pos,
-			})
-			pos++
 		}
-		rc.registry.SaveRouteStages(stages)
+		route.VnfSIDs = vnfSids
 
 		// Add the route to the list
 		routes = append(routes, route)

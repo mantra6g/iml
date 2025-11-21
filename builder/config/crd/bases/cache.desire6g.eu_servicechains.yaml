@@ -43,22 +43,14 @@ spec:
                 description: Specifies the source application
                 properties:
                   name:
-                    description: Name of the resource.
-                    maxLength: 253
-                    minLength: 1
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    description: Name of the Application
                     type: string
                   namespace:
-                    default: default
-                    description: |-
-                      Namespace of the resource.
-                      Optional. Defaults to "default" if not set.
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    description: Namespace of the Application
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
               functions:
                 description: Specifies the intermediate functions between the source
@@ -66,44 +58,33 @@ spec:
                 items:
                   properties:
                     name:
-                      description: Name of the resource.
-                      maxLength: 253
-                      minLength: 1
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      description: Name of the NetworkFunction
                       type: string
                     namespace:
-                      default: default
-                      description: |-
-                        Namespace of the resource.
-                        Optional. Defaults to "default" if not set.
-                      maxLength: 63
-                      minLength: 1
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      description: Namespace of the NetworkFunction
                       type: string
+                    subFunctionID:
+                      description: SubFunctionID is the ID of the sub-function within
+                        the NetworkFunction
+                      format: int32
+                      type: integer
                   required:
                   - name
+                  - namespace
                   type: object
                 type: array
               to:
                 description: Specifies the destination application
                 properties:
                   name:
-                    description: Name of the resource.
-                    maxLength: 253
-                    minLength: 1
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    description: Name of the Application
                     type: string
                   namespace:
-                    default: default
-                    description: |-
-                      Namespace of the resource.
-                      Optional. Defaults to "default" if not set.
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    description: Namespace of the Application
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
             required:
             - from
@@ -115,21 +96,29 @@ spec:
               dst_app_uid:
                 description: UID of the destinatination application.
                 type: string
-              nfs_uids:
+              functions:
                 description: UID of the intermediate functions.
                 items:
-                  description: |-
-                    UID is a type that holds unique ID values, including UUIDs.  Because we
-                    don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                    intent and helps make sure that UIDs and names do not get conflated.
-                  type: string
+                  description: FunctionIdentifier uniquely identifies a network function
+                    and an optional sub-function
+                  properties:
+                    function_uid:
+                      description: UID of the network function.
+                      type: string
+                    sub_function_id:
+                      description: ID of the sub-function within the network function.
+                      format: int32
+                      type: integer
+                  required:
+                  - function_uid
+                  type: object
                 type: array
               src_app_uid:
                 description: UID of the source application.
                 type: string
             required:
             - dst_app_uid
-            - nfs_uids
+            - functions
             - src_app_uid
             type: object
         required:

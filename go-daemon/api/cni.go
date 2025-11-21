@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"iml-daemon/db"
-	"iml-daemon/env"
 	"iml-daemon/logger"
-	"iml-daemon/services/apps"
-	"iml-daemon/services/vnfs"
+	"iml-daemon/apps"
+	"iml-daemon/vnfs"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
@@ -15,9 +14,9 @@ import (
 )
 
 type CNIController struct {
-	appService *apps.AppService
-	vnfService *vnfs.VnfService
 	repo       *db.Registry
+	vnfFactory *vnfs.InstanceFactory
+	appFactory *apps.InstanceFactory
 }
 
 var validate *validator.Validate
@@ -43,7 +42,7 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	}
 
 	// Create the registration request
-	instanceConfigRequest := &apps.AppInstanceRegistrationRequest{
+	regRequest := &apps.RegistrationRequest{
 		ApplicationID: instanceConfigDto.ApplicationID,
 		ContainerID:   instanceConfigDto.ContainerID,
 	}
@@ -54,33 +53,19 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	// This call is idempotent, so if the container is already registered,
 	// it will simply return the existing details.
 	// If the application ID references a non-existent application, return an error.
-	appDetails, errResponse := c.appService.RegisterLocalAppInstance(instanceConfigRequest)
-	if errResponse != nil {
-		logger.ErrorLogger().Printf("failed to register app instance: %+v", errResponse)
-		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
-		return
-	}
-
-	globalConfig, err := env.Config()
+	regResponse, err := c.appFactory.NewLocalInstance(regRequest)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to get global config: %v", err)
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	groupDetails, err := c.repo.FindAppGroupByID(appDetails.GroupID)
-	if err != nil {
-		logger.ErrorLogger().Printf("failed to get app group details: %v", err)
+		logger.ErrorLogger().Printf("failed to register app instance: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	configResponse := &AppInstanceConfigResponse{
-		IPNet:        appDetails.IP,
-		IfaceName:    appDetails.IfaceName,
-		ClusterCIDR:  globalConfig.ClusterCIDR.String(),
-		GatewayIP:    groupDetails.GatewayIP,
-		BridgeName:   groupDetails.Bridge,
+		IPNet:        regResponse.IPNet.String(),
+		IfaceName:    regResponse.IfaceName,
+		ClusterCIDR:  regResponse.ClusterCIDR.String(),
+		GatewayIP:    regResponse.GatewayIP.String(),
+		BridgeName:   regResponse.BridgeName,
 	}
 
 	// Finally, return the container details including the allocated IP.
@@ -111,16 +96,11 @@ func (c *CNIController) handleAppInstanceTeardown(response http.ResponseWriter, 
 		return
 	}
 
-	// Create the teardown request
-	teardownRequest := &apps.AppInstanceTeardownRequest{
-		ContainerID: teardownDto.ContainerID,
-	}
-
 	// Teardown the application instance
-	errResponse := c.appService.TeardownAppInstance(teardownRequest)
-	if errResponse != nil {
-		logger.ErrorLogger().Printf("failed to teardown app instance: %v", errResponse)
-		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
+	err = c.appFactory.DeleteInstance(teardownDto.ContainerID)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to teardown app instance: %v", err)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -148,44 +128,32 @@ func (c *CNIController) handleVnfInstanceRegistration(response http.ResponseWrit
 	}
 
 	// Create the registration request
-	instanceConfigRequest := &vnfs.VnfInstanceRegistrationRequest{
+	registrationRequest := &vnfs.RegistrationRequest{
 		VnfID:       instanceConfigDto.VnfID,
 		ContainerID: instanceConfigDto.ContainerID,
 	}
 
-	// Register the VNF instance in the VNF registry. This will assign the necessary
-	// resources and IPs to the VNF, as well as create the necessary routes in the nfrouter.
 	// This call is idempotent, so if the VNF is already registered,
 	// it will simply return the existing details.
 	// If the VNF ID references a non-existent VNF, return an error.
-	vnfDetails, errResponse := c.vnfService.RegisterLocalVnfInstance(instanceConfigRequest)
-	if errResponse != nil {
-		logger.ErrorLogger().Printf("failed to register VNF instance: %v", errResponse)
-		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
-		return
-	}
-
-	globalConfig, err := env.Config()
+	regResponse, err := c.vnfFactory.NewLocalInstance(registrationRequest)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to get global config: %v", err)
+		logger.ErrorLogger().Printf("failed to register VNF instance: %v", err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	groupDetails, err := c.repo.FindVnfGroupByID(vnfDetails.GroupID)
-	if err != nil {
-		logger.ErrorLogger().Printf("failed to get VNF group details: %v", err)
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
+	sidList := make([]string, len(regResponse.SIDs))
+	for i, sid := range regResponse.SIDs {
+		sidList[i] = sid.String()
 	}
-
 	configResponse := &VnfInstanceConfigResponse{
-		IPNet:       vnfDetails.IP,
-		SID:         groupDetails.SID,
-		IfaceName:   vnfDetails.IfaceName,
-		ClusterCIDR: globalConfig.ClusterCIDR.String(),
-		GatewayIP:   groupDetails.GatewayIP,
-		BridgeName:  groupDetails.Bridge,
+		IPNet:       regResponse.IPNet.String(),
+		SIDs:        sidList,
+		IfaceName:   regResponse.IfaceName,
+		ClusterCIDR: regResponse.ClusterCIDR.String(),
+		GatewayIP:   regResponse.GatewayIP.String(),
+		BridgeName:  regResponse.BridgeName,
 	}
 
 	// Finally, return the VNF details including the allocated IP.
@@ -216,16 +184,11 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 		return
 	}
 
-	// Create the teardown request
-	teardownRequest := &vnfs.VnfInstanceTeardownRequest{
-		ContainerID: teardownDto.ContainerID,
-	}
-
 	// Teardown the VNF instance
-	errResponse := c.vnfService.TeardownVnfInstance(teardownRequest)
-	if errResponse != nil {
-		logger.ErrorLogger().Printf("failed to teardown VNF instance: %v", errResponse)
-		http.Error(response, errResponse.GetMessage(), errResponse.GetStatusCode())
+	err = c.vnfFactory.TeardownVnfInstance(teardownDto.ContainerID)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to teardown VNF instance: %v", err)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -237,16 +200,16 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func InitializeCNIApi(appSvc *apps.AppService, vnfSvc *vnfs.VnfService, repo *db.Registry) (*http.Server, error) {
+func InitializeCNIApi(appFactory *apps.InstanceFactory, vnfFactory *vnfs.InstanceFactory, repo *db.Registry) (*http.Server, error) {
 	// Validate the services
-	if appSvc == nil || vnfSvc == nil || repo == nil {
-		return nil, fmt.Errorf("appService, vnfService, and repo cannot be nil")
+	if appFactory == nil || vnfFactory == nil || repo == nil {
+		return nil, fmt.Errorf("appFactory, vnfFactory, and repo cannot be nil")
 	}
 
 	// Create a new CNI controller with the services
 	cniController := &CNIController{
-		appService: appSvc,
-		vnfService: vnfSvc,
+		appFactory: appFactory,
+		vnfFactory: vnfFactory,
 		repo:       repo,
 	}
 	validate = validator.New(validator.WithRequiredStructEnabled())

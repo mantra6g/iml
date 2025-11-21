@@ -3,10 +3,49 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+
+type ApplicationReference struct {
+	// Name of the Application
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the Application
+	// +required
+	Namespace string `json:"namespace"`
+}
+func (app ApplicationReference) GetObjectKey() client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: app.Namespace,
+		Name:      app.Name,
+	}
+}
+
+
+type NetworkFunctionReference struct {
+	// Name of the NetworkFunction
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the NetworkFunction
+	// +required
+	Namespace string `json:"namespace"`
+
+	// SubFunctionID is the ID of the sub-function within the NetworkFunction
+	// +optional
+	SubFunctionID *uint32 `json:"subFunctionID,omitempty"`
+}
+func (nf NetworkFunctionReference) GetObjectKey() client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: nf.Namespace,
+		Name:      nf.Name,
+	}
+}
 
 // ServiceChainSpec defines the desired state of ServiceChain
 type ServiceChainSpec struct {
@@ -17,15 +56,24 @@ type ServiceChainSpec struct {
 
 	// Specifies the source application
 	// +required
-	From *ObjectReference `json:"from"`
+	From *ApplicationReference `json:"from"`
 
 	// Specifies the destination application
 	// +required
-	To *ObjectReference `json:"to"`
+	To *ApplicationReference `json:"to"`
 
 	// Specifies the intermediate functions between the source and destination applications
 	// +optional
-	Functions []ObjectReference `json:"functions,omitempty"`
+	Functions []NetworkFunctionReference `json:"functions,omitempty"`
+}
+
+// FunctionIdentifier uniquely identifies a network function and an optional sub-function
+type FunctionIdentifier struct {
+	// UID of the network function.
+	FunctionUID types.UID `json:"function_uid"`
+
+	// ID of the sub-function within the network function.
+	SubFunctionID *uint32 `json:"sub_function_id,omitempty"`
 }
 
 // ServiceChainStatus defines the observed state of ServiceChain.
@@ -40,7 +88,7 @@ type ServiceChainStatus struct {
 	DestinationAppUID types.UID `json:"dst_app_uid"`
 
 	// UID of the intermediate functions.
-	Functions []types.UID `json:"nfs_uids"`
+	Functions []FunctionIdentifier `json:"functions"`
 }
 
 // +kubebuilder:object:root=true

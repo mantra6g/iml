@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,6 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"builder/api/v1alpha1"
 	cachev1alpha1 "builder/api/v1alpha1"
 	"builder/pkg/events"
 )
@@ -82,7 +84,7 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	var srcApp, dstApp cachev1alpha1.Application
-	if err := r.Get(ctx, serviceChain.Spec.From.ToObjectKey(), &srcApp); err != nil {
+	if err := r.Get(ctx, serviceChain.Spec.From.GetObjectKey(), &srcApp); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Source app was deleted.
 			logger.Info("Source application not found. Deleting service chain.")
@@ -92,7 +94,7 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		return ctrl.Result{}, err
 	}
-	if err := r.Get(ctx, serviceChain.Spec.To.ToObjectKey(), &dstApp); err != nil {
+	if err := r.Get(ctx, serviceChain.Spec.To.GetObjectKey(), &dstApp); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Destination app was deleted.
 			logger.Info("Destination application not found. Deleting service chain.")
@@ -106,7 +108,7 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	var nfs []cachev1alpha1.NetworkFunction
 	for _, fn := range serviceChain.Spec.Functions {
 		var nf cachev1alpha1.NetworkFunction
-		if err := r.Get(ctx, fn.ToObjectKey(), &nf); err != nil {
+		if err := r.Get(ctx, fn.GetObjectKey(), &nf); err != nil {
 			if apierrors.IsNotFound(err) {
 				// Network function was deleted.
 				logger.Info("Network function not found. Deleting service chain.")
@@ -132,8 +134,37 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	serviceChain.Status.DestinationAppUID = dstAppID
 	
-	for _, fn := range nfs {
-		serviceChain.Status.Functions = append(serviceChain.Status.Functions, fn.UID)
+	serviceChain.Status.Functions = []v1alpha1.FunctionIdentifier{}
+	for fnIndex, fn := range nfs {
+		// Case 1: SubFunctionID is specified but the NF is not multiplexed
+		if (
+			serviceChain.Spec.Functions[fnIndex].SubFunctionID != nil &&
+			fn.Spec.Type != v1alpha1.NetworkFunctionTypeMultiplexed) {
+				return ctrl.Result{}, fmt.Errorf("function at index %d (%s/%s) specifies SubFunctionID, but its type is not 'Multiplexed'",
+					fnIndex, fn.Namespace, fn.Name)
+		}
+
+		// Case 2: SubFunctionID is specified but does not exist in the NF
+		if serviceChain.Spec.Functions[fnIndex].SubFunctionID != nil {
+			var found bool = false
+			for _, sf := range fn.Spec.SubFunctions {
+				if *serviceChain.Spec.Functions[fnIndex].SubFunctionID == sf.ID {
+					found = true
+				}
+			}
+			if !found {
+				return ctrl.Result{}, fmt.Errorf("function at index %d (%s/%s) does not contain sub-function with ID %d",
+					fnIndex, fn.Namespace, fn.Name, *serviceChain.Spec.Functions[fnIndex].SubFunctionID)
+			}
+		}
+
+		// All good, append to status
+		serviceChain.Status.Functions = append(serviceChain.Status.Functions, 
+			v1alpha1.FunctionIdentifier{
+				FunctionUID: fn.UID,
+				SubFunctionID: serviceChain.Spec.Functions[fnIndex].SubFunctionID,
+			},
+		)
 	}
 
 	// All is well
