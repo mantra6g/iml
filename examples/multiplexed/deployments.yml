@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-client-1
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-client-1
+  template:
+    metadata:
+      labels:
+        app: web-client-1
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            { 
+              "name": "iml-cni",
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "dead-beef-1"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: curl
+          image: alpine/curl:latest
+          command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-client-2
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-client-2
+  template:
+    metadata:
+      labels:
+        app: web-client-2
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            { 
+              "name": "iml-cni",
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "dead-beef-2"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: curl
+          image: alpine/curl:latest
+          command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "iml-cni", 
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "face-feed"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80

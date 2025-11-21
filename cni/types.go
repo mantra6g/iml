@@ -34,12 +34,12 @@ type NFConfigRequest struct {
 }
 
 type NFConfigResponse struct {
-	IPNet 		  string `json:"ip_net"`
-	SID         string `json:"sid"`
-	IfaceName   string `json:"iface_name"`
-	ClusterCIDR string `json:"cluster_cidr"`
-	GatewayIP   string `json:"gateway_ip"`
-	BridgeName  string `json:"bridge_name"`
+	IPNet 		  string   `json:"ip_net"`
+	SIDs        []string `json:"sids"`
+	IfaceName   string   `json:"iface_name"`
+	ClusterCIDR string   `json:"cluster_cidr"`
+	GatewayIP   string   `json:"gateway_ip"`
+	BridgeName  string   `json:"bridge_name"`
 }
 
 type AppTeardownRequest struct {

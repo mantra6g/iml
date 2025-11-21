@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"iml-daemon/db"
 	"iml-daemon/env"
+	"iml-daemon/logger"
 	"iml-daemon/models"
 	"iml-daemon/mqtt"
 	"iml-daemon/services/events"
@@ -44,8 +45,10 @@ func NewClient(eb *events.EventBus, repo *db.Registry, manager *subscriptions.Su
 
 	client.eb.Subscribe(events.EventLocalAppGroupCreated, client.handleLocalAppGroupCreated)
 	client.eb.Subscribe(events.EventLocalAppGroupRemoved, client.handleLocalAppGroupRemoved)
-	client.eb.Subscribe(events.EventLocalVnfGroupCreated, client.handleLocalVnfGroupCreated)
-	client.eb.Subscribe(events.EventLocalVnfGroupRemoved, client.handleLocalVnfGroupRemoved)
+	client.eb.Subscribe(events.EventLocalSimpleVnfGroupCreated, client.handleLocalVnfGroupCreated)
+	client.eb.Subscribe(events.EventLocalVnfMultiplexedGroupCreated, client.handleLocalVnfMultiplexedGroupCreated)
+	client.eb.Subscribe(events.EventLocalSimpleVnfGroupRemoved, client.handleLocalVnfGroupRemoved)
+	client.eb.Subscribe(events.EventLocalVnfMultiplexedGroupRemoved, client.handleLocalVnfMultiplexedGroupRemoved)
 	return client, nil
 }
 
@@ -90,7 +93,6 @@ func (c *Client) GetApplication(id string) (*models.Application, error) {
 	app = &models.Application{
 		GlobalID: appDefinition.ID,
 		Status:   models.AppStatusActive,
-		Etag:     appDefinition.Seq,
 	}
 	if err := c.repo.SaveApp(app); err != nil {
 		return nil, fmt.Errorf("failed to save application %s: %v", id, err)
@@ -130,6 +132,7 @@ func (c *Client) GetNetworkFunction(id string) (*models.VirtualNetworkFunction, 
 	if err := json.NewDecoder(resp.Body).Decode(&nfDefinition); err != nil {
 		return nil, fmt.Errorf("failed to decode VNF response: %v", err)
 	}
+	logger.DebugLogger().Printf("Retrieved network function definition from IML: %+v", nfDefinition)
 	if nfDefinition.Status != "active" {
 		return nil, fmt.Errorf("network function %s is not active in IML", id)
 	}
@@ -138,14 +141,37 @@ func (c *Client) GetNetworkFunction(id string) (*models.VirtualNetworkFunction, 
 	nf = &models.VirtualNetworkFunction{
 		GlobalID: nfDefinition.ID,
 		Status:   models.VNFStatusActive,
+		Type:     models.NetworkFunctionType(nfDefinition.Type),
 	}
 	if err := c.repo.SaveVnf(nf); err != nil {
 		return nil, fmt.Errorf("failed to save network function %s: %v", id, err)
+	}
+	logger.DebugLogger().Printf("Saved network function: %+v", nf)
+
+	if nf.Type == models.NetworkFunctionTypeMultiplexed {
+		subfunctions := []models.Subfunction{}
+		for _, sfDef := range nfDefinition.SubFunctions {
+			sf := models.Subfunction{
+				SubfunctionID: sfDef.ID,
+				VnfID:         nf.ID,
+			}
+			subfunctions = append(subfunctions, sf)
+		}
+		if err := c.repo.SaveSubfunctions(subfunctions); err != nil {
+			return nil, fmt.Errorf("failed to save subfunctions for network function %s: %v", id, err)
+		}
+		logger.DebugLogger().Printf("Saved subfunctions for network function %s", id)
 	}
 
 	err = c.manager.AddDependency(&subscriptions.TemporaryVnfDependency{VnfID: nf.GlobalID})
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to VNF updates: %v", err)
+	}
+
+	// Retrieve the saved network function to include all related data
+	nf, err = c.repo.FindCompleteActiveNetworkFunctionByGlobalID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve saved network function %s: %v", id, err)
 	}
 
 	return nf, nil

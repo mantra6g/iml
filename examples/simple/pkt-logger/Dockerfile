@@ -19,4 +19,4 @@ ENTRYPOINT [ "simple_switch", "build/logger.json", "--log-console" ]
 
 # This CMD can be overridden to specify different interfaces. 
 # The default is to use 1@in0 and 2@out0
-# CMD ["-i 1@in0", "-i 2@out0"]
+CMD ["-i 1@iml0"]

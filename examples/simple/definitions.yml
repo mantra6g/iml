@@ -19,9 +19,12 @@ kind: NetworkFunction
 metadata:
   name: pkt-logger
   namespace: default
-spec: 
-  image: tomasagata/pkt-logger:latest
+spec:
+  type: simple
   replicas: 1
+  containers:
+    - name: pkt-logger
+      image: tomasagata/pkt-logger:latest
 ---
 apiVersion: cache.desire6g.eu/v1alpha1
 kind: ServiceChain

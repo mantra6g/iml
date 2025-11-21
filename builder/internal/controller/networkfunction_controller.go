@@ -32,9 +32,10 @@ type CNIArgs struct {
 }
 
 type CNIConfig struct {
-	Name    string   `json:"name"`
+	Name    string  `json:"name"`
 	CNIArgs CNIArgs `json:"cni-args"`
 }
+
 func (c CNIConfig) String() string {
 	return `{
 		"name": "` + c.Name + `",
@@ -103,7 +104,7 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// Search for the found
+	// Search for the deployment
 	found := &appsv1.Deployment{}
 	err := r.Get(ctx, req.NamespacedName, found)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -115,7 +116,7 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			logger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: 10*time.Second}, nil
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -138,7 +139,7 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		logger.Error(err, "Failed to update NetworkFunction status")
 		return ctrl.Result{}, err
 	}
-	
+
 	// All is well.
 	// Publish creation/update event
 	r.Bus.Publish(events.Event{
@@ -149,7 +150,7 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(nf *cachev1alpha1.NetworkFunction) *appsv1.Deployment {	
+func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(nf *cachev1alpha1.NetworkFunction) *appsv1.Deployment {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nf.Name,
@@ -172,22 +173,35 @@ func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(nf *cachev1alph
 							Name: "iml-cni",
 							CNIArgs: CNIArgs{
 								AppType: "network_function",
-								NFID:   string(nf.UID),
+								NFID:    string(nf.UID),
 							},
 						}.String() + "]",
 					},
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  nf.Name,
-							Image: nf.Spec.Image,
-						},
-					},
+					Containers: nf.Spec.Containers,
 				},
 			},
 		},
 	}
+
+	for i := range dep.Spec.Template.Spec.Containers {
+		container := &dep.Spec.Template.Spec.Containers[i]
+		if container.Env == nil {
+			container.Env = []corev1.EnvVar{
+				{
+					Name:  "NF_ID",
+					Value: string(nf.UID),
+				},
+			}
+		} else {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "NF_ID",
+				Value: string(nf.UID),
+			})
+		}
+	}
+
 	// Set the ownerRef for the Deployment, ensuring that the Deployment
 	// will be deleted when the Busybox CR is deleted.
 	controllerutil.SetControllerReference(nf, dep, r.Scheme)

@@ -14,7 +14,6 @@ type ServiceChain struct {
 	ID       uuid.UUID `gorm:"primaryKey"`
 	GlobalID string
 	Status   string `gorm:"index:idx_service_chains_status,default:ACTIVE"`
-	Etag     int
 	SrcAppID uuid.UUID
 	DstAppID uuid.UUID
 	Elements []ServiceChainVnfs `gorm:"foreignKey:chain_id;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`

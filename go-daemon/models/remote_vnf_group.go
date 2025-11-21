@@ -7,5 +7,5 @@ type RemoteVnfGroup struct {
 	ExternalGroupID string
 	VnfID           uuid.UUID
 	WorkerID        uuid.UUID
-	SID             string // In "ip"/"prefix" format
+	SID             string // IPNet
 }
