@@ -18,6 +18,8 @@ func NewClient(dynamicClient *dynamic.DynamicClient) (*Client, error) {
 }
 
 func (c *Client) Create(obj *ServiceChain) error {
+	obj.Kind = "ServiceChain"
+	obj.APIVersion = Resource.GroupVersion().String()
 	_, err := c.dynamicClient.
 								Resource(Resource).
 								Namespace(obj.Namespace).

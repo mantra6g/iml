@@ -28,7 +28,7 @@ header srv6_h {
     bit<8> hdr_ext_len;
     bit<8> routing_type;
     bit<8> segments_left;
-    bit<8> first_segment;
+    bit<8> last_entry;
     bit<8> flags;
     bit<16> tag;
 }
@@ -77,7 +77,7 @@ parser MyParser(packet_in packet,
 
     state parse_srh_segments {
         packet.extract(hdr.segment_list.next);
-        transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.hdr_ext_len) {
+        transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.last_entry) {
             true: parse_srh_segments; // Loop to extract all segments
             false: parse_inner_ipv6;
         }
@@ -100,18 +100,16 @@ control MyIngress(inout headers hdr,
     action log_inner_ipv6_and_end() {
         log_msg("Ethernet src = {:x}, dst = {:x}", {hdr.ethernet.srcAddr, hdr.ethernet.dstAddr});
         log_msg("Outer IPv6 src = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}, dst = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",{
-            hdr.outer_ipv6.src_addr[15:0], hdr.outer_ipv6.src_addr[31:16], hdr.outer_ipv6.src_addr[47:32], hdr.outer_ipv6.src_addr[63:48], 
-            hdr.outer_ipv6.src_addr[79:64], hdr.outer_ipv6.src_addr[95:80], hdr.outer_ipv6.src_addr[111:96], hdr.outer_ipv6.src_addr[127:112],
-            hdr.outer_ipv6.dst_addr[15:0], hdr.outer_ipv6.dst_addr[31:16], hdr.outer_ipv6.dst_addr[47:32], hdr.outer_ipv6.dst_addr[63:48],
-            hdr.outer_ipv6.dst_addr[79:64], hdr.outer_ipv6.dst_addr[95:80], hdr.outer_ipv6.dst_addr[111:96], hdr.outer_ipv6.dst_addr[127:112]
+            hdr.outer_ipv6.src_addr[127:112], hdr.outer_ipv6.src_addr[111:96], hdr.outer_ipv6.src_addr[95:80], hdr.outer_ipv6.src_addr[79:64], 
+            hdr.outer_ipv6.src_addr[63:48], hdr.outer_ipv6.src_addr[47:32], hdr.outer_ipv6.src_addr[31:16], hdr.outer_ipv6.src_addr[15:0],
+            hdr.outer_ipv6.dst_addr[127:112], hdr.outer_ipv6.dst_addr[111:96], hdr.outer_ipv6.dst_addr[95:80], hdr.outer_ipv6.dst_addr[79:64],
+            hdr.outer_ipv6.dst_addr[63:48], hdr.outer_ipv6.dst_addr[47:32], hdr.outer_ipv6.dst_addr[31:16], hdr.outer_ipv6.dst_addr[15:0]
         });
-
-        // Here we should apply some logging mechanism
         log_msg("src IP = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}, dst IP = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",{
-            hdr.inner_ipv6.src_addr[15:0], hdr.inner_ipv6.src_addr[31:16], hdr.inner_ipv6.src_addr[47:32], hdr.inner_ipv6.src_addr[63:48], 
-            hdr.inner_ipv6.src_addr[79:64], hdr.inner_ipv6.src_addr[95:80], hdr.inner_ipv6.src_addr[111:96], hdr.inner_ipv6.src_addr[127:112],
-            hdr.inner_ipv6.dst_addr[15:0], hdr.inner_ipv6.dst_addr[31:16], hdr.inner_ipv6.dst_addr[47:32], hdr.inner_ipv6.dst_addr[63:48],
-            hdr.inner_ipv6.dst_addr[79:64], hdr.inner_ipv6.dst_addr[95:80], hdr.inner_ipv6.dst_addr[111:96], hdr.inner_ipv6.dst_addr[127:112]
+            hdr.inner_ipv6.src_addr[127:112], hdr.inner_ipv6.src_addr[111:96], hdr.inner_ipv6.src_addr[95:80], hdr.inner_ipv6.src_addr[79:64], 
+            hdr.inner_ipv6.src_addr[63:48], hdr.inner_ipv6.src_addr[47:32], hdr.inner_ipv6.src_addr[31:16], hdr.inner_ipv6.src_addr[15:0],
+            hdr.inner_ipv6.dst_addr[127:112], hdr.inner_ipv6.dst_addr[111:96], hdr.inner_ipv6.dst_addr[95:80], hdr.inner_ipv6.dst_addr[79:64],
+            hdr.inner_ipv6.dst_addr[63:48], hdr.inner_ipv6.dst_addr[47:32], hdr.inner_ipv6.dst_addr[31:16], hdr.inner_ipv6.dst_addr[15:0]
         });
 
         // Apply the "End" SRv6 behavior
@@ -128,7 +126,7 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.dstAddr = original_src;
 
         // Output the packet on the same port it came in on
-        stdmeta.egress_spec = stdmeta.ingress_port;
+        stdmeta.egress_spec = 1;
     }
 
     table srv6_table {
