@@ -28,7 +28,7 @@ spec:
         kubernetes.io/hostname: oai-01
       containers:
         - name: curl
-          image: alpine/curl:latest
+          image: alpine:latest
           command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
 ---
 apiVersion: apps/v1
@@ -61,7 +61,7 @@ spec:
         kubernetes.io/hostname: oai-01
       containers:
         - name: curl
-          image: alpine/curl:latest
+          image: alpine:latest
           command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
 ---
 apiVersion: apps/v1
@@ -94,6 +94,6 @@ spec:
         kubernetes.io/hostname: oai-01
       containers:
         - name: nginx
-          image: nginx:latest
+          image: alpine:latest
           ports:
             - containerPort: 80

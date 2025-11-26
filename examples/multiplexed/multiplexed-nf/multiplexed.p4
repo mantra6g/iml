@@ -80,7 +80,7 @@ parser MyParser(packet_in packet,
 
     state parse_srh_segments {
         packet.extract(hdr.segment_list.next);
-        transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.hdr_ext_len) {
+        transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.first_segment) {
             true: parse_srh_segments; // Loop to extract all segments
             false: parse_inner_ipv6;
         }

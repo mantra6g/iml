@@ -10,7 +10,7 @@ import (
 var Resource = schema.GroupVersionResource{
 	Group:    "cache.desire6g.eu",
 	Version:  "v1alpha1",
-	Resource: "application",
+	Resource: "applications",
 }
 
 type ApplicationSpec struct {
@@ -20,6 +20,8 @@ type ApplicationSpec struct {
 }
 
 type Application struct {
+	metav1.TypeMeta `json:",inline"`
+
 	// metadata is a standard object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 

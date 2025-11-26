@@ -15,7 +15,9 @@ RUN p4c \
     logger.p4 -o build/
 
 # The entrypoint ALWAYS runs the simple_switch with the generated JSON file
-ENTRYPOINT [ "simple_switch", "build/logger.json", "--log-console" ]
+ENTRYPOINT [ "simple_switch", \
+                "build/logger.json", \
+                "--log-console"]
 
 # This CMD can be overridden to specify different interfaces. 
 # The default is to use 1@in0 and 2@out0

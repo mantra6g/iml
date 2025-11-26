@@ -1,8 +1,30 @@
 package server
 
-type ObjectIdentifier struct {
+type AppIdentifier struct {
 	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+}
+
+type FunctionIdentifier struct {
+	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	SubFunctionID *uint32 `json:"subFunctionID,omitempty" yaml:"subFunctionID,omitempty"`
+}
+
+type SubFunctionSpec struct {
+	// +optional
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+
+	// ID is the unique identifier of the sub-function
+	// +required
+	ID uint32 `json:"id" yaml:"id"`
+}
+
+type ContainerSpec struct {
+	Name  string `json:"name,omitempty" yaml:"name,omitempty"`
+	Image string `json:"image,omitempty" yaml:"image,omitempty"`
+	Command []string `json:"command,omitempty" yaml:"command,omitempty"`
+	Args    []string `json:"args,omitempty" yaml:"args,omitempty"`
 }
 
 type NetworkServiceDescriptor struct {
@@ -16,7 +38,10 @@ type NetworkServiceDescriptor struct {
 type NetworkFunctionDescriptor struct {
 	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Image     string `json:"image,omitempty" yaml:"image,omitempty"`
+	Type      string `json:"type,omitempty" yaml:"type,omitempty"`
+	Replicas  *uint32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
+	SubFunctions []SubFunctionSpec `json:"subFunctions,omitempty" yaml:"subFunctions,omitempty"`
+	Containers []ContainerSpec `json:"containers,omitempty" yaml:"containers,omitempty"`
 }
 
 type ApplicationFunctionDescriptor struct {
@@ -28,9 +53,9 @@ type ApplicationFunctionDescriptor struct {
 type ServiceChainDescriptor struct {
 	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	From      ObjectIdentifier `json:"from,omitempty" yaml:"from,omitempty"`
-	To        ObjectIdentifier `json:"to,omitempty" yaml:"to,omitempty"`
-	Functions []ObjectIdentifier `json:"functions,omitempty" yaml:"functions,omitempty"`
+	From      AppIdentifier `json:"from,omitempty" yaml:"from,omitempty"`
+	To        AppIdentifier `json:"to,omitempty" yaml:"to,omitempty"`
+	Functions []FunctionIdentifier `json:"functions,omitempty" yaml:"functions,omitempty"`
 }
 
 type Response struct {

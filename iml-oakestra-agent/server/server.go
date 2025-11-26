@@ -13,18 +13,19 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 	"go.yaml.in/yaml/v4"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var validate *validator.Validate
 
 type Server struct {
-	appsClient  *apps.Client
-	nfsClient   *nfs.Client
+	appsClient   *apps.Client
+	nfsClient    *nfs.Client
 	chainsClient *chains.Client
-	httpServer  *http.Server
-	nsdStore    map[uint64]*NetworkServiceDescriptor
-	lastID      uint64
+	httpServer   *http.Server
+	nsdStore     map[uint64]*NetworkServiceDescriptor
+	lastID       uint64
 }
 
 func New(appsClient *apps.Client, nfsClient *nfs.Client, chainsClient *chains.Client) (*Server, error) {
@@ -70,6 +71,7 @@ func (s *Server) handleNSDCreation(w http.ResponseWriter, r *http.Request) {
 
 	var nsd NetworkServiceDescriptor
 	if err := yaml.NewDecoder(r.Body).Decode(&nsd); err != nil {
+		logger.ErrorLogger().Printf("Failed to decode NSD: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -85,6 +87,7 @@ func (s *Server) handleNSDCreation(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		if err := s.appsClient.Create(app); err != nil {
+			logger.ErrorLogger().Printf("Failed to create application: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -97,10 +100,34 @@ func (s *Server) handleNSDCreation(w http.ResponseWriter, r *http.Request) {
 				Namespace: nfDescriptor.Namespace,
 			},
 			Spec: nfs.NetworkFunctionSpec{
-				Image:      nfDescriptor.Image,
+				Replicas: nfDescriptor.Replicas,
+				Type:     nfs.NetworkFunctionType(nfDescriptor.Type),
+				SubFunctions: func() []nfs.SubFunctionSpec {
+					subFunctions := make([]nfs.SubFunctionSpec, len(nfDescriptor.SubFunctions))
+					for i, sf := range nfDescriptor.SubFunctions {
+						subFunctions[i] = nfs.SubFunctionSpec{
+							Name: sf.Name,
+							ID:   sf.ID,
+						}
+					}
+					return subFunctions
+				}(),
+				Containers: func() []corev1.Container {
+					containers := make([]corev1.Container, len(nfDescriptor.Containers))
+					for i, c := range nfDescriptor.Containers {
+						containers[i] = corev1.Container{
+							Name:    c.Name,
+							Image:   c.Image,
+							Command: c.Command,
+							Args:    c.Args,
+						}
+					}
+					return containers
+				}(),
 			},
 		}
 		if err := s.nfsClient.Create(nf); err != nil {
+			logger.ErrorLogger().Printf("Failed to create network function: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -113,24 +140,26 @@ func (s *Server) handleNSDCreation(w http.ResponseWriter, r *http.Request) {
 				Namespace: scDescriptor.Namespace,
 			},
 			Spec: chains.ServiceChainSpec{
-				From: &chains.ObjectReference{
+				From: &chains.ApplicationReference{
 					Name:      scDescriptor.From.Name,
 					Namespace: scDescriptor.From.Namespace,
 				},
-				To: &chains.ObjectReference{
+				To: &chains.ApplicationReference{
 					Name:      scDescriptor.To.Name,
 					Namespace: scDescriptor.To.Namespace,
 				},
-				Functions: make([]chains.ObjectReference, len(scDescriptor.Functions)),
+				Functions: make([]chains.NetworkFunctionReference, len(scDescriptor.Functions)),
 			},
 		}
 		for i, fn := range scDescriptor.Functions {
-			chain.Spec.Functions[i] = chains.ObjectReference{
+			chain.Spec.Functions[i] = chains.NetworkFunctionReference{
 				Name:      fn.Name,
 				Namespace: fn.Namespace,
+				SubFunctionID: fn.SubFunctionID,
 			}
 		}
 		if err := s.chainsClient.Create(chain); err != nil {
+			logger.ErrorLogger().Printf("Failed to create service chain: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
