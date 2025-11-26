@@ -5,20 +5,16 @@
 apiVersion: ray.io/v1
 kind: RayService
 metadata:
-  name: iris-inference
+  name: bw-forecast
 spec:
   serviceUnhealthySecondThreshold: 300
   deploymentUnhealthySecondThreshold: 300
   # serveConfigV2 takes a yaml multi-line scalar, which should be a Ray Serve multi-application config. See https://docs.ray.io/en/latest/serve/multi-app.html.
   serveConfigV2: |
     applications:
-      - name: iris
+      - name: bw-forecast
         import_path: serve_app:app
         route_prefix: /
-        deployments:
-          - name: IrisModel
-            num_replicas: 2
-            max_replicas_per_node: 1
   rayClusterConfig:
     rayVersion: '2.46.0' # should match the Ray version in the image of the containers
     ######################headGroupSpecs#################################
@@ -33,8 +29,8 @@ spec:
       template:
         spec:
           containers:
-          - name: iris-inference-head
-            image: tomasagata/ml-iris-example:latest
+          - name: bw-forecast-head
+            image: tomasagata/ml-mawi-bw-forecast:latest
             resources:
               limits:
                 cpu: 2
@@ -57,7 +53,7 @@ spec:
       minReplicas: 1
       maxReplicas: 1
       # logical group name, for this called small-group, also can be functional
-      groupName: iris-inference-group
+      groupName: bw-forecast-group
       # The `rayStartParams` are used to configure the `ray start` command.
       # See https://github.com/ray-project/kuberay/blob/master/docs/guidance/rayStartParams.md for the default settings of `rayStartParams` in KubeRay.
       # See https://docs.ray.io/en/latest/cluster/cli.html#ray-start for all available options in `rayStartParams`.
@@ -66,8 +62,8 @@ spec:
       template:
         spec:
           containers:
-          - name: iris-inference-worker # must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'
-            image: tomasagata/ml-iris-example:latest
+          - name: bw-forecast-worker # must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'
+            image: tomasagata/ml-mawi-bw-forecast:latest
             lifecycle:
               preStop:
                 exec:

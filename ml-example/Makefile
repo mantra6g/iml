@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= tomasagata/ml-iris-example:latest
+IMG ?= tomasagata/ml-mawi-bw-forecast:latest
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -25,8 +25,8 @@ PLATFORMS ?= linux/amd64
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name ml-iris-example-builder
-	$(CONTAINER_TOOL) buildx use ml-iris-example-builder
+	- $(CONTAINER_TOOL) buildx create --name mawi-bw-forecast-builder
+	$(CONTAINER_TOOL) buildx use mawi-bw-forecast-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm ml-iris-example-builder
+	- $(CONTAINER_TOOL) buildx rm mawi-bw-forecast-builder
 	rm Dockerfile.cross
