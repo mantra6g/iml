@@ -41,16 +41,22 @@ spec:
       # The `rayStartParams` are used to configure the `ray start` command.
       # See https://github.com/ray-project/kuberay/blob/master/docs/guidance/rayStartParams.md for the default settings of `rayStartParams` in KubeRay.
       # See https://docs.ray.io/en/latest/cluster/cli.html#ray-start for all available options in `rayStartParams`.
-      rayStartParams: {}
+      rayStartParams: 
+        num-cpus: "3"
       #pod template
       template:
         spec:
+          nodeSelector:
+            kubernetes.io/hostname: mc-a7
           containers:
           - name: bw-forecast-train-head
             # This image pulls the image of ray version '2.46.0' and adds
             # the training and serving code for the iris example.
             # In this step, only the training code is needed.
             image: tomasagata/ml-mawi-bw-forecast:latest
+            securityContext:
+              privileged: true
+              runAsUser: 0
             ports:
             - containerPort: 6379
               name: gcs-server
@@ -60,9 +66,17 @@ spec:
               name: client
             resources:
               limits:
-                cpu: "1"
+                cpu: "3"
               requests:
-                cpu: "200m"
+                cpu: "2"
+            volumeMounts:
+            - name: ray-shared-volume
+              mountPath: /mnt/bw-forecast-data
+          volumes:
+          - name: ray-shared-volume
+            hostPath:
+              path: /mnt/bw-forecast-data
+              type: DirectoryOrCreate
     workerGroupSpecs:
     # the pod replicas in this group typed worker
     - replicas: 1
@@ -73,18 +87,24 @@ spec:
       # The `rayStartParams` are used to configure the `ray start` command.
       # See https://github.com/ray-project/kuberay/blob/master/docs/guidance/rayStartParams.md for the default settings of `rayStartParams` in KubeRay.
       # See https://docs.ray.io/en/latest/cluster/cli.html#ray-start for all available options in `rayStartParams`.
-      rayStartParams: {}
+      rayStartParams: 
+        num-cpus: "3"
       #pod template
       template:
         spec:
+          nodeSelector:
+            kubernetes.io/hostname: mc-a7
           containers:
           - name: bw-forecast-train-worker # must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'
             image: tomasagata/ml-mawi-bw-forecast:latest
+            securityContext:
+              privileged: true
+              runAsUser: 0
             resources:
               limits:
-                cpu: "1"
+                cpu: "3"
               requests:
-                cpu: "200m"
+                cpu: "2"
                 # SubmitterPodTemplate is the template for the pod that will run the `ray job submit` command against the RayCluster.
                 # If SubmitterPodTemplate is specified, the first container is assumed to be the submitter container.
                 # submitterPodTemplate:
@@ -96,3 +116,11 @@ spec:
                 #         # If Command is not specified, the correct command will be supplied at runtime using the RayJob spec `entrypoint` field.
                 #         # Specifying Command is not recommended.
                 #         # command: ["sh", "-c", "ray job submit --address=http://$RAY_DASHBOARD_ADDRESS --submission-id=$RAY_JOB_SUBMISSION_ID -- echo hello world"]
+            volumeMounts:
+            - name: ray-shared-volume
+              mountPath: /mnt/bw-forecast-data
+          volumes:
+          - name: ray-shared-volume
+            hostPath:
+              path: /mnt/bw-forecast-data
+              type: DirectoryOrCreate

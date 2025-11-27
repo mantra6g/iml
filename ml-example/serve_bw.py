@@ -1,7 +1,6 @@
 import pandas as pd
 import mlflow
 from mlflow.tracking import MlflowClient
-import ray
 from ray import serve
 
 # MLflow tracking server
@@ -23,10 +22,10 @@ def load_model_from_registry():
 
     print(f"Loading model from MLflow Registry: {model_uri}")
     model = mlflow.pyfunc.load_model(model_uri)
+
     return model
 
-
-@serve.deployment(num_replicas=2, max_replicas_per_node=1)
+@serve.deployment(num_replicas=1, max_replicas_per_node=1)
 class BandwidthForecastingModel:
     def __init__(self):
         self.model = load_model_from_registry()
