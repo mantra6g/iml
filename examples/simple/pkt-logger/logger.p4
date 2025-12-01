@@ -98,19 +98,7 @@ control MyIngress(inout headers hdr,
                   inout standard_metadata_t stdmeta) {
 
     action log_inner_ipv6_and_end() {
-        log_msg("Ethernet src = {:x}, dst = {:x}", {hdr.ethernet.srcAddr, hdr.ethernet.dstAddr});
-        log_msg("Outer IPv6 src = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}, dst = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",{
-            hdr.outer_ipv6.src_addr[127:112], hdr.outer_ipv6.src_addr[111:96], hdr.outer_ipv6.src_addr[95:80], hdr.outer_ipv6.src_addr[79:64], 
-            hdr.outer_ipv6.src_addr[63:48], hdr.outer_ipv6.src_addr[47:32], hdr.outer_ipv6.src_addr[31:16], hdr.outer_ipv6.src_addr[15:0],
-            hdr.outer_ipv6.dst_addr[127:112], hdr.outer_ipv6.dst_addr[111:96], hdr.outer_ipv6.dst_addr[95:80], hdr.outer_ipv6.dst_addr[79:64],
-            hdr.outer_ipv6.dst_addr[63:48], hdr.outer_ipv6.dst_addr[47:32], hdr.outer_ipv6.dst_addr[31:16], hdr.outer_ipv6.dst_addr[15:0]
-        });
-        log_msg("src IP = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}, dst IP = {:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",{
-            hdr.inner_ipv6.src_addr[127:112], hdr.inner_ipv6.src_addr[111:96], hdr.inner_ipv6.src_addr[95:80], hdr.inner_ipv6.src_addr[79:64], 
-            hdr.inner_ipv6.src_addr[63:48], hdr.inner_ipv6.src_addr[47:32], hdr.inner_ipv6.src_addr[31:16], hdr.inner_ipv6.src_addr[15:0],
-            hdr.inner_ipv6.dst_addr[127:112], hdr.inner_ipv6.dst_addr[111:96], hdr.inner_ipv6.dst_addr[95:80], hdr.inner_ipv6.dst_addr[79:64],
-            hdr.inner_ipv6.dst_addr[63:48], hdr.inner_ipv6.dst_addr[47:32], hdr.inner_ipv6.dst_addr[31:16], hdr.inner_ipv6.dst_addr[15:0]
-        });
+        log_msg("Function applied!");
 
         // Apply the "End" SRv6 behavior
         if (hdr.srh.segments_left > 0) {
