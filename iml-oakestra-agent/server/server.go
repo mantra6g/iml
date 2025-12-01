@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	apps "iml-oakestra-agent/applications"
 	"iml-oakestra-agent/logger"
@@ -24,8 +23,6 @@ type Server struct {
 	nfsClient    *nfs.Client
 	chainsClient *chains.Client
 	httpServer   *http.Server
-	nsdStore     map[uint64]*NetworkServiceDescriptor
-	lastID       uint64
 }
 
 func New(appsClient *apps.Client, nfsClient *nfs.Client, chainsClient *chains.Client) (*Server, error) {
@@ -52,12 +49,10 @@ func New(appsClient *apps.Client, nfsClient *nfs.Client, chainsClient *chains.Cl
 		nfsClient:    nfsClient,
 		chainsClient: chainsClient,
 		httpServer:   httpServer,
-		nsdStore:     make(map[uint64]*NetworkServiceDescriptor),
-		lastID:       0,
 	}
 	validate = validator.New(validator.WithRequiredStructEnabled())
-	router.HandleFunc("/api/v1/agent/nsd", server.handleNSDCreation).Methods("POST")
-	router.HandleFunc("/api/v1/agent/nsd/{id}", server.handleNSDDeletion).Methods("DELETE")
+	router.HandleFunc("/api/v1/agent/nsd/deploy", server.handleNSDCreation).Methods("POST")
+	router.HandleFunc("/api/v1/agent/nsd/delete", server.handleNSDDeletion).Methods("POST")
 	go httpServer.ListenAndServe()
 	return server, nil
 }
@@ -165,40 +160,18 @@ func (s *Server) handleNSDCreation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Update and set the NSD ID
-	s.lastID++
-	nsdID := s.lastID
-	s.nsdStore[nsdID] = &nsd
-
 	// Send response
-	w.Header().Set("Content-Type", "application/json")
-	response := Response{
-		Message: "NSD created successfully",
-		ID:      nsdID,
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.ErrorLogger().Printf("Failed to encode response: %v", err)
-	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte("NSD deployed successfully"))
 }
 
 func (s *Server) handleNSDDeletion(w http.ResponseWriter, r *http.Request) {
 	logger.DebugLogger().Printf("Received NSD deletion request")
 
-	nsdIDStr, exists := mux.Vars(r)["id"]
-	if !exists {
-		http.Error(w, "NSD ID is required", http.StatusBadRequest)
-		return
-	}
-
-	var nsdID uint64
-	if _, err := fmt.Sscanf(nsdIDStr, "%d", &nsdID); err != nil {
-		http.Error(w, "Invalid NSD ID", http.StatusBadRequest)
-		return
-	}
-
-	nsd, found := s.nsdStore[nsdID]
-	if !found {
-		w.WriteHeader(http.StatusNoContent)
+	var nsd NetworkServiceDescriptor
+	if err := yaml.NewDecoder(r.Body).Decode(&nsd); err != nil {
+		logger.ErrorLogger().Printf("Failed to decode NSD: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -223,13 +196,6 @@ func (s *Server) handleNSDDeletion(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	delete(s.nsdStore, nsdID)
-
-	w.Header().Set("Content-Type", "application/json")
-	response := Response{
-		Message: "NSD deleted successfully",
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.ErrorLogger().Printf("Failed to encode response: %v", err)
-	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte("NSD deleted successfully"))
 }
