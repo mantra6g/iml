@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -109,7 +110,12 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	err := r.Get(ctx, req.NamespacedName, found)
 	if err != nil && apierrors.IsNotFound(err) {
 		// Deployment not found, create it
-		dep := r.deploymentForNetworkFunction(nf)
+		var dep *appsv1.Deployment
+		if nf.Spec.Type == cachev1alpha1.NetworkFunctionTypeMultiplexed && len(nf.Spec.SubFunctions) == 2 && nf.Spec.SubFunctions[0].Code != "" {
+			dep = r.deploymentForAggregatedNetworkFunction(nf)
+		} else {
+			dep = r.deploymentForNetworkFunction(nf)
+		}
 
 		logger.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
 		if err := r.Create(ctx, dep); err != nil {
@@ -200,6 +206,78 @@ func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(nf *cachev1alph
 				Value: string(nf.UID),
 			})
 		}
+	}
+
+	// Set the ownerRef for the Deployment, ensuring that the Deployment
+	// will be deleted when the Busybox CR is deleted.
+	controllerutil.SetControllerReference(nf, dep, r.Scheme)
+	return dep
+}
+
+func (r *NetworkFunctionReconciler) deploymentForAggregatedNetworkFunction(nf *cachev1alpha1.NetworkFunction) *appsv1.Deployment {
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nf.Name,
+			Namespace: nf.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: nf.Spec.Replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": nf.Name,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": nf.Name,
+					},
+					Annotations: map[string]string{
+						"k8s.v1.cni.cncf.io/networks": "[" + CNIConfig{
+							Name: "iml-cni",
+							CNIArgs: CNIArgs{
+								AppType: "network_function",
+								NFID:    string(nf.UID),
+							},
+						}.String() + "]",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "aggregator",
+							Image: "tomasagata/aggregator:latest",
+							Args: func() []string {
+								args := []string{}
+								for _, sf := range nf.Spec.SubFunctions {
+									args = append(args, "--program"+strconv.FormatUint(uint64(sf.ID), 10), sf.Code)
+								}
+								return args
+							}(),
+							Env: []corev1.EnvVar{
+								{
+									Name:  "NF_ID",
+									Value: string(nf.UID),
+								},
+							},
+						},
+						{
+							Name: "bmv2-switch",
+							Image: "p4lang/p4c:latest",
+							Command: []string{ "simple_switch_grpc", 
+								"--no-p4", 
+								"-i 1@iml0", 
+								"--log-console",
+								"--log-level", "info",
+								"--",
+								"--grpc-server-addr", "0.0.0.0:9559", 
+								"--cpu-port", "111",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	// Set the ownerRef for the Deployment, ensuring that the Deployment
