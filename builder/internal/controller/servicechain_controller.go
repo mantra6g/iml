@@ -13,7 +13,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"builder/api/v1alpha1"
 	cachev1alpha1 "builder/api/v1alpha1"
 	"builder/pkg/events"
 )
@@ -134,12 +133,12 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	serviceChain.Status.DestinationAppUID = dstAppID
 	
-	serviceChain.Status.Functions = []v1alpha1.FunctionIdentifier{}
+	serviceChain.Status.Functions = []cachev1alpha1.FunctionIdentifier{}
 	for fnIndex, fn := range nfs {
 		// Case 1: SubFunctionID is specified but the NF is not multiplexed
 		if (
 			serviceChain.Spec.Functions[fnIndex].SubFunctionID != nil &&
-			fn.Spec.Type != v1alpha1.NetworkFunctionTypeMultiplexed) {
+			fn.Spec.Type != cachev1alpha1.NetworkFunctionTypeMultiplexed) {
 				return ctrl.Result{}, fmt.Errorf("function at index %d (%s/%s) specifies SubFunctionID, but its type is not 'Multiplexed'",
 					fnIndex, fn.Namespace, fn.Name)
 		}
@@ -160,7 +159,7 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		// All good, append to status
 		serviceChain.Status.Functions = append(serviceChain.Status.Functions, 
-			v1alpha1.FunctionIdentifier{
+			cachev1alpha1.FunctionIdentifier{
 				FunctionUID: fn.UID,
 				SubFunctionID: serviceChain.Spec.Functions[fnIndex].SubFunctionID,
 			},

@@ -16,6 +16,10 @@ type SubFunctionSpec struct {
 	// ID is the unique identifier of the sub-function
 	// +required
 	ID uint32 `json:"id"`
+
+	// Code is a url to the P4 code defining the sub-function behavior
+	// +optional
+	Code string `json:"code,omitempty"`
 }
 
 type NetworkFunctionType string
