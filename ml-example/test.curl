@@ -1,5 +1,0 @@
-curl \
-  -X POST \
-  -H 'Content-Type: application/json' \
-  http://bw-forecast-serve-svc:8000/ \
-  -d '[{"ds": "2025-01-01 00:06:00"}]'
