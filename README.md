@@ -5,30 +5,27 @@ This local NFVO is responsible for handling the available resources at the given
 1. Create a kubernetes cluster.
 2. Enable/install a DNS addon for kubernetes. (This mostly goes for lightweight clusters like k3s/MicroK8s)
 3. Install multus
-```bash
+```sh
 kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
 ```
 4. Install flannel
-```bash
+```sh
 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 ```
 5. Clone the repository
-```bash
+```sh
 git clone -b tomas/feat/srv6 https://github.com/DESIRE6G/IML-LNFVO.git
 cd IML-LNFVO
 ```
 6. Install IML
-```bash
-kubectl apply -f builder/dist/install.yaml
-kubectl apply -f go-daemon/install.yml
-kubectl apply -f runtime-proxy/install.yml
-kubectl apply -f iml-oakestra-agent/install.yml # Only if using SMO workflow with Oakestra
+```sh
+./install.sh
 ```
 
 ## Important
-Make sure to have VRF support enabled on each worker node. Some distributions don't have it enabled by default and this can prevent IML from working correctly.
+Make sure to have VRF support enabled on each worker node. Some distributions don't have it enabled by default and leaving this out will prevent IML from working correctly.
 
-```bash
+```sh
 sudo apt install linux-modules-extra-$(uname -r)
 sudo modprobe vrf
 ```
@@ -185,21 +182,21 @@ spec:
 
 ### 4. Verify the network service is working
 A good process to test everything is deployed correctly first starts by listing all pods
-```bash
+```sh
 kubectl get pods -A
 ```
 Here you should be able to see the deployed application pods and the packet logger network function.
 
 After that, then I recommend you see the logs of the packet logger. Here you'll be able to see when packets are identified.
-```bash
+```sh
 kubectl logs -f <Packet logger's pod name>
 ```
 
 The final test consists of pinging a container from its peer
-```bash
+```sh
 kubectl exec -it <application's pod name> -- /bin/sh
 ```
-```bash
+```sh
 ping <peer's IP>
 ```
 
@@ -207,9 +204,14 @@ After doing that, you'll be able to see some output on the packet logger showcas
 
 ### 5. Remove the network service
 The network service can be removed by executing
-```bash
+```sh
 kubectl delete servicechains <SERVICE_CHAINS>
 kubectl delete applications <APP_NAME>
 kubectl delete networkfunctions <NF_NAME>
 ```
 
+# Uninstall
+
+```sh
+./uninstall.sh
+```
