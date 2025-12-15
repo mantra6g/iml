@@ -57,8 +57,7 @@ type NetworkFunctionSpec struct {
 	SubFunctions []SubFunctionSpec `json:"subFunctions,omitempty"`
 
 	// Containers is the list of containers that make up the network function
-	// +required
-	// +kubebuilder:validation:MinItems=1
+	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
 }
 

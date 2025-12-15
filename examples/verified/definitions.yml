@@ -33,10 +33,10 @@ spec:
   subFunctions:
   - name: logger-1
     id: 1
-    code: 
+    code: https://raw.githubusercontent.com/DESIRE6G/IML-LNFVO/refs/heads/tomas/feat/srv6/examples/verified/program1.p4
   - name: logger-2
     id: 2
-    code: 
+    code: https://raw.githubusercontent.com/DESIRE6G/IML-LNFVO/refs/heads/tomas/feat/srv6/examples/verified/program2.p4
 ---
   apiVersion: cache.desire6g.eu/v1alpha1
   kind: ServiceChain
