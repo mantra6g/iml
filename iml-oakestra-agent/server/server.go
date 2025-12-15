@@ -70,6 +70,7 @@ func (s *Server) handleNSDCreation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	logger.DebugLogger().Printf("Parsed NSD: %+v", nsd)
 
 	for _, appDescriptor := range nsd.ApplicationFunctions {
 		app := &apps.Application{
@@ -174,6 +175,7 @@ func (s *Server) handleNSDDeletion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	logger.DebugLogger().Printf("Parsed NSD: %+v", nsd)
 
 	for _, scDescriptor := range nsd.ServiceChains {
 		if err := s.chainsClient.Delete(scDescriptor.Name, scDescriptor.Namespace); err != nil {

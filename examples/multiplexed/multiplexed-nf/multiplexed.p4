@@ -47,7 +47,6 @@ struct headers {
     ipv6_h outer_ipv6;
     srv6_h srh;
     segment_h[MAX_SEGMENTS] segment_list;
-    ipv6_h inner_ipv6;
 }
 
 parser MyParser(packet_in packet,
@@ -73,7 +72,7 @@ parser MyParser(packet_in packet,
     state parse_srh {
         packet.extract(hdr.srh);
         transition select(hdr.srh.hdr_ext_len) {
-            0: parse_inner_ipv6;
+            0: parse_inner_header;
             default: parse_srh_segments;
         }
     }
@@ -82,12 +81,11 @@ parser MyParser(packet_in packet,
         packet.extract(hdr.segment_list.next);
         transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.first_segment) {
             true: parse_srh_segments; // Loop to extract all segments
-            false: parse_inner_ipv6;
+            false: parse_inner_header;
         }
     }
 
-    state parse_inner_ipv6 {
-        packet.extract(hdr.inner_ipv6);
+    state parse_inner_header {
         transition accept;
     }
 }
@@ -99,6 +97,9 @@ control MyVerifyChecksum(inout headers hdr, inout metadata_t meta) {
 control MyIngress(inout headers hdr,
                   inout metadata_t meta,
                   inout standard_metadata_t stdmeta) {
+    action drop() {
+        mark_to_drop(stdmeta);
+    }
     
     action set_function_id(bit<32> func_id) {
         meta.function_id = func_id;
@@ -119,7 +120,7 @@ control MyIngress(inout headers hdr,
             hdr.srh.segments_left = hdr.srh.segments_left - 1;
             hdr.outer_ipv6.dst_addr = hdr.segment_list[hdr.srh.segments_left].segment;
         } else {
-            mark_to_drop(stdmeta);
+            drop();
         }
     }
 
@@ -147,7 +148,7 @@ control MyIngress(inout headers hdr,
 
     apply {
         // Let pass through packets that do not have SRv6 headers
-        if (!hdr.srh.isValid() || !hdr.inner_ipv6.isValid()) {
+        if (!hdr.srh.isValid()) {
             return;
         }
 
@@ -155,23 +156,28 @@ control MyIngress(inout headers hdr,
         function_id_table.apply();
 
         if (meta.valid_function_id != 1) { // No matching function ID found
-            mark_to_drop(stdmeta);
+            drop();
             return;
         }
 
-        switch (meta.function_id) {
+        // Select which function will be executed based on the function_id
+        switch (meta.next_sid) {
             1: {
+                // Here we would execute program 1
                 function1();
             }
             2: {
+                // Here we would execute program 2
                 function2();
             }
             default: {
                 // Unknown function ID, drop the packet
-                mark_to_drop(stdmeta);
+                drop();
                 return;
             }
         }
+
+        // After processing the function, always perform SRv6 End behavior and reflect the packet
         srv6_end();
         reflect_packet();
     }
@@ -193,7 +199,6 @@ control MyDeparser(packet_out packet, in headers hdr) {
         packet.emit(hdr.outer_ipv6);
         packet.emit(hdr.srh);
         packet.emit(hdr.segment_list);
-        packet.emit(hdr.inner_ipv6);
     }
 }
 

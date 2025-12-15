@@ -250,7 +250,7 @@ func (r *NetworkFunctionReconciler) deploymentForAggregatedNetworkFunction(nf *c
 							Args: func() []string {
 								args := []string{}
 								for _, sf := range nf.Spec.SubFunctions {
-									args = append(args, "--program"+strconv.FormatUint(uint64(sf.ID), 10), sf.Code)
+									args = append(args, "--program"+strconv.FormatUint(uint64(sf.ID), 10)+"url", sf.Code)
 								}
 								return args
 							}(),

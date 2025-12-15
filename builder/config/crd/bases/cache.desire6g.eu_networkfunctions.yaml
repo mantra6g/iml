@@ -1468,7 +1468,6 @@ spec:
                   required:
                   - name
                   type: object
-                minItems: 1
                 type: array
               replicas:
                 default: 1
@@ -1482,6 +1481,10 @@ spec:
                   network function
                 items:
                   properties:
+                    code:
+                      description: Code is a url to the P4 code defining the sub-function
+                        behavior
+                      type: string
                     id:
                       description: ID is the unique identifier of the sub-function
                       format: int32
@@ -1501,8 +1504,6 @@ spec:
                 - simple
                 - multiplexed
                 type: string
-            required:
-            - containers
             type: object
           status:
             description: status defines the observed state of NetworkFunction
