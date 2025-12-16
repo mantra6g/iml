@@ -37,11 +37,17 @@ func NewInstanceFactory(
 	bus events.EventBus,
 	dataplane dataplane.Manager,
 	imlClient iml.Client) (*InstanceFactory, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("repository is required")
+	}
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
-	if repo == nil {
-		return nil, fmt.Errorf("repository is required")
+	if dataplane == nil {
+		return nil, fmt.Errorf("dataplane manager is required")
+	}
+	if imlClient == nil {
+		return nil, fmt.Errorf("IML client is required")
 	}
 
 	return &InstanceFactory{
