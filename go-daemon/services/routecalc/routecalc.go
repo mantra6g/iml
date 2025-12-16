@@ -12,16 +12,20 @@ import (
 	"sync"
 )
 
-// RouteCalcService listens for topology events and recalculates routes.
-type RouteCalcService struct {
+// Route Calculation Service listens for topology events and recalculates routes.
+type Service interface {
+	Shutdown(ctx context.Context) error
+}
+
+type InMemoryService struct {
 	eventBus events.EventBus
 	registry db.Registry
 	graph    *Graph
 	mutex    sync.Mutex
 }
 
-// NewRouteCalcService constructs the service and subscribes to events.
-func NewRouteCalcService(registry db.Registry, eb events.EventBus) (*RouteCalcService, error) {
+// NewInMemoryService constructs the service and subscribes to events.
+func NewInMemoryService(registry db.Registry, eb events.EventBus) (Service, error) {
 	// Validate the event bus and registry
 	if eb == nil {
 		return nil, fmt.Errorf("event bus cannot be nil")
@@ -34,7 +38,7 @@ func NewRouteCalcService(registry db.Registry, eb events.EventBus) (*RouteCalcSe
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new graph: %w", err)
 	}
-	rc := &RouteCalcService{
+	rc := &InMemoryService{
 		eventBus: eb,
 		registry: registry,
 		graph:    g,
@@ -62,7 +66,7 @@ func NewRouteCalcService(registry db.Registry, eb events.EventBus) (*RouteCalcSe
 }
 
 // handleEvent processes incoming events and triggers recalculation.
-func (rc *RouteCalcService) handleEvent(evt events.Event) {
+func (rc *InMemoryService) handleEvent(evt events.Event) {
 	logger.InfoLogger().Printf("RouteCalcService received event: %s", evt.Name)
 	defer func() {
 		if r := recover(); r != nil {
@@ -198,7 +202,7 @@ func (rc *RouteCalcService) handleEvent(evt events.Event) {
 }
 
 // recalculateAll retrieves all chains and recomputes their routes.
-func (rc *RouteCalcService) recalculateAll() error {
+func (rc *InMemoryService) recalculateAll() error {
 	// Get all network service chains
 	chains, err := rc.registry.FindAllNetworkServiceChains()
 	if err != nil {
@@ -237,7 +241,7 @@ func (rc *RouteCalcService) recalculateAll() error {
 }
 
 // computeRoute finds shortest path for a single chain.
-func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*Route, error) {
+func (rc *InMemoryService) computeRoutes(chain *models.ServiceChain) ([]*Route, error) {
 
 	srcAppNode := rc.graph.FindLocalAppGroupNode(chain.SrcAppID)
 	if srcAppNode == nil {
@@ -293,7 +297,7 @@ func (rc *RouteCalcService) computeRoutes(chain *models.ServiceChain) ([]*Route,
 	return routes, nil
 }
 
-func (rc *RouteCalcService) Shutdown(ctx context.Context) error {
+func (rc *InMemoryService) Shutdown(ctx context.Context) error {
 	// Place any necessary cleanup logic here
 	// Maybe cancel any ongoing calculations or close resources
 	// For now, this is a no-op

@@ -42,7 +42,7 @@ type AppDefinitionController struct {
 	topicRegex *regexp.Regexp
 }
 
-func (c *AppDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
+func (c *AppDefinitionController) SetupWithMQTT(client mqtt.Client) error {
 	c.topics = make(map[ApplicationDefinitionTopic]ApplicationDefinitionTopicData)
 	c.eventQueue = &SliceQueue{}
 	regex, err := regexp.CompilePOSIX(APP_DEFINITION_TOPIC_STR)

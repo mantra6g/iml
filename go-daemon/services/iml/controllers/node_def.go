@@ -41,7 +41,7 @@ type NodeDefinitionController struct {
 	topicRegex *regexp.Regexp
 }
 
-func (c *NodeDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
+func (c *NodeDefinitionController) SetupWithMQTT(client mqtt.Client) error {
 	c.topics = make(map[NodeDefinitionTopic]NodeDefinitionTopicData)
 	c.eventQueue = &SliceQueue{}
 	regex, err := regexp.CompilePOSIX(NODE_DEFINITION_TOPIC_STR)

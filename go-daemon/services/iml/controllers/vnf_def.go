@@ -41,7 +41,7 @@ type VNFDefinitionController struct {
 	topicRegex *regexp.Regexp
 }
 
-func (c *VNFDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
+func (c *VNFDefinitionController) SetupWithMQTT(client mqtt.Client) error {
 	c.topics = make(map[VnfDefinitionTopic]VnfDefinitionTopicData)
 	c.eventQueue = &SliceQueue{}
 	regex, err := regexp.CompilePOSIX(VNF_DEFINITION_TOPIC_STR)

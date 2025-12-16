@@ -154,7 +154,7 @@ func main() {
 	}
 
 	// Initialize the route calculation service
-	routeCalcService, err := routecalc.NewRouteCalcService(registry, eb)
+	routeCalcService, err := routecalc.NewInMemoryService(registry, eb)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize RouteCalcService: %v", err)
 		panic("Failed to initialize RouteCalcService: " + err.Error())

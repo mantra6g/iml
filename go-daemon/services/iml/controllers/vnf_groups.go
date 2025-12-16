@@ -43,7 +43,7 @@ type VnfGroupsController struct {
 	topicRegex *regexp.Regexp
 }
 
-func (c *VnfGroupsController) SetupWithMQTT(client *mqtt.Client) error {
+func (c *VnfGroupsController) SetupWithMQTT(client mqtt.Client) error {
 	c.topics = make(map[RemoteVnfGroupsTopic]RemoteVnfGroupsTopicData)
 	c.eventQueue = &SliceQueue{}
 	regex, err := regexp.CompilePOSIX(VNF_INSTANCES_TOPIC_STR)
