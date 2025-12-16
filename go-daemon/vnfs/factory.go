@@ -48,6 +48,9 @@ func NewInstanceFactory(repo db.Registry, bus events.EventBus, dataplane datapla
 	if dataplane == nil {
 		return nil, fmt.Errorf("dataplane is required")
 	}
+	if imlClient == nil {
+		return nil, fmt.Errorf("IML client is required")
+	}
 
 	return &InstanceFactory{
 		repo:      repo,

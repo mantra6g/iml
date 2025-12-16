@@ -28,6 +28,10 @@ type ClientImpl struct {
 }
 
 func NewClient(ctx context.Context) (Client, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context cannot be nil")
+	}
+
 	u, err := url.Parse(env.MQTT_URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse MQTT URL: %v", err)
