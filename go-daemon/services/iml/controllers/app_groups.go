@@ -35,7 +35,7 @@ type RemoteAppGroupsTopicData struct {
 }
 
 type AppGroupsController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
 
 	topics     map[RemoteAppGroupsTopic]RemoteAppGroupsTopicData

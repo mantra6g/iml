@@ -3,9 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"iml-daemon/apps"
 	"iml-daemon/db"
 	"iml-daemon/logger"
-	"iml-daemon/apps"
 	"iml-daemon/vnfs"
 	"net/http"
 
@@ -14,7 +14,7 @@ import (
 )
 
 type CNIController struct {
-	repo       *db.Registry
+	repo       db.Registry
 	vnfFactory *vnfs.InstanceFactory
 	appFactory *apps.InstanceFactory
 }
@@ -61,11 +61,11 @@ func (c *CNIController) handleAppInstanceRegistration(response http.ResponseWrit
 	}
 
 	configResponse := &AppInstanceConfigResponse{
-		IPNet:        regResponse.IPNet.String(),
-		IfaceName:    regResponse.IfaceName,
-		ClusterCIDR:  regResponse.ClusterCIDR.String(),
-		GatewayIP:    regResponse.GatewayIP.String(),
-		BridgeName:   regResponse.BridgeName,
+		IPNet:       regResponse.IPNet.String(),
+		IfaceName:   regResponse.IfaceName,
+		ClusterCIDR: regResponse.ClusterCIDR.String(),
+		GatewayIP:   regResponse.GatewayIP.String(),
+		BridgeName:  regResponse.BridgeName,
 	}
 
 	// Finally, return the container details including the allocated IP.
@@ -200,7 +200,7 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func InitializeCNIApi(appFactory *apps.InstanceFactory, vnfFactory *vnfs.InstanceFactory, repo *db.Registry) (*http.Server, error) {
+func InitializeCNIApi(appFactory *apps.InstanceFactory, vnfFactory *vnfs.InstanceFactory, repo db.Registry) (*http.Server, error) {
 	// Validate the services
 	if appFactory == nil || vnfFactory == nil || repo == nil {
 		return nil, fmt.Errorf("appFactory, vnfFactory, and repo cannot be nil")

@@ -14,14 +14,14 @@ import (
 
 // RouteCalcService listens for topology events and recalculates routes.
 type RouteCalcService struct {
-	eventBus *events.EventBus
-	registry *db.Registry
+	eventBus events.EventBus
+	registry db.Registry
 	graph    *Graph
 	mutex    sync.Mutex
 }
 
 // NewRouteCalcService constructs the service and subscribes to events.
-func NewRouteCalcService(registry *db.Registry, eb *events.EventBus) (*RouteCalcService, error) {
+func NewRouteCalcService(registry db.Registry, eb events.EventBus) (*RouteCalcService, error) {
 	// Validate the event bus and registry
 	if eb == nil {
 		return nil, fmt.Errorf("event bus cannot be nil")

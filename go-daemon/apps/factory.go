@@ -8,15 +8,15 @@ import (
 	"iml-daemon/models"
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
-	"iml-daemon/services/router"
+	"iml-daemon/services/router/dataplane"
 	"net"
 )
 
 type InstanceFactory struct {
-	repo      *db.Registry
-	bus       *events.EventBus
-	imlClient *iml.Client
-	dataplane *router.Dataplane
+	repo      db.Registry
+	bus       events.EventBus
+	imlClient iml.Client
+	dataplane dataplane.Manager
 }
 
 type RegistrationRequest struct {
@@ -33,10 +33,10 @@ type InstanceRegistrationResponse struct {
 }
 
 func NewInstanceFactory(
-	repo *db.Registry, 
-	bus *events.EventBus, 
-	dataplane *router.Dataplane,
-	imlClient *iml.Client) (*InstanceFactory, error) {
+	repo db.Registry,
+	bus events.EventBus,
+	dataplane dataplane.Manager,
+	imlClient iml.Client) (*InstanceFactory, error) {
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
@@ -94,9 +94,9 @@ func (f *InstanceFactory) createOrGetAppInstance(req *RegistrationRequest, app *
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to request application subnet: %v", err)
 		}
-		appGroup.Subnet = subnet.Network.String()
-		appGroup.GatewayIP = subnet.GatewayIP.String()
-		appGroup.Bridge = subnet.Bridge.Attrs().Name
+		appGroup.Subnet = subnet.Network().String()
+		appGroup.GatewayIP = subnet.GatewayIP().String()
+		appGroup.Bridge = subnet.Bridge()
 		if err := f.repo.SaveAppGroup(appGroup); err != nil {
 			return nil, nil, fmt.Errorf("failed to update app group with subnet info: %v", err)
 		}

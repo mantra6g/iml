@@ -16,16 +16,17 @@ import (
 	"iml-daemon/logger"
 	"iml-daemon/services/events"
 	"iml-daemon/services/routecalc"
+	"iml-daemon/services/router/dataplane"
 	"net"
 )
 
 type RouterService struct {
-	registry  *db.Registry
-	eventBus  *events.EventBus
-	dataplane *Dataplane
+	registry  db.Registry
+	eventBus  events.EventBus
+	dataplane dataplane.Manager
 }
 
-func New(registry *db.Registry, eventBus *events.EventBus, dataplane *Dataplane) (*RouterService, error) {
+func New(registry db.Registry, eventBus events.EventBus, dataplane dataplane.Manager) (*RouterService, error) {
 	// Validate the registry and event bus
 	if registry == nil {
 		return nil, fmt.Errorf("registry cannot be nil")

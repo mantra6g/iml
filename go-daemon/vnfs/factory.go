@@ -10,7 +10,7 @@ import (
 	"iml-daemon/models"
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
-	"iml-daemon/services/router"
+	"iml-daemon/services/router/dataplane"
 	"net"
 	"net/http"
 
@@ -18,10 +18,10 @@ import (
 )
 
 type InstanceFactory struct {
-	repo      *db.Registry
-	bus       *events.EventBus
-	dataplane *router.Dataplane
-	imlClient *iml.Client
+	repo      db.Registry
+	bus       events.EventBus
+	dataplane dataplane.Manager
+	imlClient iml.Client
 }
 
 type RegistrationRequest struct {
@@ -38,7 +38,7 @@ type InstanceRegistrationResponse struct {
 	BridgeName  string
 }
 
-func NewInstanceFactory(repo *db.Registry, bus *events.EventBus, dataplane *router.Dataplane, imlClient *iml.Client) (*InstanceFactory, error) {
+func NewInstanceFactory(repo db.Registry, bus events.EventBus, dataplane dataplane.Manager, imlClient iml.Client) (*InstanceFactory, error) {
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
@@ -114,11 +114,11 @@ func (f *InstanceFactory) newLocalSimpleInstance(nfUID string, vnf *models.Virtu
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to request subnet for VNF %s: %v", nfUID, err)
 		}
-		sid := subnet.SIDs[0]
+		sid := subnet.SIDs()[0]
 		vnfGroup.SID = sid.String()
-		vnfGroup.Subnet = subnet.Network.String()
-		vnfGroup.GatewayIP = subnet.GatewayIP.String()
-		vnfGroup.Bridge = subnet.Bridge.Attrs().Name
+		vnfGroup.Subnet = subnet.Network().String()
+		vnfGroup.GatewayIP = subnet.GatewayIP().String()
+		vnfGroup.Bridge = subnet.Bridge()
 		if err := f.repo.SaveVnfGroup(vnfGroup); err != nil {
 			return nil, nil, fmt.Errorf("failed to update VNF group %s with sid %s: %v", vnfGroup.ID, vnfGroup.SID, err)
 		}
@@ -175,12 +175,12 @@ func (f *InstanceFactory) newLocalMultiplexedInstance(nfUID string, vnf *models.
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to request subnet for VNF %s: %v", nfUID, err)
 		}
-		vnfGroup.Subnet = subnet.Network.String()
-		vnfGroup.GatewayIP = subnet.GatewayIP.String()
-		vnfGroup.Bridge = subnet.Bridge.Attrs().Name
+		vnfGroup.Subnet = subnet.Network().String()
+		vnfGroup.GatewayIP = subnet.GatewayIP().String()
+		vnfGroup.Bridge = subnet.Bridge()
 
 		sidAssignments := []models.SidAssignment{}
-		for i, sid := range subnet.SIDs {
+		for i, sid := range subnet.SIDs() {
 			sidAssignments = append(sidAssignments, models.SidAssignment{
 				VNFSubfunctionID:      vnf.Subfunctions[i].SubfunctionID,
 				SID:                   sid.String(),
@@ -307,8 +307,8 @@ func (f *InstanceFactory) deleteMultiplexedInstance(instance *models.Multiplexed
 
 func (f *InstanceFactory) publishAssignmentsToP4Controller(vnfID string, groupID uuid.UUID, sidAssignments []models.SidAssignment) error {
 	type AssignmentPayload struct {
-		SubfunctionID uint32   `json:"subfunction_id"`
-		SID           string   `json:"sid"`
+		SubfunctionID uint32 `json:"subfunction_id"`
+		SID           string `json:"sid"`
 	}
 
 	var payloads []AssignmentPayload
@@ -338,4 +338,3 @@ func (f *InstanceFactory) publishAssignmentsToP4Controller(vnfID string, groupID
 
 	return nil
 }
-

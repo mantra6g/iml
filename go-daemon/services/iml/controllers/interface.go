@@ -20,12 +20,13 @@ type Result struct {
 	// Valid values are greater than zero.
 	RequeueAfter time.Duration
 }
+
 func (r Result) IsZero() bool {
 	return !(r.RequeueAfter > 0)
 }
 
 type Controller interface {
-	SetupWithIMLClient(*iml.Client) error
+	SetupWithIMLClient(*iml.ClientImpl) error
 	HandleMessage(*paho.Publish) error
 	OnUpdate(Topic, Update) (Result, error)
 	OnDelete(Topic, mqtt.Message) (Result, error)

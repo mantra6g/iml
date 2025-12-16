@@ -8,15 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (r *Registry) FindAppById(id uuid.UUID) (*models.Application, error) {
-	var app models.Application
-	if err := r.dbHandle.First(&app, "id = ?", id).Error; err != nil {
-		return nil, fmt.Errorf("application with id %s not found: %w", id, err)
-	}
-	return &app, nil
-}
-
-func (r *Registry) FindActiveAppByLocalID(localID uuid.UUID) (*models.Application, error) {
+func (r *InMemoryRegistry) FindActiveAppByLocalID(localID uuid.UUID) (*models.Application, error) {
 	var app models.Application
 	if err := r.dbHandle.First(&app, "id = ? AND status = ?", localID, models.AppStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("application with local ID %s not found: %w", localID, err)
@@ -24,7 +16,7 @@ func (r *Registry) FindActiveAppByLocalID(localID uuid.UUID) (*models.Applicatio
 	return &app, nil
 }
 
-func (r *Registry) FindActiveAppByGlobalID(globalID string) (*models.Application, error) {
+func (r *InMemoryRegistry) FindActiveAppByGlobalID(globalID string) (*models.Application, error) {
 	var app models.Application
 	if err := r.dbHandle.First(&app, "global_id = ? AND status = ?", globalID, models.AppStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("application with global ID %s not found: %w", globalID, err)
@@ -32,15 +24,7 @@ func (r *Registry) FindActiveAppByGlobalID(globalID string) (*models.Application
 	return &app, nil
 }
 
-func (r *Registry) FindAllApps() ([]*models.Application, error) {
-	var apps []*models.Application
-	if err := r.dbHandle.Find(&apps).Error; err != nil {
-		return nil, fmt.Errorf("failed to find all applications: %w", err)
-	}
-	return apps, nil
-}
-
-func (r *Registry) FindLocalAppGroupByGlobalID(globalAppID string) (*models.AppGroup, error) {
+func (r *InMemoryRegistry) FindLocalAppGroupByGlobalID(globalAppID string) (*models.AppGroup, error) {
 	// As the app group model does not have global_id directly, we obtain it by joining with the applications table.
 	var group models.AppGroup
 	if err := r.dbHandle.Joins("JOIN applications ON applications.id = app_groups.app_id").Where("applications.global_id = ?", globalAppID).First(&group).Error; err != nil {
@@ -49,7 +33,7 @@ func (r *Registry) FindLocalAppGroupByGlobalID(globalAppID string) (*models.AppG
 	return &group, nil
 }
 
-func (r *Registry) FindAppGroupByID(id uuid.UUID) (*models.AppGroup, error) {
+func (r *InMemoryRegistry) FindAppGroupByID(id uuid.UUID) (*models.AppGroup, error) {
 	var group models.AppGroup
 	if err := r.dbHandle.First(&group, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("app group with id %s not found: %w", id, err)
@@ -57,7 +41,7 @@ func (r *Registry) FindAppGroupByID(id uuid.UUID) (*models.AppGroup, error) {
 	return &group, nil
 }
 
-func (r *Registry) FindAppInstanceByContainerID(containerID string) (*models.AppInstance, error) {
+func (r *InMemoryRegistry) FindAppInstanceByContainerID(containerID string) (*models.AppInstance, error) {
 	var instance models.AppInstance
 	if err := r.dbHandle.First(&instance, "container_id = ?", containerID).Error; err != nil {
 		return nil, fmt.Errorf("app instance with container ID %s not found: %w", containerID, err)
@@ -65,39 +49,7 @@ func (r *Registry) FindAppInstanceByContainerID(containerID string) (*models.App
 	return &instance, nil
 }
 
-func (r *Registry) FindAppInstancesByAppID(appID string) ([]*models.AppInstance, error) {
-	var instances []*models.AppInstance
-	if err := r.dbHandle.Find(&instances, "app_id = ?", appID).Error; err != nil {
-		return nil, fmt.Errorf("failed to find app instances for app ID %s: %w", appID, err)
-	}
-	return instances, nil
-}
-
-func (r *Registry) FindAppInstancesByGroupID(groupID uuid.UUID) ([]*models.AppInstance, error) {
-	var instances []*models.AppInstance
-	if err := r.dbHandle.Find(&instances, "group_id = ?", groupID).Error; err != nil {
-		return nil, fmt.Errorf("failed to find app instances for group ID %s: %w", groupID, err)
-	}
-	return instances, nil
-}
-
-func (r *Registry) FindAllNetworkFunctions() ([]*models.VirtualNetworkFunction, error) {
-	var functions []*models.VirtualNetworkFunction
-	if err := r.dbHandle.Find(&functions).Error; err != nil {
-		return nil, fmt.Errorf("failed to find all network functions: %w", err)
-	}
-	return functions, nil
-}
-
-func (r *Registry) FindNetworkFunctionByID(id uuid.UUID) (*models.VirtualNetworkFunction, error) {
-	var function models.VirtualNetworkFunction
-	if err := r.dbHandle.First(&function, "id = ?", id).Error; err != nil {
-		return nil, fmt.Errorf("network function with id %s not found: %w", id, err)
-	}
-	return &function, nil
-}
-
-func (r *Registry) FindActiveNetworkFunctionByLocalID(localID uuid.UUID) (*models.VirtualNetworkFunction, error) {
+func (r *InMemoryRegistry) FindActiveNetworkFunctionByLocalID(localID uuid.UUID) (*models.VirtualNetworkFunction, error) {
 	var vnf models.VirtualNetworkFunction
 	if err := r.dbHandle.First(&vnf, "id = ? AND status = ?", localID, models.VNFStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("VNF with local ID %s not found: %w", localID, err)
@@ -105,7 +57,7 @@ func (r *Registry) FindActiveNetworkFunctionByLocalID(localID uuid.UUID) (*model
 	return &vnf, nil
 }
 
-func (r *Registry) FindActiveNetworkFunctionByGlobalID(globalID string) (*models.VirtualNetworkFunction, error) {
+func (r *InMemoryRegistry) FindActiveNetworkFunctionByGlobalID(globalID string) (*models.VirtualNetworkFunction, error) {
 	var vnf models.VirtualNetworkFunction
 	if err := r.dbHandle.First(&vnf, "global_id = ? AND status = ?", globalID, models.VNFStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("VNF with global ID %s not found: %w", globalID, err)
@@ -113,7 +65,7 @@ func (r *Registry) FindActiveNetworkFunctionByGlobalID(globalID string) (*models
 	return &vnf, nil
 }
 
-func (r *Registry) FindCompleteActiveNetworkFunctionByGlobalID(globalID string) (*models.VirtualNetworkFunction, error) {
+func (r *InMemoryRegistry) FindCompleteActiveNetworkFunctionByGlobalID(globalID string) (*models.VirtualNetworkFunction, error) {
 	var vnf models.VirtualNetworkFunction
 	if err := r.dbHandle.Preload("Subfunctions").First(&vnf, "global_id = ? AND status = ?", globalID, models.VNFStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("VNF with global ID %s not found: %w", globalID, err)
@@ -121,15 +73,15 @@ func (r *Registry) FindCompleteActiveNetworkFunctionByGlobalID(globalID string) 
 	return &vnf, nil
 }
 
-func (r *Registry) FindVnfInstancesByVNFID(vnfID uint) ([]*models.SimpleVnfInstance, error) {
-	var instances []*models.SimpleVnfInstance
-	if err := r.dbHandle.Find(&instances, "vnf_id = ?", vnfID).Error; err != nil {
-		return nil, fmt.Errorf("failed to find VNF instances for VNF ID %d: %w", vnfID, err)
-	}
-	return instances, nil
-}
+// func (r *InMemoryRegistry) FindVnfInstancesByVNFID(vnfID uint) ([]*models.SimpleVnfInstance, error) {
+// 	var instances []*models.SimpleVnfInstance
+// 	if err := r.dbHandle.Find(&instances, "vnf_id = ?", vnfID).Error; err != nil {
+// 		return nil, fmt.Errorf("failed to find VNF instances for VNF ID %d: %w", vnfID, err)
+// 	}
+// 	return instances, nil
+// }
 
-func (r *Registry) FindVnfInstanceByContainerID(containerID string) (*models.SimpleVnfInstance, error) {
+func (r *InMemoryRegistry) FindVnfInstanceByContainerID(containerID string) (*models.SimpleVnfInstance, error) {
 	var instance models.SimpleVnfInstance
 	if err := r.dbHandle.First(&instance, "container_id = ?", containerID).Error; err != nil {
 		return nil, fmt.Errorf("VNF instance with container ID %s not found: %w", containerID, err)
@@ -137,7 +89,7 @@ func (r *Registry) FindVnfInstanceByContainerID(containerID string) (*models.Sim
 	return &instance, nil
 }
 
-func (r *Registry) FindVnfMultiplexedInstanceByContainerID(containerID string) (*models.MultiplexedVnfInstance, error) {
+func (r *InMemoryRegistry) FindVnfMultiplexedInstanceByContainerID(containerID string) (*models.MultiplexedVnfInstance, error) {
 	var instance models.MultiplexedVnfInstance
 	if err := r.dbHandle.First(&instance, "container_id = ?", containerID).Error; err != nil {
 		return nil, fmt.Errorf("multiplexed VNF instance with container ID %s not found: %w", containerID, err)
@@ -145,15 +97,7 @@ func (r *Registry) FindVnfMultiplexedInstanceByContainerID(containerID string) (
 	return &instance, nil
 }
 
-func (r *Registry) FindVnfGroupByID(id uuid.UUID) (*models.SimpleVnfGroup, error) {
-	var group models.SimpleVnfGroup
-	if err := r.dbHandle.First(&group, "id = ?", id).Error; err != nil {
-		return nil, fmt.Errorf("VNF group with id %s not found: %w", id, err)
-	}
-	return &group, nil
-}
-
-func (r *Registry) FindVnfGroupByIDWithPrepopulatedInstanceList(id uuid.UUID) (*models.SimpleVnfGroup, error) {
+func (r *InMemoryRegistry) FindVnfGroupByIDWithPrepopulatedInstanceList(id uuid.UUID) (*models.SimpleVnfGroup, error) {
 	var group models.SimpleVnfGroup
 	if err := r.dbHandle.Preload("Instances").First(&group, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("VNF group with id %s not found: %w", id, err)
@@ -161,7 +105,7 @@ func (r *Registry) FindVnfGroupByIDWithPrepopulatedInstanceList(id uuid.UUID) (*
 	return &group, nil
 }
 
-func (r *Registry) FindSubfunctionPreloadedVnfMultiplexedGroupByID(id uuid.UUID) (*models.MultiplexedVnfGroup, error) {
+func (r *InMemoryRegistry) FindSubfunctionPreloadedVnfMultiplexedGroupByID(id uuid.UUID) (*models.MultiplexedVnfGroup, error) {
 	var group models.MultiplexedVnfGroup
 	if err := r.dbHandle.Preload("SidAssignments").First(&group, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("multiplexed VNF group with id %s not found: %w", id, err)
@@ -169,7 +113,7 @@ func (r *Registry) FindSubfunctionPreloadedVnfMultiplexedGroupByID(id uuid.UUID)
 	return &group, nil
 }
 
-func (r *Registry) FindVnfMultiplexedGroupByIDWithPrepopulatedInstanceList(id uuid.UUID) (*models.MultiplexedVnfGroup, error) {
+func (r *InMemoryRegistry) FindVnfMultiplexedGroupByIDWithPrepopulatedInstanceList(id uuid.UUID) (*models.MultiplexedVnfGroup, error) {
 	var group models.MultiplexedVnfGroup
 	if err := r.dbHandle.Preload("Instances").First(&group, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("multiplexed VNF group with id %s not found: %w", id, err)
@@ -177,7 +121,7 @@ func (r *Registry) FindVnfMultiplexedGroupByIDWithPrepopulatedInstanceList(id uu
 	return &group, nil
 }
 
-func (r *Registry) FindLocalSimpleVnfGroupByVnfID(globalVnfID string) (*models.SimpleVnfGroup, error) {
+func (r *InMemoryRegistry) FindLocalSimpleVnfGroupByVnfID(globalVnfID string) (*models.SimpleVnfGroup, error) {
 	var group models.SimpleVnfGroup
 	if err := r.dbHandle.Joins("JOIN virtual_network_functions ON virtual_network_functions.id = simple_vnf_groups.vnf_id").Where("virtual_network_functions.global_id = ?", globalVnfID).First(&group).Error; err != nil {
 		return nil, fmt.Errorf("local VNF group with VNF ID %s not found: %w", globalVnfID, err)
@@ -185,7 +129,7 @@ func (r *Registry) FindLocalSimpleVnfGroupByVnfID(globalVnfID string) (*models.S
 	return &group, nil
 }
 
-func (r *Registry) FindLocalMultiplexedGroupByVnfID(globalVnfID string) (*models.MultiplexedVnfGroup, error) {
+func (r *InMemoryRegistry) FindLocalMultiplexedGroupByVnfID(globalVnfID string) (*models.MultiplexedVnfGroup, error) {
 	var group models.MultiplexedVnfGroup
 	if err := r.dbHandle.Joins("JOIN virtual_network_functions ON virtual_network_functions.id = multiplexed_vnf_groups.vnf_id").Where("virtual_network_functions.global_id = ?", globalVnfID).First(&group).Error; err != nil {
 		return nil, fmt.Errorf("local multiplexed VNF group with VNF ID %s not found: %w", globalVnfID, err)
@@ -193,7 +137,7 @@ func (r *Registry) FindLocalMultiplexedGroupByVnfID(globalVnfID string) (*models
 	return &group, nil
 }
 
-func (r *Registry) FindAllNetworkServiceChains() ([]models.ServiceChain, error) {
+func (r *InMemoryRegistry) FindAllNetworkServiceChains() ([]models.ServiceChain, error) {
 	var chains []models.ServiceChain
 	if err := r.dbHandle.Preload("Elements").Find(&chains).Error; err != nil {
 		return nil, fmt.Errorf("failed to find all network service chains: %w", err)
@@ -201,7 +145,7 @@ func (r *Registry) FindAllNetworkServiceChains() ([]models.ServiceChain, error) 
 	return chains, nil
 }
 
-func (r *Registry) FindActiveNetworkServiceChainByGlobalID(globalChainID string) (*models.ServiceChain, error) {
+func (r *InMemoryRegistry) FindActiveNetworkServiceChainByGlobalID(globalChainID string) (*models.ServiceChain, error) {
 	var chain models.ServiceChain
 	if err := r.dbHandle.First(&chain, "global_id = ? AND status = ?", globalChainID, models.ServiceChainStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("network service chain with global ID %s not found: %w", globalChainID, err)
@@ -209,7 +153,7 @@ func (r *Registry) FindActiveNetworkServiceChainByGlobalID(globalChainID string)
 	return &chain, nil
 }
 
-func (r *Registry) FindActiveNodeByGlobalID(globalNodeID string) (*models.Worker, error) {
+func (r *InMemoryRegistry) FindActiveNodeByGlobalID(globalNodeID string) (*models.Worker, error) {
 	var node models.Worker
 	if err := r.dbHandle.First(&node, "global_id = ? AND status = ?", globalNodeID, models.WorkerStatusActive).Error; err != nil {
 		return nil, fmt.Errorf("node with global ID %s not found: %w", globalNodeID, err)
@@ -217,7 +161,7 @@ func (r *Registry) FindActiveNodeByGlobalID(globalNodeID string) (*models.Worker
 	return &node, nil
 }
 
-func (r *Registry) FindRemoteAppGroupByNodeAndExternalID(nodeID string, groupID string) (*models.RemoteAppGroup, error) {
+func (r *InMemoryRegistry) FindRemoteAppGroupByNodeAndExternalID(nodeID string, groupID string) (*models.RemoteAppGroup, error) {
 	var group models.RemoteAppGroup
 	if err := r.dbHandle.First(&group, "node_id = ? AND external_group_id = ?", nodeID, groupID).Error; err != nil {
 		return nil, fmt.Errorf("remote app group with node ID %s and external ID %s not found: %w", nodeID, groupID, err)
@@ -225,7 +169,7 @@ func (r *Registry) FindRemoteAppGroupByNodeAndExternalID(nodeID string, groupID 
 	return &group, nil
 }
 
-func (r *Registry) FindRemoteVnfGroupByNodeAndExternalID(nodeID string, groupID string) (*models.RemoteVnfGroup, error) {
+func (r *InMemoryRegistry) FindRemoteVnfGroupByNodeAndExternalID(nodeID string, groupID string) (*models.RemoteVnfGroup, error) {
 	var group models.RemoteVnfGroup
 	if err := r.dbHandle.First(&group, "node_id = ? AND external_group_id = ?", nodeID, groupID).Error; err != nil {
 		return nil, fmt.Errorf("remote VNF group with node ID %s and external ID %s not found: %w", nodeID, groupID, err)
@@ -233,35 +177,35 @@ func (r *Registry) FindRemoteVnfGroupByNodeAndExternalID(nodeID string, groupID 
 	return &group, nil
 }
 
-func (r *Registry) SaveApp(app *models.Application) error {
+func (r *InMemoryRegistry) SaveApp(app *models.Application) error {
 	if err := r.dbHandle.Save(app).Error; err != nil {
 		return fmt.Errorf("failed to save application: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveAppGroup(group *models.AppGroup) error {
+func (r *InMemoryRegistry) SaveAppGroup(group *models.AppGroup) error {
 	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save app group: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveAppInstance(instance *models.AppInstance) error {
+func (r *InMemoryRegistry) SaveAppInstance(instance *models.AppInstance) error {
 	if err := r.dbHandle.Save(instance).Error; err != nil {
 		return fmt.Errorf("failed to save app instance: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveVnf(function *models.VirtualNetworkFunction) error {
+func (r *InMemoryRegistry) SaveVnf(function *models.VirtualNetworkFunction) error {
 	if err := r.dbHandle.Save(function).Error; err != nil {
 		return fmt.Errorf("failed to save virtual network function: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveSubfunctions(subfunctions []models.Subfunction) error {
+func (r *InMemoryRegistry) SaveSubfunctions(subfunctions []models.Subfunction) error {
 	logger.DebugLogger().Printf("Saving %d subfunctions", len(subfunctions))
 	for _, sf := range subfunctions {
 		logger.DebugLogger().Printf("Saving subfunction: %+v", sf)
@@ -272,230 +216,142 @@ func (r *Registry) SaveSubfunctions(subfunctions []models.Subfunction) error {
 	return nil
 }
 
-func (r *Registry) SaveVnfGroup(group *models.SimpleVnfGroup) error {
+func (r *InMemoryRegistry) SaveVnfGroup(group *models.SimpleVnfGroup) error {
 	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save VNF group: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveVnfMultiplexedGroup(group *models.MultiplexedVnfGroup) error {
+func (r *InMemoryRegistry) SaveVnfMultiplexedGroup(group *models.MultiplexedVnfGroup) error {
 	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save multiplexed VNF group: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveSidAssignments(assignments []models.SidAssignment) error {
-	for _, assignment := range assignments {
-		if err := r.dbHandle.Save(&assignment).Error; err != nil {
-			return fmt.Errorf("failed to save SID assignment: %w", err)
-		}
-	}
-	return nil
-}
+// func (r *InMemoryRegistry) SaveSidAssignments(assignments []models.SidAssignment) error {
+// 	for _, assignment := range assignments {
+// 		if err := r.dbHandle.Save(&assignment).Error; err != nil {
+// 			return fmt.Errorf("failed to save SID assignment: %w", err)
+// 		}
+// 	}
+// 	return nil
+// }
 
-func (r *Registry) SaveVnfInstance(instance *models.SimpleVnfInstance) error {
+func (r *InMemoryRegistry) SaveVnfInstance(instance *models.SimpleVnfInstance) error {
 	if err := r.dbHandle.Save(instance).Error; err != nil {
 		return fmt.Errorf("failed to save VNF instance: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveVnfMultiplexedInstance(instance *models.MultiplexedVnfInstance) error {
+func (r *InMemoryRegistry) SaveVnfMultiplexedInstance(instance *models.MultiplexedVnfInstance) error {
 	if err := r.dbHandle.Save(instance).Error; err != nil {
 		return fmt.Errorf("failed to save multiplexed VNF instance: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveNetworkServiceChain(chain *models.ServiceChain) error {
+func (r *InMemoryRegistry) SaveNetworkServiceChain(chain *models.ServiceChain) error {
 	if err := r.dbHandle.Save(chain).Error; err != nil {
 		return fmt.Errorf("failed to save network service chain: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveChainElement(element *models.ServiceChainVnfs) error {
-	if err := r.dbHandle.Save(element).Error; err != nil {
-		return fmt.Errorf("failed to save chain element: %w", err)
-	}
-	return nil
-}
-
-func (r *Registry) SaveRoute(route *models.Route) error {
-	if err := r.dbHandle.Save(route).Error; err != nil {
-		return fmt.Errorf("failed to save route: %w", err)
-	}
-	return nil
-}
-
-func (r *Registry) SaveRemoteAppInstances(instances []*models.RemoteAppInstance) error {
-	for _, instance := range instances {
-		if err := r.dbHandle.Save(instance).Error; err != nil {
-			return fmt.Errorf("failed to save remote app instance: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r *Registry) RemoveAppInstanceByContainerID(containerID string) error {
-	if err := r.dbHandle.Delete(&models.AppInstance{}, "container_id = ?", containerID).Error; err != nil {
-		return fmt.Errorf("failed to remove app instance with container ID %s: %w", containerID, err)
-	}
-	return nil
-}
-
-func (r *Registry) RemoveAppInstance(id uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveAppInstance(id uuid.UUID) error {
 	if err := r.dbHandle.Delete(&models.AppInstance{}, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("failed to remove app instance with ID %s: %w", id, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveAppGroup(id uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveAppGroup(id uuid.UUID) error {
 	if err := r.dbHandle.Delete(&models.AppGroup{}, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("failed to remove app group with ID %s: %w", id, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveVnfInstance(id uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveVnfInstance(id uuid.UUID) error {
 	if err := r.dbHandle.Delete(&models.SimpleVnfInstance{}, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("failed to delete VNF instance %s: %w", id, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveVnfMultiplexedInstance(id uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveVnfMultiplexedInstance(id uuid.UUID) error {
 	if err := r.dbHandle.Delete(&models.MultiplexedVnfInstance{}, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("failed to delete multiplexed VNF instance %s: %w", id, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveVnfGroup(id uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveVnfGroup(id uuid.UUID) error {
 	if err := r.dbHandle.Delete(&models.SimpleVnfGroup{}, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("failed to remove VNF group with ID %s: %w", id, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveVnfMultiplexedGroup(id uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveVnfMultiplexedGroup(id uuid.UUID) error {
 	if err := r.dbHandle.Delete(&models.MultiplexedVnfGroup{}, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("failed to remove multiplexed VNF group with ID %s: %w", id, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveVnfInstanceByContainerID(containerID string) error {
-	if err := r.dbHandle.Delete(&models.SimpleVnfInstance{}, "container_id = ?", containerID).Error; err != nil {
-		return fmt.Errorf("failed to remove VNF instance with container ID %s: %w", containerID, err)
-	}
-	return nil
-}
-
-// func (r *Registry) FindAllRoutes() ([]*models.Route, error) {
-// 	var routes []*models.Route
-// 	if err := r.dbHandle.Find(&routes).Error; err != nil {
-// 		return nil, fmt.Errorf("failed to find all routes: %w", err)
-// 	}
-// 	return routes, nil
-// }
-
-// func (r *Registry) FindRouteStages(route *models.Route) ([]models.VnfGroup, error) {
-// 	groups, err := route.GetStagedGroups(r.dbHandle)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to get staged groups for route %s: %w", route.ID, err)
-// 	}
-// 	return groups, nil
-// }
-
-// func (r *Registry) RemoveAllRoutes() error {
-// 	if err := r.dbHandle.Delete(&models.Route{}, "1 = 1").Error; err != nil {
-// 		return fmt.Errorf("failed to remove all routes: %w", err)
-// 	}
-// 	return nil
-// }
-
-func (r *Registry) RemoveRemoteAppGroupsByID(ids []uuid.UUID) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	if err := r.dbHandle.Delete(&models.RemoteAppGroup{}, "id IN ?", ids).Error; err != nil {
-		return fmt.Errorf("failed to remove remote app groups by IDs %v: %w", ids, err)
-	}
-	return nil
-}
-
-// func (r *Registry) SaveRoutes(routes []*models.Route) error {
-// 	for _, route := range routes {
-// 		if err := r.SaveRoute(route); err != nil {
-// 			return fmt.Errorf("failed to save route: %w", err)
-// 		}
-// 	}
-// 	return nil
-// }
-
-func (r *Registry) SaveRouteStages(routeStages []*models.RouteStage) error {
-	for _, stage := range routeStages {
-		if err := r.dbHandle.Save(stage).Error; err != nil {
-			return fmt.Errorf("failed to save route stage: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r *Registry) SaveRemoteAppGroup(group *models.RemoteAppGroup) error {
+func (r *InMemoryRegistry) SaveRemoteAppGroup(group *models.RemoteAppGroup) error {
 	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save remote app group: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveRemoteVnfGroup(group *models.RemoteVnfGroup) error {
+func (r *InMemoryRegistry) SaveRemoteVnfGroup(group *models.RemoteVnfGroup) error {
 	if err := r.dbHandle.Save(group).Error; err != nil {
 		return fmt.Errorf("failed to save remote VNF group: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) SaveNode(node *models.Worker) error {
+func (r *InMemoryRegistry) SaveNode(node *models.Worker) error {
 	if err := r.dbHandle.Save(node).Error; err != nil {
 		return fmt.Errorf("failed to save node: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) MarkAppAsDeleted(globalID string) error {
+func (r *InMemoryRegistry) MarkAppAsDeleted(globalID string) error {
 	if err := r.dbHandle.Model(&models.Application{}).Where("global_id = ? AND status = ?", globalID, models.AppStatusActive).Update("status", models.AppStatusDeletionPending).Error; err != nil {
 		return fmt.Errorf("failed to mark application %s as deleted: %w", globalID, err)
 	}
 	return nil
 }
 
-func (r *Registry) MarkVnfAsDeleted(globalID string) error {
+func (r *InMemoryRegistry) MarkVnfAsDeleted(globalID string) error {
 	if err := r.dbHandle.Model(&models.VirtualNetworkFunction{}).Where("global_id = ? AND status = ?", globalID, models.VNFStatusActive).Update("status", models.VNFStatusDeletionPending).Error; err != nil {
 		return fmt.Errorf("failed to mark VNF %s as deleted: %w", globalID, err)
 	}
 	return nil
 }
 
-func (r *Registry) MarkServiceChainAsDeleted(globalID string) error {
+func (r *InMemoryRegistry) MarkServiceChainAsDeleted(globalID string) error {
 	if err := r.dbHandle.Model(&models.ServiceChain{}).Where("global_id = ? AND status = ?", globalID, models.ServiceChainStatusActive).Update("status", models.ServiceChainStatusDeletionPending).Error; err != nil {
 		return fmt.Errorf("failed to mark service chain %s as deleted: %w", globalID, err)
 	}
 	return nil
 }
 
-func (r *Registry) MarkNodeAsDeleted(globalID string) error {
+func (r *InMemoryRegistry) MarkNodeAsDeleted(globalID string) error {
 	if err := r.dbHandle.Model(&models.Worker{}).Where("global_id = ? AND status = ?", globalID, models.WorkerStatusActive).Update("status", models.WorkerStatusInactive).Error; err != nil {
 		return fmt.Errorf("failed to mark node %s as deleted: %w", globalID, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveRemoteAppInstancesByIP(ips []string, groupID uuid.UUID) error {
+func (r *InMemoryRegistry) RemoveRemoteAppInstancesByIP(ips []string, groupID uuid.UUID) error {
 	if len(ips) == 0 {
 		return nil
 	}
@@ -505,14 +361,14 @@ func (r *Registry) RemoveRemoteAppInstancesByIP(ips []string, groupID uuid.UUID)
 	return nil
 }
 
-func (r *Registry) RemoveRemoteAppGroupsByGlobalAppID(globalAppID string) error {
+func (r *InMemoryRegistry) RemoveRemoteAppGroupsByGlobalAppID(globalAppID string) error {
 	if err := r.dbHandle.Delete(&models.RemoteAppGroup{}, "app_id = ?", globalAppID).Error; err != nil {
 		return fmt.Errorf("failed to remove remote app groups for App ID %s: %w", globalAppID, err)
 	}
 	return nil
 }
 
-func (r *Registry) RemoveRemoteVnfGroupsByGlobalVnfID(globalVnfID string) error {
+func (r *InMemoryRegistry) RemoveRemoteVnfGroupsByGlobalVnfID(globalVnfID string) error {
 	if err := r.dbHandle.Delete(&models.RemoteVnfGroup{}, "vnf_id = ?", globalVnfID).Error; err != nil {
 		return fmt.Errorf("failed to remove remote VNF groups for VNF ID %s: %w", globalVnfID, err)
 	}

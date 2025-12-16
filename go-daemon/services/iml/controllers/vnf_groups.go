@@ -35,7 +35,7 @@ type RemoteVnfGroupsTopicData struct {
 }
 
 type VnfGroupsController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
 
 	topics     map[RemoteVnfGroupsTopic]RemoteVnfGroupsTopicData

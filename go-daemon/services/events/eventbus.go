@@ -1,15 +1,21 @@
 package events
 
-// NewEventBus creates a new EventBus instance.
-func NewEventBus() *EventBus {
-	return &EventBus{
+type EventBus interface {
+	Subscribe(eventName string, handler Handler) uint64
+	Unsubscribe(eventName string, id uint64)
+	Publish(event Event)
+}
+
+// NewInMemory creates a new EventBus instance.
+func NewInMemory() EventBus {
+	return &InMemoryEventBus{
 		subscribers: make(map[string][]subscription),
 		nextID:      1,
 	}
 }
 
 // Subscribe registers a handler for the given event name. It returns a unique subscription ID.
-func (eb *EventBus) Subscribe(eventName string, handler Handler) uint64 {
+func (eb *InMemoryEventBus) Subscribe(eventName string, handler Handler) uint64 {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
@@ -23,7 +29,7 @@ func (eb *EventBus) Subscribe(eventName string, handler Handler) uint64 {
 }
 
 // Unsubscribe removes the subscription for the given event name and subscription ID.
-func (eb *EventBus) Unsubscribe(eventName string, id uint64) {
+func (eb *InMemoryEventBus) Unsubscribe(eventName string, id uint64) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
@@ -39,7 +45,7 @@ func (eb *EventBus) Unsubscribe(eventName string, id uint64) {
 
 // Publish sends the event to all registered handlers for its name.
 // Each handler is invoked asynchronously in its own goroutine.
-func (eb *EventBus) Publish(event Event) {
+func (eb *InMemoryEventBus) Publish(event Event) {
 	eb.mu.RLock()
 	subs, found := eb.subscribers[event.Name]
 	eb.mu.RUnlock()
