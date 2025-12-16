@@ -15,13 +15,19 @@ import (
 
 type Topic string
 
-type Client struct {
+type Client interface {
+	Add(sub Subscription) (Topic, error)
+	Remove(subscriptionTopic Topic) error
+	RegisterHandler(topic string, handler paho.MessageHandler) error
+}
+
+type ClientImpl struct {
 	conn   *autopaho.ConnectionManager
 	subs   map[Topic]Subscription
 	router paho.Router
 }
 
-func NewClient(ctx context.Context) (*Client, error) {
+func NewClient(ctx context.Context) (Client, error) {
 	u, err := url.Parse(env.MQTT_URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse MQTT URL: %v", err)
@@ -34,11 +40,10 @@ func NewClient(ctx context.Context) (*Client, error) {
 
 	router := paho.NewStandardRouter()
 
-	client := &Client{
+	client := &ClientImpl{
 		subs:   make(map[Topic]Subscription),
 		router: router,
 	}
-
 
 	clientConfig := autopaho.ClientConfig{
 		ServerUrls: []*url.URL{u},
@@ -66,7 +71,7 @@ func NewClient(ctx context.Context) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) Add(sub Subscription) (Topic, error) {
+func (c *ClientImpl) Add(sub Subscription) (Topic, error) {
 	topic := sub.Topic()
 	logger.DebugLogger().Printf("Adding MQTT subscription for topic %s", topic)
 	subAck, err := c.conn.Subscribe(context.Background(), &paho.Subscribe{
@@ -82,7 +87,7 @@ func (c *Client) Add(sub Subscription) (Topic, error) {
 	return topic, nil
 }
 
-func (c *Client) Remove(subscriptionTopic Topic) error {
+func (c *ClientImpl) Remove(subscriptionTopic Topic) error {
 	_, ok := c.subs[subscriptionTopic]
 	if !ok {
 		logger.DebugLogger().Printf("No subscription found for topic %s, skipping...", subscriptionTopic)
@@ -99,7 +104,7 @@ func (c *Client) Remove(subscriptionTopic Topic) error {
 	return nil
 }
 
-func (c *Client) RegisterHandler(topic string, handler paho.MessageHandler) error {
+func (c *ClientImpl) RegisterHandler(topic string, handler paho.MessageHandler) error {
 	if handler == nil {
 		return fmt.Errorf("cannot register nil handler for topic %s", topic)
 	}

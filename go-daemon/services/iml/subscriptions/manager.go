@@ -11,13 +11,13 @@ import (
 type SubscriptionManager struct {
 	subscriptions map[SubscriptionKey]Subscription
 	dependencies  map[DependencyKey]Dependency
-	mqttClient    *mqtt.Client
+	mqttClient    mqtt.Client
 	repo          db.Registry
 
 	_mutex sync.RWMutex
 }
 
-func NewSubscriptionManager(mqttClient *mqtt.Client, repo db.Registry) (*SubscriptionManager, error) {
+func NewSubscriptionManager(mqttClient mqtt.Client, repo db.Registry) (*SubscriptionManager, error) {
 	if mqttClient == nil {
 		return nil, fmt.Errorf("SubscriptionManager.NewSubscriptionManager: mqttClient is nil")
 	}

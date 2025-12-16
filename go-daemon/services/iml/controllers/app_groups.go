@@ -43,7 +43,7 @@ type AppGroupsController struct {
 	topicRegex *regexp.Regexp
 }
 
-func (c *AppGroupsController) SetupWithMQTT(client *mqtt.Client) error {
+func (c *AppGroupsController) SetupWithMQTT(client mqtt.Client) error {
 	c.topics = make(map[RemoteAppGroupsTopic]RemoteAppGroupsTopicData)
 	c.eventQueue = &SliceQueue{}
 	regex, err := regexp.CompilePOSIX(APP_INSTANCES_TOPIC_STR)

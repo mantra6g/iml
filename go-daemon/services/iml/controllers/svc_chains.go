@@ -43,7 +43,7 @@ type ChainDefinitionController struct {
 	topicRegex *regexp.Regexp
 }
 
-func (c *ChainDefinitionController) SetupWithMQTT(client *mqtt.Client) error {
+func (c *ChainDefinitionController) SetupWithMQTT(client mqtt.Client) error {
 	c.topics = make(map[ChainDefinitionTopic]ChainDefinitionTopicData)
 	c.eventQueue = &SliceQueue{}
 	regex, err := regexp.CompilePOSIX(CHAIN_DEFINITION_TOPIC_STR)
