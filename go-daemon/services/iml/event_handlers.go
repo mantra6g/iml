@@ -7,7 +7,7 @@ import (
 	"iml-daemon/services/iml/subscriptions"
 )
 
-func (c *Client) handleLocalAppGroupCreated(event events.Event) {
+func (c *ClientImpl) handleLocalAppGroupCreated(event events.Event) {
 	logger.DebugLogger().Printf("iml.handleLocalAppGroupCreated: %v", event)
 	appGroup, ok := event.Payload.(models.AppGroup)
 	if !ok {
@@ -30,7 +30,7 @@ func (c *Client) handleLocalAppGroupCreated(event events.Event) {
 	}
 }
 
-func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
+func (c *ClientImpl) handleLocalAppGroupRemoved(event events.Event) {
 	logger.DebugLogger().Printf("iml.handleLocalAppGroupRemoved: %v", event)
 	appGroup, ok := event.Payload.(models.AppGroup)
 	if !ok {
@@ -53,7 +53,7 @@ func (c *Client) handleLocalAppGroupRemoved(event events.Event) {
 	}
 }
 
-func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
+func (c *ClientImpl) handleLocalVnfGroupCreated(event events.Event) {
 	logger.DebugLogger().Printf("iml.handleLocalVnfGroupCreated: %v", event)
 	vnfGroup, ok := event.Payload.(models.SimpleVnfGroup)
 	if !ok {
@@ -76,7 +76,7 @@ func (c *Client) handleLocalVnfGroupCreated(event events.Event) {
 	}
 }
 
-func (c *Client) handleLocalVnfMultiplexedGroupCreated(event events.Event) {
+func (c *ClientImpl) handleLocalVnfMultiplexedGroupCreated(event events.Event) {
 	logger.DebugLogger().Printf("iml.handleLocalVnfMultiplexedGroupCreated: %v", event)
 	vnfGroup, ok := event.Payload.(models.MultiplexedVnfGroup)
 	if !ok {
@@ -98,7 +98,7 @@ func (c *Client) handleLocalVnfMultiplexedGroupCreated(event events.Event) {
 	}
 }
 
-func (c *Client) handleLocalVnfGroupRemoved(event events.Event) {
+func (c *ClientImpl) handleLocalVnfGroupRemoved(event events.Event) {
 	logger.DebugLogger().Printf("iml.handleLocalVnfGroupRemoved: %v", event)
 	vnfGroup, ok := event.Payload.(models.SimpleVnfGroup)
 	if !ok {
@@ -121,7 +121,7 @@ func (c *Client) handleLocalVnfGroupRemoved(event events.Event) {
 	}
 }
 
-func (c *Client) handleLocalVnfMultiplexedGroupRemoved(event events.Event) {
+func (c *ClientImpl) handleLocalVnfMultiplexedGroupRemoved(event events.Event) {
 	logger.DebugLogger().Printf("iml.handleLocalVnfMultiplexedGroupRemoved: %v", event)
 	vnfGroup, ok := event.Payload.(models.MultiplexedVnfGroup)
 	if !ok {

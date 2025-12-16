@@ -8,7 +8,14 @@ import (
 	"gorm.io/gorm"
 )
 
-func InitializeInMemoryRegistry() (*Registry, error) {
+// InMemoryRegistry is the main entrypoint to accessing the database.
+// It provides methods to find applications, app instances, VNFs, and VNF instances.
+// It uses GORM for database operations.
+type InMemoryRegistry struct {
+	dbHandle *gorm.DB
+}
+
+func InitializeInMemoryRegistry() (Registry, error) {
 	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to the database: %w", err)
@@ -49,7 +56,7 @@ func InitializeInMemoryRegistry() (*Registry, error) {
 	// 	return nil, fmt.Errorf("failed to setup join table for Route and RouteStage: %w", err)
 	// }
 
-	return &Registry{
+	return &InMemoryRegistry{
 		dbHandle: db,
 	}, nil
 }

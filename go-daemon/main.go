@@ -14,6 +14,7 @@ import (
 	"iml-daemon/services/iml/subscriptions"
 	"iml-daemon/services/routecalc"
 	"iml-daemon/services/router"
+	"iml-daemon/services/router/dataplane"
 	"iml-daemon/vnfs"
 	"os"
 	"os/signal"
@@ -39,10 +40,10 @@ func main() {
 	}
 
 	// Initialize the event bus
-	eb := events.NewEventBus()
+	eb := events.NewInMemory()
 
 	// Initialize the Dataplane
-	dataplane, err := router.NewDataplane(config.SIDSubnet, config.AppSubnet, config.NFSubnet, config.TunSubnet)
+	dataplaneMgr, err := dataplane.NewSoftware(config.SIDSubnet, config.AppSubnet, config.NFSubnet, config.TunSubnet)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create Dataplane: %v", err)
 		panic("Failed to create Dataplane: " + err.Error())
@@ -134,19 +135,19 @@ func main() {
 	}
 
 	// Initialize the router service
-	routerService, err := router.New(registry, eb, dataplane)
+	routerService, err := router.New(registry, eb, dataplaneMgr)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize RouterService: %v", err)
 		panic("Failed to initialize RouterService: " + err.Error())
 	}
 
 	// Create app and vnf instance factories
-	appFactory, err := apps.NewInstanceFactory(registry, eb, dataplane, imlClient)
+	appFactory, err := apps.NewInstanceFactory(registry, eb, dataplaneMgr, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create AppInstanceFactory: %v", err)
 		panic("Failed to create AppInstanceFactory: " + err.Error())
 	}
-	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, dataplane, imlClient)
+	vnfFactory, err := vnfs.NewInstanceFactory(registry, eb, dataplaneMgr, imlClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to create VnfInstanceFactory: %v", err)
 		panic("Failed to create VnfInstanceFactory: " + err.Error())

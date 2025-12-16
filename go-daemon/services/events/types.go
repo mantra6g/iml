@@ -38,8 +38,8 @@ type subscription struct {
 	handler Handler
 }
 
-// EventBus provides publish/subscribe capabilities for domain events.
-type EventBus struct {
+// InMemoryEventBus provides publish/subscribe capabilities for domain events.
+type InMemoryEventBus struct {
 	subscribers map[string][]subscription // map of event name -> list of subscriptions
 	mu          sync.RWMutex              // protects subscribers
 	nextID      uint64                    // incremental ID generator

@@ -34,7 +34,7 @@ type ApplicationDefinitionTopicData struct {
 }
 
 type AppDefinitionController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
 
 	topics     map[ApplicationDefinitionTopic]ApplicationDefinitionTopicData

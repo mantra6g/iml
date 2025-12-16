@@ -32,7 +32,7 @@ type ApplicationServicesTopicData struct {
 }
 
 type AppServicesController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
 
 	topics     map[ApplicationServicesTopic]ApplicationServicesTopicData

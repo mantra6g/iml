@@ -33,7 +33,7 @@ type VnfDefinitionTopicData struct {
 }
 
 type VNFDefinitionController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
 
 	topics     map[VnfDefinitionTopic]VnfDefinitionTopicData

@@ -33,7 +33,7 @@ type NodeDefinitionTopicData struct {
 }
 
 type NodeDefinitionController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
 
 	topics     map[NodeDefinitionTopic]NodeDefinitionTopicData

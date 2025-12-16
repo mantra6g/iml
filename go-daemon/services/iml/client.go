@@ -19,14 +19,19 @@ import (
 	"net/http"
 )
 
-type Client struct {
-	eb   *events.EventBus
-	repo *db.Registry
+type Client interface {
+	GetApplication(id string) (*models.Application, error)
+	GetNetworkFunction(id string) (*models.VirtualNetworkFunction, error)
+}
+
+type ClientImpl struct {
+	eb   events.EventBus
+	repo db.Registry
 
 	manager *subscriptions.SubscriptionManager
 }
 
-func NewClient(eb *events.EventBus, repo *db.Registry, manager *subscriptions.SubscriptionManager) (*Client, error) {
+func NewClient(eb events.EventBus, repo db.Registry, manager *subscriptions.SubscriptionManager) (Client, error) {
 	if eb == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
@@ -37,7 +42,7 @@ func NewClient(eb *events.EventBus, repo *db.Registry, manager *subscriptions.Su
 		return nil, fmt.Errorf("subscription manager is required")
 	}
 
-	client := &Client{
+	client := &ClientImpl{
 		eb:      eb,
 		repo:    repo,
 		manager: manager,
@@ -59,7 +64,7 @@ func NewClient(eb *events.EventBus, repo *db.Registry, manager *subscriptions.Su
 // If you want to keep the application updated, use PullApplication instead.
 //
 // This method is the correct way to check the state of an application.
-func (c *Client) GetApplication(id string) (*models.Application, error) {
+func (c *ClientImpl) GetApplication(id string) (*models.Application, error) {
 	// First, check if the application already exists locally
 	// If the application exists, and it is active, then it means that
 	// it is already synchronized with IML via MQTT, so we can return it directly.
@@ -106,7 +111,7 @@ func (c *Client) GetApplication(id string) (*models.Application, error) {
 	return app, nil
 }
 
-func (c *Client) GetNetworkFunction(id string) (*models.VirtualNetworkFunction, error) {
+func (c *ClientImpl) GetNetworkFunction(id string) (*models.VirtualNetworkFunction, error) {
 	// First, check if the network function already exists locally
 	// If the network function exists, and it is active, then it means that
 	// it is already synchronized with IML via MQTT, so we can return it directly.

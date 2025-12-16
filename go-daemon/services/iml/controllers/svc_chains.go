@@ -34,9 +34,9 @@ type ChainDefinitionTopicData struct {
 }
 
 type ChainDefinitionController struct {
-	Registry   *db.Registry
+	Registry   db.Registry
 	SubManager *subscriptions.SubscriptionManager
-	EventBus   *events.EventBus
+	EventBus   events.EventBus
 
 	topics     map[ChainDefinitionTopic]ChainDefinitionTopicData
 	eventQueue Queue
@@ -269,8 +269,8 @@ func (c *ChainDefinitionController) OnUpdate(topic ChainDefinitionTopic, update 
 			return Result{RequeueAfter: 5 * time.Second}, fmt.Errorf("virtual Network Function ID %s for Service Chain ID %s not found in local database", vnfIdentifier.FunctionUID, topic.ChainID)
 		}
 		vnfs = append(vnfs, models.ServiceChainVnfs{
-			Position: uint8(i),
-			VnfID:    vnfRec.ID,
+			Position:      uint8(i),
+			VnfID:         vnfRec.ID,
 			SubfunctionID: vnfIdentifier.SubFunctionID,
 		})
 	}
