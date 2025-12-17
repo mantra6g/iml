@@ -9,34 +9,20 @@ import (
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
 	"iml-daemon/services/router/dataplane"
-	"net"
 )
 
-type InstanceFactory struct {
+type InstanceFactoryImpl struct {
 	repo      db.Registry
 	bus       events.EventBus
 	imlClient iml.Client
 	dataplane dataplane.Manager
 }
 
-type RegistrationRequest struct {
-	ApplicationID string
-	ContainerID   string
-}
-
-type InstanceRegistrationResponse struct {
-	IPNet       net.IPNet
-	IfaceName   string
-	ClusterCIDR net.IPNet
-	GatewayIP   net.IP
-	BridgeName  string
-}
-
 func NewInstanceFactory(
 	repo db.Registry,
 	bus events.EventBus,
 	dataplane dataplane.Manager,
-	imlClient iml.Client) (*InstanceFactory, error) {
+	imlClient iml.Client) (InstanceFactory, error) {
 	if repo == nil {
 		return nil, fmt.Errorf("repository is required")
 	}
@@ -50,7 +36,7 @@ func NewInstanceFactory(
 		return nil, fmt.Errorf("IML client is required")
 	}
 
-	return &InstanceFactory{
+	return &InstanceFactoryImpl{
 		repo:      repo,
 		bus:       bus,
 		imlClient: imlClient,
@@ -58,7 +44,7 @@ func NewInstanceFactory(
 	}, nil
 }
 
-func (f *InstanceFactory) NewLocalInstance(req *RegistrationRequest) (*InstanceRegistrationResponse, error) {
+func (f *InstanceFactoryImpl) NewLocalInstance(req *RegistrationRequest) (*InstanceRegistrationResponse, error) {
 	app, err := f.imlClient.GetApplication(req.ApplicationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get application %s: %v", req.ApplicationID, err)
@@ -84,7 +70,7 @@ func (f *InstanceFactory) NewLocalInstance(req *RegistrationRequest) (*InstanceR
 	return response, nil
 }
 
-func (f *InstanceFactory) createOrGetAppInstance(req *RegistrationRequest, app *models.Application) (*models.AppInstance, *models.AppGroup, error) {
+func (f *InstanceFactoryImpl) createOrGetAppInstance(req *RegistrationRequest, app *models.Application) (*models.AppInstance, *models.AppGroup, error) {
 	appGroup, _ := f.repo.FindLocalAppGroupByGlobalID(app.GlobalID)
 	if appGroup == nil {
 		// Create a new app group if it doesn't exist
@@ -141,7 +127,7 @@ func (f *InstanceFactory) createOrGetAppInstance(req *RegistrationRequest, app *
 	return instance, appGroup, nil
 }
 
-func (f *InstanceFactory) DeleteInstance(containerID string) error {
+func (f *InstanceFactoryImpl) DeleteInstance(containerID string) error {
 	// First, find the application instance by container ID
 	// If it does not exist, just return
 	instance, _ := f.repo.FindAppInstanceByContainerID(containerID)
