@@ -9,41 +9,42 @@ import (
 
 type Software struct {
 }
+
 func (s *Software) Close() error {
 	return fmt.Errorf("Windows is not supported yet")
 }
 
-func (s *Software)	AddVNFSubnet(vnfGroupID uuid.UUID, sidAmount int) (VNFSubnet, error) {
+func (s *Software) AddVNFSubnet(vnfGroupID uuid.UUID, sidAmount int) (VNFSubnet, error) {
 	return nil, fmt.Errorf("Windows is not supported yet")
 }
-func (s *Software)	AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error) {
+func (s *Software) AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error) {
 	return nil, fmt.Errorf("Windows is not supported yet")
 }
 
-func (s *Software)	RemoveApplicationSubnet(appGroupID uuid.UUID) {}
-func (s *Software)	RemoveVNFSubnet(vnfGroupID uuid.UUID) {}
+func (s *Software) RemoveApplicationSubnet(appGroupID uuid.UUID) {}
+func (s *Software) RemoveVNFSubnet(vnfGroupID uuid.UUID)         {}
 
-func (s *Software)	AddApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) (*net.IPNet, string, error) {
+func (s *Software) AddApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) (*net.IPNet, string, error) {
 	return nil, "", fmt.Errorf("Windows is not supported yet")
 }
-func (s *Software)	RemoveApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) error {
+func (s *Software) RemoveApplicationInstance(appGroupID uuid.UUID, appInstanceID uuid.UUID) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
-	
-func (s *Software)	AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) (*net.IPNet, string, error) {
+
+func (s *Software) AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) (*net.IPNet, string, error) {
 	return nil, "", fmt.Errorf("Windows is not supported yet")
 }
-func (s *Software)	RemoveVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) error {
+func (s *Software) RemoveVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
 
-func (s *Software)	AddRoute(srcAppGroup uuid.UUID, dstNet net.IPNet, sids []net.IP) error {
+func (s *Software) AddRoute(srcAppGroup uuid.UUID, dstNet net.IPNet, sids []net.IP) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
-func (s *Software)	RemoveRoute(srcAppGroup uuid.UUID, dstNet string) error {
+func (s *Software) RemoveRoute(srcAppGroup uuid.UUID, dstNet string) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
 
-func NewSoftware(sidRange *net.IPNet, appRange *net.IPNet, vnfRange *net.IPNet, tunRange *net.IPNet) (*Software, error) {
+func NewSoftware(sidRange *net.IPNet, appRange *net.IPNet, vnfRange *net.IPNet, tunRange *net.IPNet) (Manager, error) {
 	return nil, fmt.Errorf("Windows is not supported yet")
 }

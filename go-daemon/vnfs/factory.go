@@ -17,28 +17,14 @@ import (
 	"github.com/google/uuid"
 )
 
-type InstanceFactory struct {
+type InstanceFactoryImpl struct {
 	repo      db.Registry
 	bus       events.EventBus
 	dataplane dataplane.Manager
 	imlClient iml.Client
 }
 
-type RegistrationRequest struct {
-	VnfID       string
-	ContainerID string
-}
-
-type InstanceRegistrationResponse struct {
-	IPNet       net.IPNet
-	SIDs        []net.IPNet
-	IfaceName   string
-	ClusterCIDR net.IPNet
-	GatewayIP   net.IP
-	BridgeName  string
-}
-
-func NewInstanceFactory(repo db.Registry, bus events.EventBus, dataplane dataplane.Manager, imlClient iml.Client) (*InstanceFactory, error) {
+func NewInstanceFactory(repo db.Registry, bus events.EventBus, dataplane dataplane.Manager, imlClient iml.Client) (InstanceFactory, error) {
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
 	}
@@ -52,7 +38,7 @@ func NewInstanceFactory(repo db.Registry, bus events.EventBus, dataplane datapla
 		return nil, fmt.Errorf("IML client is required")
 	}
 
-	return &InstanceFactory{
+	return &InstanceFactoryImpl{
 		repo:      repo,
 		bus:       bus,
 		dataplane: dataplane,
@@ -60,7 +46,7 @@ func NewInstanceFactory(repo db.Registry, bus events.EventBus, dataplane datapla
 	}, nil
 }
 
-func (f *InstanceFactory) NewLocalInstance(req *RegistrationRequest) (*InstanceRegistrationResponse, error) {
+func (f *InstanceFactoryImpl) NewLocalInstance(req *RegistrationRequest) (*InstanceRegistrationResponse, error) {
 	vnf, err := f.imlClient.GetNetworkFunction(req.VnfID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VNF %s: %v", req.VnfID, err)
@@ -99,7 +85,7 @@ func (f *InstanceFactory) NewLocalInstance(req *RegistrationRequest) (*InstanceR
 	}
 }
 
-func (f *InstanceFactory) newLocalSimpleInstance(nfUID string, vnf *models.VirtualNetworkFunction, containerID string) (*models.SimpleVnfInstance, *models.SimpleVnfGroup, error) {
+func (f *InstanceFactoryImpl) newLocalSimpleInstance(nfUID string, vnf *models.VirtualNetworkFunction, containerID string) (*models.SimpleVnfInstance, *models.SimpleVnfGroup, error) {
 	vnfGroup, _ := f.repo.FindLocalSimpleVnfGroupByVnfID(nfUID)
 	if vnfGroup == nil {
 		vnfGroup = &models.SimpleVnfGroup{
@@ -160,7 +146,7 @@ func (f *InstanceFactory) newLocalSimpleInstance(nfUID string, vnf *models.Virtu
 	return instance, vnfGroup, nil
 }
 
-func (f *InstanceFactory) newLocalMultiplexedInstance(nfUID string, vnf *models.VirtualNetworkFunction, containerID string) (*models.MultiplexedVnfInstance, *models.MultiplexedVnfGroup, error) {
+func (f *InstanceFactoryImpl) newLocalMultiplexedInstance(nfUID string, vnf *models.VirtualNetworkFunction, containerID string) (*models.MultiplexedVnfInstance, *models.MultiplexedVnfGroup, error) {
 	vnfGroup, _ := f.repo.FindLocalMultiplexedGroupByVnfID(nfUID)
 	if vnfGroup == nil {
 		vnfGroup = &models.MultiplexedVnfGroup{
@@ -234,7 +220,7 @@ func (f *InstanceFactory) newLocalMultiplexedInstance(nfUID string, vnf *models.
 	return instance, vnfGroup, nil
 }
 
-func (f *InstanceFactory) TeardownVnfInstance(containerID string) error {
+func (f *InstanceFactoryImpl) TeardownVnfInstance(containerID string) error {
 	instance, err := f.repo.FindVnfInstanceByContainerID(containerID)
 	if err == nil && instance != nil {
 		return f.deleteSimpleInstance(instance)
@@ -248,7 +234,7 @@ func (f *InstanceFactory) TeardownVnfInstance(containerID string) error {
 	return nil
 }
 
-func (f *InstanceFactory) deleteSimpleInstance(instance *models.SimpleVnfInstance) error {
+func (f *InstanceFactoryImpl) deleteSimpleInstance(instance *models.SimpleVnfInstance) error {
 	// Remove the instance from the dataplane
 	if err := f.dataplane.RemoveVNFInstance(instance.GroupID, instance.ID); err != nil {
 		return fmt.Errorf("failed to remove VNF instance from dataplane: %v", err)
@@ -278,7 +264,7 @@ func (f *InstanceFactory) deleteSimpleInstance(instance *models.SimpleVnfInstanc
 	return nil
 }
 
-func (f *InstanceFactory) deleteMultiplexedInstance(instance *models.MultiplexedVnfInstance) error {
+func (f *InstanceFactoryImpl) deleteMultiplexedInstance(instance *models.MultiplexedVnfInstance) error {
 	// Remove the instance from the dataplane
 	if err := f.dataplane.RemoveVNFInstance(instance.GroupID, instance.ID); err != nil {
 		return fmt.Errorf("failed to remove VNF instance from dataplane: %v", err)
@@ -308,7 +294,7 @@ func (f *InstanceFactory) deleteMultiplexedInstance(instance *models.Multiplexed
 	return nil
 }
 
-func (f *InstanceFactory) publishAssignmentsToP4Controller(vnfID string, groupID uuid.UUID, sidAssignments []models.SidAssignment) error {
+func (f *InstanceFactoryImpl) publishAssignmentsToP4Controller(vnfID string, groupID uuid.UUID, sidAssignments []models.SidAssignment) error {
 	type AssignmentPayload struct {
 		SubfunctionID uint32 `json:"subfunction_id"`
 		SID           string `json:"sid"`

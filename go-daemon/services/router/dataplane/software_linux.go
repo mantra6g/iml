@@ -16,17 +16,17 @@ import (
 )
 
 type Software struct {
-	appSubnets      map[uuid.UUID]*appSubnet
-	appMu						sync.Mutex
-	vnfSubnets      map[uuid.UUID]*vnfSubnet
-	vnfMu						sync.Mutex
-	routerVrf			  *netlink.Vrf
+	appSubnets map[uuid.UUID]*appSubnet
+	appMu      sync.Mutex
+	vnfSubnets map[uuid.UUID]*vnfSubnet
+	vnfMu      sync.Mutex
+	routerVrf  *netlink.Vrf
 
 	appNetAllocator *Subnet6Allocator
 	vnfNetAllocator *Subnet6Allocator
 	sidNetAllocator *Subnet6Allocator
 	tunNetAllocator *Subnet6Allocator
-	tableAllocator	*TableAllocator
+	tableAllocator  *TableAllocator
 }
 
 type appSubnet struct {
@@ -35,9 +35,10 @@ type appSubnet struct {
 	bridge        *netlink.Bridge
 	VethBridgeVRF *netlink.Veth
 	Vrf           *netlink.Vrf
-	Tunnel			  *netlink.Veth
+	Tunnel        *netlink.Veth
 	IPAllocator   *IPv6Allocator
 }
+
 func (as *appSubnet) Network() *net.IPNet {
 	return as.network
 }
@@ -58,6 +59,7 @@ type vnfSubnet struct {
 	Instances     map[uuid.UUID]net.IP
 	mu            sync.Mutex
 }
+
 func (vs *vnfSubnet) Network() *net.IPNet {
 	return vs.network
 }
@@ -71,7 +73,7 @@ func (vs *vnfSubnet) Bridge() string {
 	return vs.bridge.Attrs().Name
 }
 
-func NewSoftware(sidRange *net.IPNet, appRange *net.IPNet, vnfRange *net.IPNet, tunRange *net.IPNet) (*Software, error) {
+func NewSoftware(sidRange *net.IPNet, appRange *net.IPNet, vnfRange *net.IPNet, tunRange *net.IPNet) (Manager, error) {
 	// Enable IPv6 forwarding. Required in host namespace to route packets between interfaces.
 	if err := os.WriteFile("/proc/sys/net/ipv6/conf/all/forwarding", []byte("1"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to enable IPv6 forwarding: %w", err)
@@ -111,7 +113,7 @@ func NewSoftware(sidRange *net.IPNet, appRange *net.IPNet, vnfRange *net.IPNet, 
 		appNetAllocator: appNetAllocator,
 		vnfNetAllocator: vnfNetAllocator,
 		tunNetAllocator: tunNetAllocator,
-		tableAllocator:	 tableAllocator,
+		tableAllocator:  tableAllocator,
 		appSubnets:      make(map[uuid.UUID]*appSubnet),
 		vnfSubnets:      make(map[uuid.UUID]*vnfSubnet),
 	}
@@ -154,9 +156,9 @@ func (d *Software) AddRoute(srcAppGroup uuid.UUID, dstNet net.IPNet, sids []net.
 
 	// ip route add <dstNet> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
 	route := &netlink.Route{
-		Dst:        &dstNet,
-		Table:      int(subnet.Vrf.Table),
-		Encap:      &netlink.SEG6Encap{
+		Dst:   &dstNet,
+		Table: int(subnet.Vrf.Table),
+		Encap: &netlink.SEG6Encap{
 			Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
 			Segments: sids,
 		},
@@ -195,7 +197,7 @@ func (d *Software) RemoveRoute(srcAppGroup uuid.UUID, dstNet string) error {
 	return nil
 }
 
-// Creates a subnet into the dataplane and returns the configured bridge name. 
+// Creates a subnet into the dataplane and returns the configured bridge name.
 func (d *Software) AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error) {
 	d.appMu.Lock()
 	defer d.appMu.Unlock()
@@ -328,11 +330,11 @@ func (d *Software) AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error)
 		return nil, fmt.Errorf("failed to get link-local address for app tunnel in application subnet: %w", err)
 	}
 
-	// Create a route in the router VRF to reach the application subnet using 
+	// Create a route in the router VRF to reach the application subnet using
 	// the app tunnel as the outgoing interface.
 	routeToApp := &netlink.Route{
 		Dst:       AppNetwork,
-		Gw: 			 rtTunLLAddr.IP,
+		Gw:        rtTunLLAddr.IP,
 		Table:     int(d.routerVrf.Table),
 		LinkIndex: appTunnel.Attrs().Index,
 	}
@@ -345,7 +347,7 @@ func (d *Software) AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error)
 	// Create a route in the application VRF to reach the router subnet using
 	// the router tunnel as the outgoing interface.
 	routeToRouter := &netlink.Route{
-		Dst:       &net.IPNet{
+		Dst: &net.IPNet{
 			IP:   net.ParseIP("::"),
 			Mask: net.CIDRMask(0, 128),
 		},
@@ -373,7 +375,7 @@ func (d *Software) AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error)
 			Name:        bridgeName,
 			MasterIndex: appVrf.Attrs().Index,
 		},
-	}	
+	}
 	if err := netlink.LinkAdd(bridge); err != nil {
 		d.cleanupAppSubnet(subnet)
 		return nil, fmt.Errorf("failed to add bridge %s: %w", bridgeName, err)
@@ -386,7 +388,7 @@ func (d *Software) AddApplicationSubnet(appGroupID uuid.UUID) (AppSubnet, error)
 
 	vethFromBridgeToVrf := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: fmt.Sprintf("%s-%d", hexStr, appVrf.Table),
+			Name:        fmt.Sprintf("%s-%d", hexStr, appVrf.Table),
 			MasterIndex: bridge.Attrs().Index,
 		},
 		PeerName: fmt.Sprintf("%d-%s", appVrf.Table, hexStr),
@@ -428,7 +430,9 @@ func (d *Software) RemoveApplicationSubnet(appGroupID uuid.UUID) {
 	defer d.appMu.Unlock()
 
 	subnet, exists := d.appSubnets[appGroupID]
-	if !exists { return }
+	if !exists {
+		return
+	}
 	d.cleanupAppSubnet(subnet)
 	delete(d.appSubnets, appGroupID)
 }
@@ -508,9 +512,9 @@ func (d *Software) AddVNFSubnet(vnfGroupID uuid.UUID, sidAmount int) (VNFSubnet,
 
 	bridge := &netlink.Bridge{
 		LinkAttrs: netlink.LinkAttrs{
-			Name:        bridgeName,
+			Name: bridgeName,
 		},
-	}	
+	}
 	if err := netlink.LinkAdd(bridge); err != nil {
 		return nil, fmt.Errorf("failed to add bridge %s: %w", bridgeName, err)
 	}
@@ -522,7 +526,7 @@ func (d *Software) AddVNFSubnet(vnfGroupID uuid.UUID, sidAmount int) (VNFSubnet,
 
 	vethFromBridgeToVrf := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: fmt.Sprintf("%s-%d", hexStr, d.routerVrf.Table),
+			Name:        fmt.Sprintf("%s-%d", hexStr, d.routerVrf.Table),
 			MasterIndex: bridge.Attrs().Index,
 		},
 		PeerName: fmt.Sprintf("%d-%s", d.routerVrf.Table, hexStr),
@@ -565,7 +569,9 @@ func (d *Software) RemoveVNFSubnet(vnfGroupID uuid.UUID) {
 	defer d.vnfMu.Unlock()
 
 	subnet, exists := d.vnfSubnets[vnfGroupID]
-	if !exists { return }
+	if !exists {
+		return
+	}
 	d.cleanupVNFSubnet(subnet)
 	delete(d.vnfSubnets, vnfGroupID)
 }
@@ -576,7 +582,7 @@ func (d *Software) AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID)
 
 	subnet, exists := d.vnfSubnets[vnfGroupID]
 	if !exists {
-		return nil, "",fmt.Errorf("VNF subnet for group %s does not exist", vnfGroupID)
+		return nil, "", fmt.Errorf("VNF subnet for group %s does not exist", vnfGroupID)
 	}
 	subnet.mu.Lock()
 	defer subnet.mu.Unlock()
@@ -598,7 +604,7 @@ func (d *Software) AddVNFInstance(vnfGroupID uuid.UUID, vnfInstanceID uuid.UUID)
 		return nil, "", fmt.Errorf("failed to regenerate vnf subnet next hops: %w", err)
 	}
 	logger.DebugLogger().Printf("VNF subnet %s next hops after adding instance %s: %v", subnet.network.String(), vnfInstanceID, nextHops)
-	
+
 	for _, sid := range subnet.sids {
 		err = d.updateVNFSubnetSIDRoute(&sid, nextHops)
 		if err != nil {
@@ -709,7 +715,7 @@ func (d *Software) cleanupVNFSubnet(subnet *vnfSubnet) {
 }
 
 func (*Software) regenerateVNFSubnetNextHops(subnet *vnfSubnet) ([]*netlink.NexthopInfo, error) {
-	link, err := netlink.LinkByName(subnet.VethBridgeVRF.PeerName);
+	link, err := netlink.LinkByName(subnet.VethBridgeVRF.PeerName)
 	if err != nil {
 		logger.ErrorLogger().Printf("failed to get veth %s: %v", subnet.VethBridgeVRF.Attrs().Name, err)
 		return nil, err
@@ -805,12 +811,12 @@ func (d *Software) setUpRouterSubnet() error {
 	flags_end_dt6_encaps[nl.SEG6_LOCAL_ACTION] = true
 	flags_end_dt6_encaps[nl.SEG6_LOCAL_TABLE] = true
 	decapRoute := &netlink.Route{
-		Dst:       decapSid,
-		Table: 	int(routerVrf.Table),
+		Dst:   decapSid,
+		Table: int(routerVrf.Table),
 		Encap: &netlink.SEG6LocalEncap{
-			Flags:     flags_end_dt6_encaps,
+			Flags:  flags_end_dt6_encaps,
 			Action: nl.SEG6_LOCAL_ACTION_END_DT6,
-			Table: int(routerVrf.Table),
+			Table:  int(routerVrf.Table),
 		},
 		LinkIndex: decapIface.Attrs().Index,
 	}

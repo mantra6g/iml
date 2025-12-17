@@ -15,8 +15,8 @@ import (
 
 type CNIController struct {
 	repo       db.Registry
-	vnfFactory *vnfs.InstanceFactory
-	appFactory *apps.InstanceFactory
+	vnfFactory vnfs.InstanceFactory
+	appFactory apps.InstanceFactory
 }
 
 var validate *validator.Validate
@@ -200,7 +200,7 @@ func (c *CNIController) handleVnfInstanceTeardown(response http.ResponseWriter, 
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func InitializeCNIApi(appFactory *apps.InstanceFactory, vnfFactory *vnfs.InstanceFactory, repo db.Registry) (*http.Server, error) {
+func InitializeCNIApi(appFactory apps.InstanceFactory, vnfFactory vnfs.InstanceFactory, repo db.Registry) (*http.Server, error) {
 	// Validate the services
 	if appFactory == nil || vnfFactory == nil || repo == nil {
 		return nil, fmt.Errorf("appFactory, vnfFactory, and repo cannot be nil")
