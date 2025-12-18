@@ -20,7 +20,6 @@ import (
 	"context"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,28 +38,6 @@ type NetworkFunctionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Bus    *events.EventBus
-}
-
-type CNIArgs struct {
-	AppType string `json:"app_type"`
-	AppID   string `json:"app_id,omitempty"`
-	NFID    string `json:"nf_id,omitempty"`
-}
-
-type CNIConfig struct {
-	Name    string  `json:"name"`
-	CNIArgs CNIArgs `json:"cni-args"`
-}
-
-func (c CNIConfig) String() string {
-	return `{
-		"name": "` + c.Name + `",
-		"cni-args": {
-			"app_type": "` + c.CNIArgs.AppType + `",
-			"app_id": "` + c.CNIArgs.AppID + `",
-			"nf_id": "` + c.CNIArgs.NFID + `"
-		}
-	}`
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
@@ -169,56 +146,6 @@ func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(
 			Replicas: nf.Spec.Replicas,
 		},
 	}
-	// dep := &appsv1.Deployment{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name:      nf.Name,
-	// 		Namespace: nf.Namespace,
-	// 	},
-	// 	Spec: appsv1.DeploymentSpec{
-	// 		Replicas: nf.Spec.Replicas,
-	// 		Selector: &metav1.LabelSelector{
-	// 			MatchLabels: map[string]string{
-	// 				"app": nf.Name,
-	// 			},
-	// 		},
-	// 		Template: corev1.PodTemplateSpec{
-	// 			ObjectMeta: metav1.ObjectMeta{
-	// 				Labels: map[string]string{
-	// 					"app": nf.Name,
-	// 				},
-	// 				Annotations: map[string]string{
-	// 					"k8s.v1.cni.cncf.io/networks": "[" + CNIConfig{
-	// 						Name: "iml-cni",
-	// 						CNIArgs: CNIArgs{
-	// 							AppType: "network_function",
-	// 							NFID:    string(nf.UID),
-	// 						},
-	// 					}.String() + "]",
-	// 				},
-	// 			},
-	// 			Spec: corev1.PodSpec{
-	// 				Containers: nf.Spec.Containers,
-	// 			},
-	// 		},
-	// 	},
-	// }
-
-	// for i := range dep.Spec.Template.Spec.Containers {
-	// 	container := &dep.Spec.Template.Spec.Containers[i]
-	// 	if container.Env == nil {
-	// 		container.Env = []corev1.EnvVar{
-	// 			{
-	// 				Name:  "NF_ID",
-	// 				Value: string(nf.UID),
-	// 			},
-	// 		}
-	// 	} else {
-	// 		container.Env = append(container.Env, corev1.EnvVar{
-	// 			Name:  "NF_ID",
-	// 			Value: string(nf.UID),
-	// 		})
-	// 	}
-	// }
 
 	// Set the ownerRef for the Deployment, ensuring that the Deployment
 	// will be deleted when the Busybox CR is deleted.
@@ -230,7 +157,7 @@ func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(
 func (r *NetworkFunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cachev1alpha1.NetworkFunction{}).
-		Owns(&appsv1.Deployment{}).
-		Named("networkfunction").
+		Owns(&schedulingv1alpha1.NetworkFunctionDeployment{}).
+		Named("cache-networkfunction").
 		Complete(r)
 }

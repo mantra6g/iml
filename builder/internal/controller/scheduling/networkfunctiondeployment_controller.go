@@ -25,6 +25,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // NetworkFunctionDeploymentReconciler reconciles a NetworkFunctionDeployment object
@@ -47,9 +49,19 @@ type NetworkFunctionDeploymentReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *NetworkFunctionDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	deployment := &schedulingv1alpha1.NetworkFunctionDeployment{}
+	if err := r.Get(ctx, req.NamespacedName, deployment); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("NetworkFunctionDeployment resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "unable to fetch NetworkFunctionDeployment")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	logger.Info("Reconciling NetworkFunctionDeployment", "deployment", deployment.Name)
 
 	return ctrl.Result{}, nil
 }

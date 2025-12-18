@@ -25,6 +25,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1alpha1 "builder/api/core/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // P4TargetReconciler reconciles a P4Target object
@@ -47,9 +48,19 @@ type P4TargetReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var p4target *corev1alpha1.P4Target
+	if err := r.Get(ctx, req.NamespacedName, p4target); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("P4Target resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "unable to fetch P4Target")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	
 
 	return ctrl.Result{}, nil
 }

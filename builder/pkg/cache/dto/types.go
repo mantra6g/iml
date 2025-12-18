@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-
-
 type Versionable interface {
 	GetVersion() string
 	// SetVersion(string)

@@ -233,7 +233,7 @@ func (r *ServiceChainReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.mapApplicationsToRequests)).
 		Watches(&cachev1alpha1.NetworkFunction{},
 			handler.EnqueueRequestsFromMapFunc(r.mapNetworkFunctionsToRequests)).
-		Named("servicechain").
+		Named("cache-servicechain").
 		Complete(r)
 }
 
