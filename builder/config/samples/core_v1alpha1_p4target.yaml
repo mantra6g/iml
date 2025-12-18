@@ -1,0 +1,9 @@
+apiVersion: core.desire6g.eu/v1alpha1
+kind: P4Target
+metadata:
+  labels:
+    app.kubernetes.io/name: builder
+    app.kubernetes.io/managed-by: kustomize
+  name: p4target-sample
+spec:
+  # TODO(user): Add fields here

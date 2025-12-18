@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"builder/api/v1alpha1"
+	cachev1alpha1 "builder/api/cache/v1alpha1"
 	"builder/pkg/cache/dto"
 	"builder/pkg/events"
 	"fmt"
@@ -43,7 +43,7 @@ func New(eventbus *events.EventBus, logger logr.Logger) (*Service, error) {
 
 func (s *Service) handleAppUpdatedEvent(event events.Event) {
 	s.logger.Info("Received app update event", "event", event)
-	app, ok := event.Payload.(*v1alpha1.Application)
+	app, ok := event.Payload.(*cachev1alpha1.Application)
 	if !ok {
 		s.logger.Error(fmt.Errorf("invalid payload for AppUpdated event"), "handleAppUpdatedEvent error")
 		return
@@ -59,7 +59,7 @@ func (s *Service) handleAppUpdatedEvent(event events.Event) {
 
 func (s *Service) handleAppDeletedEvent(event events.Event) {
 	s.logger.Info("Received app delete event", "event", event)
-	app, ok := event.Payload.(*v1alpha1.Application)
+	app, ok := event.Payload.(*cachev1alpha1.Application)
 	if !ok {
 		s.logger.Error(fmt.Errorf("invalid payload for AppDeleted event"), "handleAppDeletedEvent error")
 		return
@@ -75,7 +75,7 @@ func (s *Service) handleAppDeletedEvent(event events.Event) {
 
 func (s *Service) handleNfUpdatedEvent(event events.Event) {
 	s.logger.Info("Received nf update event", "event", event)
-	nf, ok := event.Payload.(*v1alpha1.NetworkFunction)
+	nf, ok := event.Payload.(*cachev1alpha1.NetworkFunction)
 	if !ok {
 		s.logger.Error(fmt.Errorf("invalid payload for NfUpdated event"), "handleNfUpdatedEvent error")
 		return
@@ -87,7 +87,7 @@ func (s *Service) handleNfUpdatedEvent(event events.Event) {
 
 func (s *Service) handleNfDeletedEvent(event events.Event) {
 	s.logger.Info("Received nf delete event", "event", event)
-	nf, ok := event.Payload.(*v1alpha1.NetworkFunction)
+	nf, ok := event.Payload.(*cachev1alpha1.NetworkFunction)
 	if !ok {
 		s.logger.Error(fmt.Errorf("invalid payload for NfDeleted event"), "handleNfDeletedEvent error")
 		return
@@ -99,7 +99,7 @@ func (s *Service) handleNfDeletedEvent(event events.Event) {
 
 func (s *Service) handleChainUpdatedEvent(event events.Event) {
 	s.logger.Info("Received chain update event", "event", event)
-	chain, ok := event.Payload.(*v1alpha1.ServiceChain)
+	chain, ok := event.Payload.(*cachev1alpha1.ServiceChain)
 	if !ok {
 		s.logger.Error(fmt.Errorf("invalid payload for ChainUpdated event"), "handleChainUpdatedEvent error")
 		return
@@ -111,7 +111,7 @@ func (s *Service) handleChainUpdatedEvent(event events.Event) {
 
 func (s *Service) handleChainDeletedEvent(event events.Event) {
 	s.logger.Info("Received chain delete event", "event", event)
-	chain, ok := event.Payload.(*v1alpha1.ServiceChain)
+	chain, ok := event.Payload.(*cachev1alpha1.ServiceChain)
 	if !ok {
 		s.logger.Error(fmt.Errorf("invalid payload for ChainDeleted event"), "handleChainDeletedEvent error")
 		return
@@ -143,7 +143,7 @@ func (s *Service) GetApp(uid types.UID) (dto.ApplicationDefinition, error) {
 	return getEntry(s.appCache, uid)
 }
 
-func (s *Service) UpdateApp(appID types.UID, app *v1alpha1.Application) error {
+func (s *Service) UpdateApp(appID types.UID, app *cachev1alpha1.Application) error {
 	seq := getNextSeq(s.appCache, appID)
 	appDef := dto.ApplicationDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
@@ -191,7 +191,7 @@ func (s *Service) GetNF(nfID types.UID) (dto.NetworkFunctionDefinition, error) {
 	return getEntry(s.nfCache, nfID)
 }
 
-func (s *Service) UpdateNF(nfID types.UID, nf *v1alpha1.NetworkFunction) error {
+func (s *Service) UpdateNF(nfID types.UID, nf *cachev1alpha1.NetworkFunction) error {
 	nfDef := dto.NetworkFunctionDefinition{
 		ObjectMetadata: dto.ObjectMetadata{
 			Version:   "1.0",
@@ -202,16 +202,6 @@ func (s *Service) UpdateNF(nfID types.UID, nf *v1alpha1.NetworkFunction) error {
 		ID:        string(nfID),
 		Name:      nf.Name,
 		Namespace: nf.Namespace,
-		Type: 		 nf.Spec.Type,
-		SubFunctions: func(subFuncs []v1alpha1.SubFunctionSpec) []dto.SubFunctionDefinition {
-			defs := make([]dto.SubFunctionDefinition, len(subFuncs))
-			for i, sf := range subFuncs {
-				defs[i] = dto.SubFunctionDefinition{
-					ID:   sf.ID,
-				}
-			}
-			return defs
-		}(nf.Spec.SubFunctions),
 	}
 	err := updateEntry(s.nfCache, nfID, nfDef)
 	if err != nil {
@@ -256,7 +246,7 @@ func (s *Service) ListServiceChains() []dto.ServiceChainDefinition {
 	return s.chainCache.List()
 }
 
-func (s *Service) UpdateServiceChain(chainID types.UID, chain *v1alpha1.ServiceChain) error {
+func (s *Service) UpdateServiceChain(chainID types.UID, chain *cachev1alpha1.ServiceChain) error {
 	seq := getNextSeq(s.chainCache, chainID)
 	chainDef := dto.ServiceChainDefinition{
 		ObjectMetadata: dto.ObjectMetadata{

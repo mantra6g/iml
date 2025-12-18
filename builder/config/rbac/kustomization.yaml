@@ -22,13 +22,22 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the builder itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- servicechain_admin_role.yaml
-- servicechain_editor_role.yaml
-- servicechain_viewer_role.yaml
-- networkfunction_admin_role.yaml
-- networkfunction_editor_role.yaml
-- networkfunction_viewer_role.yaml
-- application_admin_role.yaml
-- application_editor_role.yaml
-- application_viewer_role.yaml
+- scheduling_networkfunctiondeployment_admin_role.yaml
+- scheduling_networkfunctiondeployment_editor_role.yaml
+- scheduling_networkfunctiondeployment_viewer_role.yaml
+- infra_p4targetset_admin_role.yaml
+- infra_p4targetset_editor_role.yaml
+- infra_p4targetset_viewer_role.yaml
+- core_p4target_admin_role.yaml
+- core_p4target_editor_role.yaml
+- core_p4target_viewer_role.yaml
+- cache_servicechain_admin_role.yaml
+- cache_servicechain_editor_role.yaml
+- cache_servicechain_viewer_role.yaml
+- cache_networkfunction_admin_role.yaml
+- cache_networkfunction_editor_role.yaml
+- cache_networkfunction_viewer_role.yaml
+- cache_application_admin_role.yaml
+- cache_application_editor_role.yaml
+- cache_application_viewer_role.yaml
 

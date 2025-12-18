@@ -63,11 +63,6 @@ spec:
                     namespace:
                       description: Namespace of the NetworkFunction
                       type: string
-                    subFunctionID:
-                      description: SubFunctionID is the ID of the sub-function within
-                        the NetworkFunction
-                      format: int32
-                      type: integer
                   required:
                   - name
                   - namespace
@@ -99,19 +94,7 @@ spec:
               functions:
                 description: UID of the intermediate functions.
                 items:
-                  description: FunctionIdentifier uniquely identifies a network function
-                    and an optional sub-function
-                  properties:
-                    function_uid:
-                      description: UID of the network function.
-                      type: string
-                    sub_function_id:
-                      description: ID of the sub-function within the network function.
-                      format: int32
-                      type: integer
-                  required:
-                  - function_uid
-                  type: object
+                  type: string
                 type: array
               src_app_uid:
                 description: UID of the source application.

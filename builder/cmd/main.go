@@ -1,3 +1,19 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
@@ -21,8 +37,14 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	cachev1alpha1 "builder/api/v1alpha1"
-	"builder/internal/controller"
+	cachev1alpha1 "builder/api/cache/v1alpha1"
+	corev1alpha1 "builder/api/core/v1alpha1"
+	infrav1alpha1 "builder/api/infra/v1alpha1"
+	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+	cachecontroller "builder/internal/controller/cache"
+	corecontroller "builder/internal/controller/core"
+	infracontroller "builder/internal/controller/infra"
+	schedulingcontroller "builder/internal/controller/scheduling"
 	"builder/pkg/appchains"
 	"builder/pkg/cache"
 	"builder/pkg/events"
@@ -40,6 +62,9 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(cachev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(infrav1alpha1.AddToScheme(scheme))
+	utilruntime.Must(schedulingv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -217,7 +242,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ApplicationReconciler{
+	if err := (&cachecontroller.ApplicationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Bus:    eventbus,
@@ -225,7 +250,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
 	}
-	if err := (&controller.NetworkFunctionReconciler{
+	if err := (&cachecontroller.NetworkFunctionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Bus:    eventbus,
@@ -233,12 +258,33 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)
 	}
-	if err := (&controller.ServiceChainReconciler{
+	if err := (&cachecontroller.ServiceChainReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
+		os.Exit(1)
+	}
+	if err := (&corecontroller.P4TargetReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
+		os.Exit(1)
+	}
+	if err := (&infracontroller.P4TargetSetReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "P4TargetSet")
+		os.Exit(1)
+	}
+	if err := (&schedulingcontroller.NetworkFunctionDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionDeployment")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

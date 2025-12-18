@@ -1,7 +1,6 @@
 package dto
 
 import (
-	"builder/api/v1alpha1"
 	"time"
 )
 
@@ -44,8 +43,6 @@ type ApplicationDefinition struct {
 	Namespace string    `json:"namespace"`
 }
 
-type NetworkFunctionType = v1alpha1.NetworkFunctionType
-
 type SubFunctionDefinition struct {
 	ID   uint32 `json:"id"`
 }
@@ -55,8 +52,6 @@ type NetworkFunctionDefinition struct {
 	ID           string                  `json:"id"`
 	Name         string                  `json:"name"`
 	Namespace    string                  `json:"namespace"`
-	Type         NetworkFunctionType     `json:"type"`
-	SubFunctions []SubFunctionDefinition `json:"sub_functions"`
 }
 
 type ApplicationServiceChains struct {
@@ -65,7 +60,6 @@ type ApplicationServiceChains struct {
 	Chains    []string  `json:"chains"`
 }
 
-type FunctionIdentifier = v1alpha1.FunctionIdentifier
 
 type ServiceChainDefinition struct {
 	ObjectMetadata
@@ -74,5 +68,5 @@ type ServiceChainDefinition struct {
 	Namespace string    `json:"namespace"`
 	SrcAppID  string    `json:"src_app_id"`
 	DstAppID  string    `json:"dst_app_id"`
-	Functions []FunctionIdentifier  `json:"functions"`
+	Functions []string  `json:"functions"`
 }

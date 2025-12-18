@@ -3,4 +3,7 @@ resources:
 - cache_v1alpha1_application.yaml
 - cache_v1alpha1_networkfunction.yaml
 - cache_v1alpha1_servicechain.yaml
+- core_v1alpha1_p4target.yaml
+- infra_v1alpha1_p4targetset.yaml
+- scheduling_v1alpha1_networkfunctiondeployment.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

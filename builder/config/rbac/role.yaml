@@ -48,3 +48,81 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - core.desire6g.eu
+  resources:
+  - p4targets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.desire6g.eu
+  resources:
+  - p4targets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.desire6g.eu
+  resources:
+  - p4targets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - infra.desire6g.eu
+  resources:
+  - p4targetsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infra.desire6g.eu
+  resources:
+  - p4targetsets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - infra.desire6g.eu
+  resources:
+  - p4targetsets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctiondeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctiondeployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctiondeployments/status
+  verbs:
+  - get
+  - patch
+  - update

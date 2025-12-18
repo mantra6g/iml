@@ -6,6 +6,7 @@ cliVersion: 4.7.1
 domain: desire6g.eu
 layout:
 - go.kubebuilder.io/v4
+multigroup: true
 projectName: builder
 repo: builder
 resources:
@@ -16,7 +17,7 @@ resources:
   domain: desire6g.eu
   group: cache
   kind: Application
-  path: builder/api/v1alpha1
+  path: builder/api/cache/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -25,7 +26,7 @@ resources:
   domain: desire6g.eu
   group: cache
   kind: NetworkFunction
-  path: builder/api/v1alpha1
+  path: builder/api/cache/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -34,6 +35,31 @@ resources:
   domain: desire6g.eu
   group: cache
   kind: ServiceChain
-  path: builder/api/v1alpha1
+  path: builder/api/cache/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: desire6g.eu
+  group: core
+  kind: P4Target
+  path: builder/api/core/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: desire6g.eu
+  group: infra
+  kind: P4TargetSet
+  path: builder/api/infra/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: desire6g.eu
+  group: scheduling
+  kind: NetworkFunctionDeployment
+  path: builder/api/scheduling/v1alpha1
   version: v1alpha1
 version: "3"

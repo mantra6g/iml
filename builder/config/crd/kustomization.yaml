@@ -5,6 +5,9 @@ resources:
 - bases/cache.desire6g.eu_applications.yaml
 - bases/cache.desire6g.eu_networkfunctions.yaml
 - bases/cache.desire6g.eu_servicechains.yaml
+- bases/core.desire6g.eu_p4targets.yaml
+- bases/infra.desire6g.eu_p4targetsets.yaml
+- bases/scheduling.desire6g.eu_networkfunctiondeployments.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
