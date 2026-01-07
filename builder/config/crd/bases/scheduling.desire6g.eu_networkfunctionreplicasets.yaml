@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctiondeployments.scheduling.desire6g.eu
+  name: networkfunctionreplicasets.scheduling.desire6g.eu
 spec:
   group: scheduling.desire6g.eu
   names:
-    kind: NetworkFunctionDeployment
-    listKind: NetworkFunctionDeploymentList
-    plural: networkfunctiondeployments
-    singular: networkfunctiondeployment
+    kind: NetworkFunctionReplicaSet
+    listKind: NetworkFunctionReplicaSetList
+    plural: networkfunctionreplicasets
+    singular: networkfunctionreplicaset
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkFunctionDeployment is the Schema for the networkfunctiondeployments
+        description: NetworkFunctionReplicaSet is the Schema for the networkfunctionreplicasets
           API
         properties:
           apiVersion:
@@ -38,21 +38,36 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of NetworkFunctionDeployment
+            description: spec defines the desired state of NetworkFunctionReplicaSet
             properties:
+              p4File:
+                description: |-
+                  P4File is the actual P4 program file for the network function.
+                  It can be the actual p4program encoded in base64 or
+                  a s3://, http:// or https:// URL pointing to the P4 file location.
+                type: string
               replicas:
                 default: 1
                 description: Replicas is the number of desired replicas of the NetworkFunction
                 format: int32
                 type: integer
+              supportedTargets:
+                description: Supported target architectures for the network function
+                items:
+                  type: string
+                minItems: 1
+                type: array
+            required:
+            - p4File
+            - supportedTargets
             type: object
           status:
-            description: status defines the observed state of NetworkFunctionDeployment
+            description: status defines the observed state of NetworkFunctionReplicaSet
             properties:
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the
-                  NetworkFunctionDeployment's current state.
+                  NetworkFunctionReplicaSet's current state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -110,20 +125,20 @@ spec:
                 type: array
               currentReplicas:
                 description: CurrentReplicas is the current number of replicas of
-                  the NetworkFunction
+                  the NetworkFunctionBinding
                 format: int32
                 type: integer
               lastDeploymentTime:
-                description: LastDeploymentTime is the last time the NetworkFunctionDeployment
+                description: LastDeploymentTime is the last time the NetworkFunctionReplicaSet
                   was deployed
                 format: date-time
                 type: string
               phase:
-                description: Phase indicates the current phase of the NetworkFunctionDeployment
+                description: Phase indicates the current phase of the NetworkFunctionReplicaSet
                 type: string
               readyReplicas:
                 description: ReadyReplicas is the number of ready replicas of the
-                  NetworkFunction
+                  NetworkFunctionBinding
                 format: int32
                 type: integer
             type: object

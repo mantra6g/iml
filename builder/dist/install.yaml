@@ -68,20 +68,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctiondeployments.scheduling.desire6g.eu
+  name: networkfunctionbindings.scheduling.desire6g.eu
 spec:
   group: scheduling.desire6g.eu
   names:
-    kind: NetworkFunctionDeployment
-    listKind: NetworkFunctionDeploymentList
-    plural: networkfunctiondeployments
-    singular: networkfunctiondeployment
+    kind: NetworkFunctionBinding
+    listKind: NetworkFunctionBindingList
+    plural: networkfunctionbindings
+    singular: networkfunctionbinding
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkFunctionDeployment is the Schema for the networkfunctiondeployments
+        description: NetworkFunctionBinding is the Schema for the networkfunctionbindings
           API
         properties:
           apiVersion:
@@ -102,7 +102,64 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of NetworkFunctionDeployment
+            description: spec defines the desired state of NetworkFunctionBinding
+            properties:
+              foo:
+                description: foo is an example field of NetworkFunctionBinding. Edit
+                  networkfunctionbinding_types.go to remove/update
+                type: string
+            type: object
+          status:
+            description: status defines the observed state of NetworkFunctionBinding
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: networkfunctionreplicasets.scheduling.desire6g.eu
+spec:
+  group: scheduling.desire6g.eu
+  names:
+    kind: NetworkFunctionReplicaSet
+    listKind: NetworkFunctionReplicaSetList
+    plural: networkfunctionreplicasets
+    singular: networkfunctionreplicaset
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NetworkFunctionReplicaSet is the Schema for the networkfunctionreplicasets
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of NetworkFunctionReplicaSet
             properties:
               replicas:
                 default: 1
@@ -111,12 +168,12 @@ spec:
                 type: integer
             type: object
           status:
-            description: status defines the observed state of NetworkFunctionDeployment
+            description: status defines the observed state of NetworkFunctionReplicaSet
             properties:
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the
-                  NetworkFunctionDeployment's current state.
+                  NetworkFunctionReplicaSet's current state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -174,20 +231,20 @@ spec:
                 type: array
               currentReplicas:
                 description: CurrentReplicas is the current number of replicas of
-                  the NetworkFunction
+                  the NetworkFunctionBinding
                 format: int32
                 type: integer
               lastDeploymentTime:
-                description: LastDeploymentTime is the last time the NetworkFunctionDeployment
+                description: LastDeploymentTime is the last time the NetworkFunctionReplicaSet
                   was deployed
                 format: date-time
                 type: string
               phase:
-                description: Phase indicates the current phase of the NetworkFunctionDeployment
+                description: Phase indicates the current phase of the NetworkFunctionReplicaSet
                 type: string
               readyReplicas:
                 description: ReadyReplicas is the number of ready replicas of the
-                  NetworkFunction
+                  NetworkFunctionBinding
                 format: int32
                 type: integer
             type: object
@@ -352,6 +409,63 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+  name: p4targetdeployments.infra.desire6g.eu
+spec:
+  group: infra.desire6g.eu
+  names:
+    kind: P4TargetDeployment
+    listKind: P4TargetDeploymentList
+    plural: p4targetdeployments
+    singular: p4targetdeployment
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: P4TargetDeployment is the Schema for the p4targetdeployments
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of P4TargetDeployment
+            properties:
+              foo:
+                description: foo is an example field of P4TargetDeployment. Edit p4targetdeployment_types.go
+                  to remove/update
+                type: string
+            type: object
+          status:
+            description: status defines the observed state of P4TargetDeployment
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: p4targets.core.desire6g.eu
 spec:
   group: core.desire6g.eu
@@ -362,7 +476,11 @@ spec:
     singular: p4target
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API
@@ -534,162 +652,6 @@ spec:
                     format: int32
                     type: integer
                 type: object
-            type: object
-        required:
-        - spec
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
-  name: p4targetsets.infra.desire6g.eu
-spec:
-  group: infra.desire6g.eu
-  names:
-    kind: P4TargetSet
-    listKind: P4TargetSetList
-    plural: p4targetsets
-    singular: p4targetset
-  scope: Cluster
-  versions:
-  - name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        description: P4TargetSet is the Schema for the p4targetsets API
-        properties:
-          apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-            type: string
-          kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: spec defines the desired state of P4TargetSet
-            properties:
-              cpus:
-                default: 1
-                description: CPUs is the number of CPUs allocated to each P4 target
-                  instance
-                format: int32
-                minimum: 1
-                type: integer
-              memory:
-                default: 512
-                description: Memory is the amount of memory (in MiB) allocated to
-                  each P4 target instance
-                format: int32
-                minimum: 128
-                type: integer
-              replicas:
-                default: 1
-                description: Replicas is the number of desired replicas of the P4
-                  target set
-                format: int32
-                minimum: 1
-                type: integer
-              targetClass:
-                description: Architecture is the target architecture of the P4 target
-                  set
-                enum:
-                - bmv2
-                type: string
-            required:
-            - targetClass
-            type: object
-          status:
-            description: status defines the observed state of P4TargetSet
-            properties:
-              conditions:
-                items:
-                  description: Condition contains details for one aspect of the current
-                    state of this API Resource.
-                  properties:
-                    lastTransitionTime:
-                      description: |-
-                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                      format: date-time
-                      type: string
-                    message:
-                      description: |-
-                        message is a human readable message indicating details about the transition.
-                        This may be an empty string.
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      description: |-
-                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                        with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      description: |-
-                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                        Producers of specific condition types may define expected values and meanings for this field,
-                        and whether the values are considered a guaranteed API.
-                        The value should be a CamelCase string.
-                        This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
-              currentReplicas:
-                description: CurrentReplicas is the number of created replicas of
-                  the P4 target set
-                format: int32
-                type: integer
-              failedReplicas:
-                description: FailedReplicas is the number of failed replicas of the
-                  P4 target set
-                format: int32
-                type: integer
-              phase:
-                description: Phase is the current phase of the P4 target set
-                type: string
-              readyReplicas:
-                description: ReadyReplicas is the number of ready replicas of the
-                  P4 target set
-                format: int32
-                type: integer
             type: object
         required:
         - spec
@@ -1152,18 +1114,18 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: builder
-  name: iml-infra-p4targetset-admin-role
+  name: iml-infra-p4targetdeployment-admin-role
 rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets
+  - p4targetdeployments
   verbs:
   - '*'
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/status
+  - p4targetdeployments/status
   verbs:
   - get
 ---
@@ -1173,12 +1135,12 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: builder
-  name: iml-infra-p4targetset-editor-role
+  name: iml-infra-p4targetdeployment-editor-role
 rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets
+  - p4targetdeployments
   verbs:
   - create
   - delete
@@ -1190,7 +1152,7 @@ rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/status
+  - p4targetdeployments/status
   verbs:
   - get
 ---
@@ -1200,12 +1162,12 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: builder
-  name: iml-infra-p4targetset-viewer-role
+  name: iml-infra-p4targetdeployment-viewer-role
 rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets
+  - p4targetdeployments
   verbs:
   - get
   - list
@@ -1213,7 +1175,7 @@ rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/status
+  - p4targetdeployments/status
   verbs:
   - get
 ---
@@ -1295,7 +1257,7 @@ rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets
+  - p4targetdeployments
   verbs:
   - create
   - delete
@@ -1307,13 +1269,13 @@ rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/finalizers
+  - p4targetdeployments/finalizers
   verbs:
   - update
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/status
+  - p4targetdeployments/status
   verbs:
   - get
   - patch
@@ -1321,7 +1283,8 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionbindings
+  - networkfunctionreplicasets
   verbs:
   - create
   - delete
@@ -1333,13 +1296,15 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/finalizers
+  - networkfunctionbindings/finalizers
+  - networkfunctionreplicasets/finalizers
   verbs:
   - update
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionbindings/status
+  - networkfunctionreplicasets/status
   verbs:
   - get
   - patch
@@ -1379,18 +1344,18 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: builder
-  name: iml-scheduling-networkfunctiondeployment-admin-role
+  name: iml-scheduling-networkfunctionbinding-admin-role
 rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionbindings
   verbs:
   - '*'
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionbindings/status
   verbs:
   - get
 ---
@@ -1400,12 +1365,12 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: builder
-  name: iml-scheduling-networkfunctiondeployment-editor-role
+  name: iml-scheduling-networkfunctionbinding-editor-role
 rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionbindings
   verbs:
   - create
   - delete
@@ -1417,7 +1382,7 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionbindings/status
   verbs:
   - get
 ---
@@ -1427,12 +1392,12 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: builder
-  name: iml-scheduling-networkfunctiondeployment-viewer-role
+  name: iml-scheduling-networkfunctionbinding-viewer-role
 rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionbindings
   verbs:
   - get
   - list
@@ -1440,7 +1405,78 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionbindings/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-scheduling-networkfunctionreplicaset-admin-role
+rules:
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctionreplicasets
+  verbs:
+  - '*'
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctionreplicasets/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-scheduling-networkfunctionreplicaset-editor-role
+rules:
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctionreplicasets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctionreplicasets/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: builder
+  name: iml-scheduling-networkfunctionreplicaset-viewer-role
+rules:
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctionreplicasets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - scheduling.desire6g.eu
+  resources:
+  - networkfunctionreplicasets/status
   verbs:
   - get
 ---

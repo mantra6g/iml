@@ -59,13 +59,13 @@ func InitializeSouthboundAPI(cache *cache.Service, logger logr.Logger) (*http.Se
 	}
 
 	controller := &SouthboundAPIController{
-		ClusterCIDR:      iplib.Net6FromStr("fd00::/15"),
-		AppNetAllocator:  appNetAllocator,
-		NFNetAllocator:   nfNetAllocator,
-		SIDNetAllocator:  sidNetAllocator,
-		TunNetAllocator:  tunNetAllocator,
-		Cache:            cache,
-		logger:           logger,
+		ClusterCIDR:     iplib.Net6FromStr("fd00::/15"),
+		AppNetAllocator: appNetAllocator,
+		NFNetAllocator:  nfNetAllocator,
+		SIDNetAllocator: sidNetAllocator,
+		TunNetAllocator: tunNetAllocator,
+		Cache:           cache,
+		logger:          logger,
 	}
 	router := mux.NewRouter()
 	server := &http.Server{

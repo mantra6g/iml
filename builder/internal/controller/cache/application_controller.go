@@ -33,7 +33,7 @@ import (
 type ApplicationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Bus    *events.EventBus
+	Bus    events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications,verbs=get;list;watch;create;update;patch;delete

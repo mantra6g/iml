@@ -25,7 +25,6 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-
 type ApplicationReference struct {
 	// Name of the Application
 	// +required
@@ -35,13 +34,13 @@ type ApplicationReference struct {
 	// +required
 	Namespace string `json:"namespace"`
 }
+
 func (app ApplicationReference) GetObjectKey() client.ObjectKey {
 	return client.ObjectKey{
 		Namespace: app.Namespace,
 		Name:      app.Name,
 	}
 }
-
 
 type NetworkFunctionReference struct {
 	// Name of the NetworkFunction
@@ -52,6 +51,7 @@ type NetworkFunctionReference struct {
 	// +required
 	Namespace string `json:"namespace"`
 }
+
 func (nf NetworkFunctionReference) GetObjectKey() client.ObjectKey {
 	return client.ObjectKey{
 		Namespace: nf.Namespace,

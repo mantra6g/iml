@@ -2,20 +2,19 @@ package events
 
 import "sync"
 
-
 const (
-	EventAppPreUpdated = "app:updated:pre"
-	EventAppUpdated    = "app:updated"
-	EventAppPreDeleted = "app:deleted:pre"
-	EventAppDeleted    = "app:deleted"
-	EventNfPreUpdated  = "nf:updated:pre"
-	EventNfUpdated     = "nf:updated"
-	EventNfPreDeleted  = "nf:deleted:pre"
-	EventNfDeleted     = "nf:deleted"
-	EventChainPreUpdated = "chain:updated:pre"
-	EventChainUpdated    = "chain:updated"
-	EventChainPreDeleted = "chain:deleted:pre"
-	EventChainDeleted    = "chain:deleted"
+	EventAppPreUpdated       = "app:updated:pre"
+	EventAppUpdated          = "app:updated"
+	EventAppPreDeleted       = "app:deleted:pre"
+	EventAppDeleted          = "app:deleted"
+	EventNfPreUpdated        = "nf:updated:pre"
+	EventNfUpdated           = "nf:updated"
+	EventNfPreDeleted        = "nf:deleted:pre"
+	EventNfDeleted           = "nf:deleted"
+	EventChainPreUpdated     = "chain:updated:pre"
+	EventChainUpdated        = "chain:updated"
+	EventChainPreDeleted     = "chain:deleted:pre"
+	EventChainDeleted        = "chain:deleted"
 	EventAppChainsPreUpdated = "app_services:updated:pre"
 	EventAppChainsUpdated    = "app_services:updated"
 )
@@ -36,9 +35,15 @@ type subscription struct {
 	handler Handler
 }
 
-// EventBus provides publish/subscribe capabilities for domain events.
-type EventBus struct {
+type EventBusImpl struct {
 	subscribers map[string][]subscription // map of event name -> list of subscriptions
 	mu          sync.RWMutex              // protects subscribers
 	nextID      uint64                    // incremental ID generator
+}
+
+// EventBus provides publish/subscribe capabilities for domain events.
+type EventBus interface {
+	Subscribe(eventName string, handler Handler) uint64
+	Unsubscribe(eventName string, id uint64)
+	Publish(event Event)
 }

@@ -20,28 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 const (
 	TARGET_BMV2 = "bmv2"
-	// TARGET_TOFINO = "tofino"
-	// TARGET_XDP 	 = "xdp"
+	// TARGET_TOFINO  = "tofino"
+	// TARGET_XDP 	   = "xdp"
 	// TARGET_DPDK 	 = "dpdk"
 )
 
-// NetworkFunctionSpec defines the desired state of NetworkFunction
-type NetworkFunctionSpec struct {
+// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// NetworkFunctionBindingSpec defines the desired state of NetworkFunctionBinding
+type NetworkFunctionBindingSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// Replicas is the number of desired replicas of the network function
-	// +optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Supported target architectures for the network function
 	// +required
@@ -56,54 +50,52 @@ type NetworkFunctionSpec struct {
 	P4File string `json:"p4File,omitempty"`
 }
 
-// NetworkFunctionStatus defines the observed state of NetworkFunction.
-type NetworkFunctionStatus struct {
+// NetworkFunctionBindingStatus defines the observed state of NetworkFunctionBinding.
+type NetworkFunctionBindingStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Phase indicates the current phase of the NetworkFunction
+	// Phase indicates the current phase of the NetworkFunctionBinding
 	Phase string `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the
-	// NetworkFunction's current state.
+	// NetworkFunctionBinding's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// CurrentReplicas is the current number of replicas of the network function
-	CurrentReplicas int32 `json:"currentReplicas,omitempty"`
-
-	// ReadyReplicas is the number of ready replicas of the network function
-	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	// AssignedTarget is the name of the P4Target where this NetworkFunction instance
+	// will be running on.
+	AssignedTarget string `json:"assignedTarget,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// NetworkFunction is the Schema for the networkfunctions API
-type NetworkFunction struct {
+// NetworkFunctionBinding is the Schema for the networkfunctionbindings API
+type NetworkFunctionBinding struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of NetworkFunction
+	// spec defines the desired state of NetworkFunctionBinding
 	// +required
-	Spec NetworkFunctionSpec `json:"spec"`
+	Spec NetworkFunctionBindingSpec `json:"spec"`
 
-	// status defines the observed state of NetworkFunction
+	// status defines the observed state of NetworkFunctionBinding
 	// +optional
-	Status NetworkFunctionStatus `json:"status,omitempty,omitzero"`
+	Status NetworkFunctionBindingStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// NetworkFunctionList contains a list of NetworkFunction
-type NetworkFunctionList struct {
+// NetworkFunctionBindingList contains a list of NetworkFunctionBinding
+type NetworkFunctionBindingList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []NetworkFunction `json:"items"`
+	Items           []NetworkFunctionBinding `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&NetworkFunction{}, &NetworkFunctionList{})
+	SchemeBuilder.Register(&NetworkFunctionBinding{}, &NetworkFunctionBindingList{})
 }

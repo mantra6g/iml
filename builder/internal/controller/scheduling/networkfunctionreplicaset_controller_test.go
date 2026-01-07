@@ -30,7 +30,7 @@ import (
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 )
 
-var _ = Describe("NetworkFunctionDeployment Controller", func() {
+var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,16 +40,22 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		networkfunctiondeployment := &schedulingv1alpha1.NetworkFunctionDeployment{}
+		networkfunctionreplicaset := &schedulingv1alpha1.NetworkFunctionReplicaSet{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind NetworkFunctionDeployment")
-			err := k8sClient.Get(ctx, typeNamespacedName, networkfunctiondeployment)
+			By("creating the custom resource for the Kind NetworkFunctionReplicaSet")
+			err := k8sClient.Get(ctx, typeNamespacedName, networkfunctionreplicaset)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &schedulingv1alpha1.NetworkFunctionDeployment{
+				replicas := int32(1)
+				resource := &schedulingv1alpha1.NetworkFunctionReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
+					},
+					Spec: schedulingv1alpha1.NetworkFunctionReplicaSetSpec{
+						Replicas:         &replicas,
+						SupportedTargets: []string{schedulingv1alpha1.TARGET_BMV2},
+						P4File:           "https://example.com/p4file.p4",
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -59,16 +65,17 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &schedulingv1alpha1.NetworkFunctionDeployment{}
+			resource := &schedulingv1alpha1.NetworkFunctionReplicaSet{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance NetworkFunctionDeployment")
+			By("Cleanup the specific resource instance NetworkFunctionReplicaSet")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &NetworkFunctionDeploymentReconciler{
+			controllerReconciler := &NetworkFunctionReplicaSetReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

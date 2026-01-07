@@ -23,46 +23,19 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type TargetClass string
 const (
-	BMv2      TargetClass = "bmv2"
-	// Tofino 	  TargetClass = "tofino"
-	// XDP 		  TargetClass = "xdp"
-	// DPDK 		  TargetClass = "dpdk"
+	TARGET_BMV2   = "bmv2"
+	TARGET_TOFINO = "tofino"
+	// TARGET_XDP  = "xdp"
+	// TARGET_DPDK = "dpdk"
 )
 
-type EndpointDetails struct {
-	// ManagementAddress is the management IP address of the P4 target
-	// +required
-	ManagementAddress string `json:"mgmtAddress,omitempty"`
-
-	// P4RuntimePort is the P4Runtime gRPC port of the P4 target
-	// +required
-	P4RuntimePort int32 `json:"p4runtimePort,omitempty"`
-
-	// GNMIPort is the gNMI gRPC port of the P4 target
-	// +required
-  GNMIport int32 `json:"gnmiPort,omitempty"`
-}
-
-type ResourceRequirements struct {
-	// CPU is the number of CPUs allocated to the P4 target
-	// +optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	CPU *int32 `json:"cpu,omitempty"`
-
-	// Memory is the amount of memory (in MiB) allocated to the P4 target
-	// +optional
-	// +kubebuilder:default=512
-	// +kubebuilder:validation:Minimum=128
-	Memory *int32 `json:"memory,omitempty"`
-}
-
-type ResourceList struct {
-	CPUs int32 `json:"cpus,omitempty"`
-	Memory int32 `json:"memory,omitempty"`
-}
+const (
+	P4_TARGET_PHASE_PENDING   = "Pending"
+	P4_TARGET_PHASE_READY     = "Ready"
+	P4_TARGET_PHASE_NOT_READY = "NotReady"
+	P4_TARGET_PHASE_UNKNOWN   = "Unknown"
+)
 
 // P4TargetSpec defines the desired state of P4Target
 type P4TargetSpec struct {
@@ -74,15 +47,7 @@ type P4TargetSpec struct {
 	// TargetClass is the target class of the P4 target
 	// +required
 	// +kubebuilder:validation:Enum=bmv2
-	TargetClass TargetClass `json:"targetClass,omitempty"`
-
-	// Endpoint defines the connection details of the P4 target
-	// +required
-	Endpoint EndpointDetails `json:"endpoint,omitempty"`
-
-	// Resources defines the compute resources allocated to the P4 target
-	// +optional
-	Resources ResourceRequirements `json:"resources,omitempty"`
+	TargetClass string `json:"targetClass,omitempty"`
 }
 
 // P4TargetStatus defines the observed state of P4Target.
@@ -95,14 +60,8 @@ type P4TargetStatus struct {
 
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Capacity is the total amount of resources on the P4 target
-	Capacity ResourceList `json:"capacity,omitempty"`
-
-	// Allocatable is the amount of resources allocatable on the P4 target
-	Allocatable ResourceList `json:"allocatable,omitempty"`
-
-	// Used is the amount of resources currently used on the P4 target
-	Used ResourceList `json:"used,omitempty"`
+	// Ready indicates if the underlying P4 target is ready to accept network functions
+	Ready bool `json:"ready,omitempty"`
 
 	// LastHeartbeatTime is the last time the P4 target sent a heartbeat
 	LastHeartbeatTime metav1.Time `json:"lastHeartbeatTime,omitempty"`
@@ -111,6 +70,7 @@ type P4TargetStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"
 
 // P4Target is the Schema for the p4targets API
 type P4Target struct {

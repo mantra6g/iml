@@ -13,19 +13,19 @@ import (
 )
 
 type Service struct {
-	cache  *cache.Service
-	bus    *events.EventBus
-	logger logr.Logger
+	cache        *cache.Service
+	bus          events.EventBus
+	logger       logr.Logger
 	eventChannel chan events.Event
-	ctx    context.Context
-	ctxCancel context.CancelFunc
+	ctx          context.Context
+	ctxCancel    context.CancelFunc
 }
 
 type Result struct {
-	Requeue      bool
+	Requeue bool
 }
 
-func NewService(cache *cache.Service, bus *events.EventBus, logger logr.Logger) (*Service, error) {
+func NewService(cache *cache.Service, bus events.EventBus, logger logr.Logger) (*Service, error) {
 	if cache == nil {
 		return nil, fmt.Errorf("cache service is required")
 	}
@@ -35,11 +35,11 @@ func NewService(cache *cache.Service, bus *events.EventBus, logger logr.Logger) 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	service := &Service{
-		cache: cache,
-		bus:   bus,
-		logger: logger,
-		ctx: ctx,
-		ctxCancel: cancel,
+		cache:        cache,
+		bus:          bus,
+		logger:       logger,
+		ctx:          ctx,
+		ctxCancel:    cancel,
 		eventChannel: make(chan events.Event),
 	}
 

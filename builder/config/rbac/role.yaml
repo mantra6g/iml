@@ -77,7 +77,7 @@ rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets
+  - p4targetdeployments
   verbs:
   - create
   - delete
@@ -89,13 +89,13 @@ rules:
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/finalizers
+  - p4targetdeployments/finalizers
   verbs:
   - update
 - apiGroups:
   - infra.desire6g.eu
   resources:
-  - p4targetsets/status
+  - p4targetdeployments/status
   verbs:
   - get
   - patch
@@ -103,7 +103,8 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionbindings
+  - networkfunctionreplicasets
   verbs:
   - create
   - delete
@@ -115,13 +116,15 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/finalizers
+  - networkfunctionbindings/finalizers
+  - networkfunctionreplicasets/finalizers
   verbs:
   - update
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionbindings/status
+  - networkfunctionreplicasets/status
   verbs:
   - get
   - patch

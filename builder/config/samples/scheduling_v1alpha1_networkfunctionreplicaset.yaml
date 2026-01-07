@@ -1,9 +1,9 @@
-apiVersion: infra.desire6g.eu/v1alpha1
-kind: P4TargetSet
+apiVersion: scheduling.desire6g.eu/v1alpha1
+kind: NetworkFunctionReplicaSet
 metadata:
   labels:
     app.kubernetes.io/name: builder
     app.kubernetes.io/managed-by: kustomize
-  name: p4targetset-sample
+  name: networkfunctionreplicaset-sample
 spec:
   # TODO(user): Add fields here

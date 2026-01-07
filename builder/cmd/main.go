@@ -273,18 +273,25 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 		os.Exit(1)
 	}
-	if err := (&infracontroller.P4TargetSetReconciler{
+	if err := (&schedulingcontroller.NetworkFunctionReplicaSetReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "P4TargetSet")
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionReplicaSet")
 		os.Exit(1)
 	}
-	if err := (&schedulingcontroller.NetworkFunctionDeploymentReconciler{
+	if err := (&schedulingcontroller.NetworkFunctionBindingReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionDeployment")
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionBinding")
+		os.Exit(1)
+	}
+	if err := (&infracontroller.P4TargetDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "P4TargetDeployment")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

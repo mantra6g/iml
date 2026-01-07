@@ -14,7 +14,7 @@ type Subnet6Allocator struct {
 }
 
 // Creates a new SubnetAllocator.
-// 
+//
 // It uses the given base ipv6 network to create subnets of the specified prefix length.
 func NewSubnet6Allocator(baseNet *net.IPNet, prefix int) (*Subnet6Allocator, error) {
 	if baseNet == nil {
@@ -49,6 +49,7 @@ type IPv6Allocator struct {
 	baseNet iplib.Net6
 	lastIP  net.IP
 }
+
 func NewIPv6Allocator(baseNet *net.IPNet) (*IPv6Allocator, error) {
 	if baseNet == nil {
 		return nil, fmt.Errorf("base network is nil")
@@ -84,6 +85,7 @@ type TableAllocator struct {
 	firstTableID int
 	lastAssigned int
 }
+
 func NewTableAllocator(firstID int) (*TableAllocator, error) {
 	if firstID <= 0 {
 		return nil, fmt.Errorf("table ID must be positive: %d", firstID)

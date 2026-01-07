@@ -14,11 +14,11 @@ import (
 
 type MQTTService struct {
 	broker *mqtt.Server
-	bus    *events.EventBus
+	bus    events.EventBus
 	logger logr.Logger
 }
 
-func Initialize(bus *events.EventBus, logger logr.Logger) (*MQTTService, error) {
+func Initialize(bus events.EventBus, logger logr.Logger) (*MQTTService, error) {
 	// Create the new MQTT Server.
 	server := mqtt.New(&mqtt.Options{
 		InlineClient: true,

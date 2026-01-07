@@ -23,24 +23,16 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const (
-	TARGET_BMV2 = "bmv2"
-	// TARGET_TOFINO = "tofino"
-	// TARGET_XDP 	 = "xdp"
-	// TARGET_DPDK 	 = "dpdk"
-)
-
-// NetworkFunctionSpec defines the desired state of NetworkFunction
-type NetworkFunctionSpec struct {
+// NetworkFunctionReplicaSetSpec defines the desired state of NetworkFunctionReplicaSet
+type NetworkFunctionReplicaSetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// Replicas is the number of desired replicas of the network function
+	// Replicas is the number of desired replicas of the NetworkFunction
 	// +optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default:=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Supported target architectures for the network function
@@ -56,54 +48,57 @@ type NetworkFunctionSpec struct {
 	P4File string `json:"p4File,omitempty"`
 }
 
-// NetworkFunctionStatus defines the observed state of NetworkFunction.
-type NetworkFunctionStatus struct {
+// NetworkFunctionReplicaSetStatus defines the observed state of NetworkFunctionReplicaSet.
+type NetworkFunctionReplicaSetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Phase indicates the current phase of the NetworkFunction
+	// Phase indicates the current phase of the NetworkFunctionReplicaSet
 	Phase string `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the
-	// NetworkFunction's current state.
+	// NetworkFunctionReplicaSet's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// CurrentReplicas is the current number of replicas of the network function
+	// LastDeploymentTime is the last time the NetworkFunctionReplicaSet was deployed
+	LastDeploymentTime metav1.Time `json:"lastDeploymentTime,omitempty"`
+
+	// CurrentReplicas is the current number of replicas of the NetworkFunctionBinding
 	CurrentReplicas int32 `json:"currentReplicas,omitempty"`
 
-	// ReadyReplicas is the number of ready replicas of the network function
+	// ReadyReplicas is the number of ready replicas of the NetworkFunctionBinding
 	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// NetworkFunction is the Schema for the networkfunctions API
-type NetworkFunction struct {
+// NetworkFunctionReplicaSet is the Schema for the networkfunctionreplicasets API
+type NetworkFunctionReplicaSet struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of NetworkFunction
+	// spec defines the desired state of NetworkFunctionReplicaSet
 	// +required
-	Spec NetworkFunctionSpec `json:"spec"`
+	Spec NetworkFunctionReplicaSetSpec `json:"spec"`
 
-	// status defines the observed state of NetworkFunction
+	// status defines the observed state of NetworkFunctionReplicaSet
 	// +optional
-	Status NetworkFunctionStatus `json:"status,omitempty,omitzero"`
+	Status NetworkFunctionReplicaSetStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// NetworkFunctionList contains a list of NetworkFunction
-type NetworkFunctionList struct {
+// NetworkFunctionReplicaSetList contains a list of NetworkFunctionReplicaSet
+type NetworkFunctionReplicaSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []NetworkFunction `json:"items"`
+	Items           []NetworkFunctionReplicaSet `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&NetworkFunction{}, &NetworkFunctionList{})
+	SchemeBuilder.Register(&NetworkFunctionReplicaSet{}, &NetworkFunctionReplicaSetList{})
 }

@@ -37,7 +37,7 @@ import (
 type NetworkFunctionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Bus    *events.EventBus
+	Bus    events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
@@ -98,18 +98,18 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Search for the deployment
-	found := &schedulingv1alpha1.NetworkFunctionDeployment{}
+	found := &schedulingv1alpha1.NetworkFunctionReplicaSet{}
 	err := r.Get(ctx, req.NamespacedName, found)
 	if err != nil && apierrors.IsNotFound(err) {
 		// Deployment not found, create it
-		dep := r.deploymentForNetworkFunction(nf)
+		dep := r.replicaSetForNetworkFunction(nf)
 
-		logger.Info("Creating a new NetworkFunctionDeployment", "NetworkFunctionDeployment.Namespace", dep.Namespace, "NetworkFunctionDeployment.Name", dep.Name)
+		logger.Info("Creating a new NetworkFunctionReplicaSet", "NetworkFunctionReplicaSet.Namespace", dep.Namespace, "NetworkFunctionReplicaSet.Name", dep.Name)
 		if err := r.Create(ctx, dep); err != nil {
-			logger.Error(err, "Failed to create new NetworkFunctionDeployment", "NetworkFunctionDeployment.Namespace", dep.Namespace, "NetworkFunctionDeployment.Name", dep.Name)
+			logger.Error(err, "Failed to create new NetworkFunctionReplicaSet", "NetworkFunctionReplicaSet.Namespace", dep.Namespace, "NetworkFunctionReplicaSet.Name", dep.Name)
 			return ctrl.Result{}, err
 		}
-		// NetworkFunctionDeployment created successfully - return and requeue
+		// NetworkFunctionReplicaSet created successfully - return and requeue
 		// to verify deployment exists.
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	} else if err != nil {
@@ -134,20 +134,22 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(
-	nf *cachev1alpha1.NetworkFunction) *schedulingv1alpha1.NetworkFunctionDeployment {
-	
-	dep := &schedulingv1alpha1.NetworkFunctionDeployment{
+func (r *NetworkFunctionReconciler) replicaSetForNetworkFunction(
+	nf *cachev1alpha1.NetworkFunction) *schedulingv1alpha1.NetworkFunctionReplicaSet {
+
+	dep := &schedulingv1alpha1.NetworkFunctionReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nf.Name,
 			Namespace: nf.Namespace,
 		},
-		Spec: schedulingv1alpha1.NetworkFunctionDeploymentSpec{
-			Replicas: nf.Spec.Replicas,
+		Spec: schedulingv1alpha1.NetworkFunctionReplicaSetSpec{
+			Replicas:         nf.Spec.Replicas,
+			SupportedTargets: nf.Spec.SupportedTargets,
+			P4File:           nf.Spec.P4File,
 		},
 	}
 
-	// Set the ownerRef for the Deployment, ensuring that the Deployment
+	// Set the ownerRef for the ReplicaSet, ensuring that the ReplicaSet
 	// will be deleted when the Busybox CR is deleted.
 	controllerutil.SetControllerReference(nf, dep, r.Scheme)
 	return dep
@@ -157,7 +159,7 @@ func (r *NetworkFunctionReconciler) deploymentForNetworkFunction(
 func (r *NetworkFunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cachev1alpha1.NetworkFunction{}).
-		Owns(&schedulingv1alpha1.NetworkFunctionDeployment{}).
+		Owns(&schedulingv1alpha1.NetworkFunctionReplicaSet{}).
 		Named("cache-networkfunction").
 		Complete(r)
 }

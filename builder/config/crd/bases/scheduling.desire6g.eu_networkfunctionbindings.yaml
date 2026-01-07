@@ -4,20 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: p4targetsets.infra.desire6g.eu
+  name: networkfunctionbindings.scheduling.desire6g.eu
 spec:
-  group: infra.desire6g.eu
+  group: scheduling.desire6g.eu
   names:
-    kind: P4TargetSet
-    listKind: P4TargetSetList
-    plural: p4targetsets
-    singular: p4targetset
-  scope: Cluster
+    kind: NetworkFunctionBinding
+    listKind: NetworkFunctionBindingList
+    plural: networkfunctionbindings
+    singular: networkfunctionbinding
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: P4TargetSet is the Schema for the p4targetsets API
+        description: NetworkFunctionBinding is the Schema for the networkfunctionbindings
+          API
         properties:
           apiVersion:
             description: |-
@@ -37,42 +38,36 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of P4TargetSet
+            description: spec defines the desired state of NetworkFunctionBinding
             properties:
-              cpus:
-                default: 1
-                description: CPUs is the number of CPUs allocated to each P4 target
-                  instance
-                format: int32
-                minimum: 1
-                type: integer
-              memory:
-                default: 512
-                description: Memory is the amount of memory (in MiB) allocated to
-                  each P4 target instance
-                format: int32
-                minimum: 128
-                type: integer
-              replicas:
-                default: 1
-                description: Replicas is the number of desired replicas of the P4
-                  target set
-                format: int32
-                minimum: 1
-                type: integer
-              targetClass:
-                description: Architecture is the target architecture of the P4 target
-                  set
-                enum:
-                - bmv2
+              p4File:
+                description: |-
+                  P4File is the actual P4 program file for the network function.
+                  It can be the actual p4program encoded in base64 or
+                  a s3://, http:// or https:// URL pointing to the P4 file location.
                 type: string
+              supportedTargets:
+                description: Supported target architectures for the network function
+                items:
+                  type: string
+                minItems: 1
+                type: array
             required:
-            - targetClass
+            - p4File
+            - supportedTargets
             type: object
           status:
-            description: status defines the observed state of P4TargetSet
+            description: status defines the observed state of NetworkFunctionBinding
             properties:
+              assignedTarget:
+                description: |-
+                  AssignedTarget is the name of the P4Target where this NetworkFunction instance
+                  will be running on.
+                type: string
               conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  NetworkFunctionBinding's current state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -128,24 +123,9 @@ spec:
                   - type
                   type: object
                 type: array
-              currentReplicas:
-                description: CurrentReplicas is the number of created replicas of
-                  the P4 target set
-                format: int32
-                type: integer
-              failedReplicas:
-                description: FailedReplicas is the number of failed replicas of the
-                  P4 target set
-                format: int32
-                type: integer
               phase:
-                description: Phase is the current phase of the P4 target set
+                description: Phase indicates the current phase of the NetworkFunctionBinding
                 type: string
-              readyReplicas:
-                description: ReadyReplicas is the number of ready replicas of the
-                  P4 target set
-                format: int32
-                type: integer
             type: object
         required:
         - spec

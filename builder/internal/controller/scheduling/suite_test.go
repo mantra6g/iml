@@ -32,6 +32,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	cachev1alpha1 "builder/api/cache/v1alpha1"
+	corev1alpha1 "builder/api/core/v1alpha1"
+	infrav1alpha1 "builder/api/infra/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -60,6 +63,12 @@ var _ = BeforeSuite(func() {
 
 	var err error
 	err = schedulingv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = corev1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = cachev1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = infrav1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

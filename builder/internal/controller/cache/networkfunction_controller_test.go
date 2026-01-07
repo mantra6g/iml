@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
+	"builder/test/mocks"
 )
 
 var _ = Describe("NetworkFunction Controller", func() {
@@ -46,10 +47,16 @@ var _ = Describe("NetworkFunction Controller", func() {
 			By("creating the custom resource for the Kind NetworkFunction")
 			err := k8sClient.Get(ctx, typeNamespacedName, networkfunction)
 			if err != nil && errors.IsNotFound(err) {
+				replicas := int32(1)
 				resource := &cachev1alpha1.NetworkFunction{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
+					},
+					Spec: cachev1alpha1.NetworkFunctionSpec{
+						Replicas:         &replicas,
+						SupportedTargets: []string{cachev1alpha1.TARGET_BMV2},
+						P4File:           "https://example.com/p4file.p4",
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -66,11 +73,15 @@ var _ = Describe("NetworkFunction Controller", func() {
 			By("Cleanup the specific resource instance NetworkFunction")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
+			fakeEventBus := &mocks.FakeEventBus{}
+
 			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Bus:    fakeEventBus,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

@@ -22,12 +22,15 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the builder itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- scheduling_networkfunctiondeployment_admin_role.yaml
-- scheduling_networkfunctiondeployment_editor_role.yaml
-- scheduling_networkfunctiondeployment_viewer_role.yaml
-- infra_p4targetset_admin_role.yaml
-- infra_p4targetset_editor_role.yaml
-- infra_p4targetset_viewer_role.yaml
+- infra_p4targetdeployment_admin_role.yaml
+- infra_p4targetdeployment_editor_role.yaml
+- infra_p4targetdeployment_viewer_role.yaml
+- scheduling_networkfunctionbinding_admin_role.yaml
+- scheduling_networkfunctionbinding_editor_role.yaml
+- scheduling_networkfunctionbinding_viewer_role.yaml
+- scheduling_networkfunctionreplicaset_admin_role.yaml
+- scheduling_networkfunctionreplicaset_editor_role.yaml
+- scheduling_networkfunctionreplicaset_viewer_role.yaml
 - core_p4target_admin_role.yaml
 - core_p4target_editor_role.yaml
 - core_p4target_viewer_role.yaml

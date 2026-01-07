@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: builder
     app.kubernetes.io/managed-by: kustomize
-  name: scheduling-networkfunctiondeployment-editor-role
+  name: scheduling-networkfunctionbinding-editor-role
 rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionbindings
   verbs:
   - create
   - delete
@@ -28,6 +28,6 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionbindings/status
   verbs:
   - get

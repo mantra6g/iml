@@ -21,11 +21,19 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	corev1alpha1 "builder/api/core/v1alpha1"
+	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+	"builder/pkg/readiness"
+
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // P4TargetReconciler reconciles a P4Target object
@@ -50,7 +58,7 @@ type P4TargetReconciler struct {
 func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
-	var p4target *corev1alpha1.P4Target
+	p4target := &corev1alpha1.P4Target{}
 	if err := r.Get(ctx, req.NamespacedName, p4target); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("P4Target resource not found. Ignoring since object must be deleted.")
@@ -60,7 +68,63 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	
+	var checker readiness.Checker
+	switch p4target.Spec.TargetClass {
+	case corev1alpha1.TARGET_BMV2:
+		checker = &readiness.PodBasedTargetChecker{
+			Client: r.Client,
+		}
+	case corev1alpha1.TARGET_TOFINO:
+		checker = &readiness.ExternalTargetChecker{}
+	default:
+		logger.Error(nil, "Unknown P4Target class", "targetClass", p4target.Spec.TargetClass)
+	}
+
+	readyStatus := checker.Check(ctx, p4target)
+	if !readyStatus.Ready {
+		logger.Info("P4Target not ready", "reason", readyStatus.Reason, "message", readyStatus.Message)
+		updateP4TargetStatus(p4target, readyStatus)
+		if err := r.Status().Update(ctx, p4target); err != nil {
+			logger.Error(err, "Failed to update P4Target status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	bindingList := &schedulingv1alpha1.NetworkFunctionBindingList{}
+	if err := r.List(ctx, bindingList,
+		client.MatchingLabels{
+			"scheduling.desire6g.eu/assigned-target": p4target.Name,
+		},
+	); err != nil {
+		logger.Error(err, "unable to list NetworkFunctionBindings")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if len(bindingList.Items) != 0 {
+		p4target.Status.Ready = false
+		p4target.Status.Conditions = append(p4target.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             readiness.ReasonTargetInUse,
+			Message:            "P4Target is assigned to one or more NetworkFunctionBindings",
+			LastTransitionTime: metav1.Now(),
+		})
+	} else {
+		p4target.Status.Ready = true
+		p4target.Status.Conditions = append(p4target.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionTrue,
+			Reason:             readiness.ReasonAvailable,
+			Message:            "P4Target is available",
+			LastTransitionTime: metav1.Now(),
+		})
+	}
+
+	if err := r.Status().Update(ctx, p4target); err != nil {
+		logger.Error(err, "Failed to update P4Target status")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -69,6 +133,89 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.P4Target{}).
+		// Watch Pods with label infra.desire6g.eu/target
+		// and enqueue reconcile calls when they change
+		Watches(&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.mapPodToRequests),
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				pod, ok := obj.(*corev1.Pod)
+				if !ok {
+					return false
+				}
+				_, hasLabel := pod.Labels["infra.desire6g.eu/target"]
+				return hasLabel
+			}))).
+		Watches(&schedulingv1alpha1.NetworkFunctionBinding{},
+			handler.EnqueueRequestsFromMapFunc(r.mapBindingToRequests),
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
+				binding, ok := object.(*schedulingv1alpha1.NetworkFunctionBinding)
+				if !ok {
+					return false
+				}
+				_, hasLabel := binding.Labels["scheduling.desire6g.eu/assigned-target"]
+				return hasLabel
+			}))).
 		Named("core-p4target").
 		Complete(r)
+}
+
+func (r *P4TargetReconciler) mapPodToRequests(ctx context.Context, obj client.Object) []ctrl.Request {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil
+	}
+
+	targetName, exists := pod.Labels["infra.desire6g.eu/target"]
+	if !exists {
+		return nil
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Name: targetName,
+			},
+		},
+	}
+}
+
+func (r *P4TargetReconciler) mapBindingToRequests(ctx context.Context, obj client.Object) []ctrl.Request {
+	binding, ok := obj.(*schedulingv1alpha1.NetworkFunctionBinding)
+	if !ok {
+		return nil
+	}
+	targetName, exists := binding.Labels["scheduling.desire6g.eu/assigned-target"]
+	if !exists {
+		return nil
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Name: targetName,
+			},
+		},
+	}
+}
+
+func updateP4TargetStatus(target *corev1alpha1.P4Target, readyStatus readiness.ReadyStatus) {
+	var condition metav1.Condition
+	if readyStatus.Ready {
+		target.Status.Phase = "Ready"
+		condition = metav1.Condition{
+			Type:   "Ready",
+			Status: metav1.ConditionTrue,
+		}
+	} else {
+		target.Status.Phase = "NotReady"
+		condition = metav1.Condition{
+			Type:   "Ready",
+			Status: metav1.ConditionFalse,
+		}
+	}
+	condition.Reason = readyStatus.Reason
+	condition.Message = readyStatus.Message
+	condition.LastTransitionTime = metav1.Now()
+
+	target.Status.Conditions = append(target.Status.Conditions, condition)
 }

@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: builder
     app.kubernetes.io/managed-by: kustomize
-  name: scheduling-networkfunctiondeployment-viewer-role
+  name: scheduling-networkfunctionreplicaset-viewer-role
 rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments
+  - networkfunctionreplicasets
   verbs:
   - get
   - list
@@ -24,6 +24,6 @@ rules:
 - apiGroups:
   - scheduling.desire6g.eu
   resources:
-  - networkfunctiondeployments/status
+  - networkfunctionreplicasets/status
   verbs:
   - get

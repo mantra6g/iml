@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
+	"builder/test/mocks"
 )
 
 var _ = Describe("ServiceChain Controller", func() {
@@ -42,20 +43,7 @@ var _ = Describe("ServiceChain Controller", func() {
 		}
 		servicechain := &cachev1alpha1.ServiceChain{}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind ServiceChain")
-			err := k8sClient.Get(ctx, typeNamespacedName, servicechain)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &cachev1alpha1.ServiceChain{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+		BeforeEach(func() {})
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
@@ -66,14 +54,81 @@ var _ = Describe("ServiceChain Controller", func() {
 			By("Cleanup the specific resource instance ServiceChain")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
+			By("creating the referenced Application resources")
+			app1 := &cachev1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "app-1",
+					Namespace: "default",
+				},
+				Spec: cachev1alpha1.ApplicationSpec{},
+			}
+			Expect(k8sClient.Create(ctx, app1)).To(Succeed())
+
+			app2 := &cachev1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "app-2",
+					Namespace: "default",
+				},
+				Spec: cachev1alpha1.ApplicationSpec{},
+			}
+			Expect(k8sClient.Create(ctx, app2)).To(Succeed())
+
+			By("creating the referenced NetworkFunction resource")
+			replicas := int32(1)
+			nf1 := &cachev1alpha1.NetworkFunction{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nf-1",
+					Namespace: "default",
+				},
+				Spec: cachev1alpha1.NetworkFunctionSpec{
+					Replicas:         &replicas,
+					SupportedTargets: []string{cachev1alpha1.TARGET_BMV2},
+					P4File:           "https://example.com/p4file.p4",
+				},
+			}
+			Expect(k8sClient.Create(ctx, nf1)).To(Succeed())
+
+			By("creating the custom resource for the Kind ServiceChain")
+			err := k8sClient.Get(ctx, typeNamespacedName, servicechain)
+			if err != nil && errors.IsNotFound(err) {
+				resource := &cachev1alpha1.ServiceChain{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      resourceName,
+						Namespace: "default",
+					},
+					Spec: cachev1alpha1.ServiceChainSpec{
+						From: &cachev1alpha1.ApplicationReference{
+							Name:      "app-1",
+							Namespace: "default",
+						},
+						To: &cachev1alpha1.ApplicationReference{
+							Name:      "app-2",
+							Namespace: "default",
+						},
+						Functions: []cachev1alpha1.NetworkFunctionReference{
+							{
+								Name:      "nf-1",
+								Namespace: "default",
+							},
+						},
+					},
+					// TODO(user): Specify other spec details if needed.
+				}
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			}
+
 			By("Reconciling the created resource")
+			fakeEventBus := &mocks.FakeEventBus{}
+
 			controllerReconciler := &ServiceChainReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Bus:    fakeEventBus,
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())

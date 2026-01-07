@@ -213,7 +213,7 @@ func (in *NetworkFunctionSpec) DeepCopyInto(out *NetworkFunctionSpec) {
 	}
 	if in.SupportedTargets != nil {
 		in, out := &in.SupportedTargets, &out.SupportedTargets
-		*out = make([]TargetArchitecture, len(*in))
+		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
 }

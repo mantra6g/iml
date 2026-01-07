@@ -1,0 +1,9 @@
+apiVersion: scheduling.desire6g.eu/v1alpha1
+kind: NetworkFunctionBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: builder
+    app.kubernetes.io/managed-by: kustomize
+  name: networkfunctionbinding-sample
+spec:
+  # TODO(user): Add fields here

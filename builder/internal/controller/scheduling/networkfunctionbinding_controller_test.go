@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package core
+package scheduling
 
 import (
 	"context"
@@ -27,10 +27,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	corev1alpha1 "builder/api/core/v1alpha1"
+	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 )
 
-var _ = Describe("P4Target Controller", func() {
+var _ = Describe("NetworkFunctionBinding Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,19 +40,20 @@ var _ = Describe("P4Target Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		p4target := &corev1alpha1.P4Target{}
+		networkfunctionbinding := &schedulingv1alpha1.NetworkFunctionBinding{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind P4Target")
-			err := k8sClient.Get(ctx, typeNamespacedName, p4target)
+			By("creating the custom resource for the Kind NetworkFunctionBinding")
+			err := k8sClient.Get(ctx, typeNamespacedName, networkfunctionbinding)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.P4Target{
+				resource := &schedulingv1alpha1.NetworkFunctionBinding{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: corev1alpha1.P4TargetSpec{
-						TargetClass: corev1alpha1.TARGET_BMV2,
+					Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+						SupportedTargets: []string{schedulingv1alpha1.TARGET_BMV2},
+						P4File:           "https://example.com/p4file.p4",
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -62,17 +63,17 @@ var _ = Describe("P4Target Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &corev1alpha1.P4Target{}
+			resource := &schedulingv1alpha1.NetworkFunctionBinding{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance P4Target")
+			By("Cleanup the specific resource instance NetworkFunctionBinding")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &P4TargetReconciler{
+			controllerReconciler := &NetworkFunctionBindingReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

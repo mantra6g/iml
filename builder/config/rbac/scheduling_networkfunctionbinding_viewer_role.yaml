@@ -1,7 +1,7 @@
 # This rule is not used by the project builder itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to infra.desire6g.eu resources.
+# Grants read-only access to scheduling.desire6g.eu resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
@@ -11,19 +11,19 @@ metadata:
   labels:
     app.kubernetes.io/name: builder
     app.kubernetes.io/managed-by: kustomize
-  name: infra-p4targetset-viewer-role
+  name: scheduling-networkfunctionbinding-viewer-role
 rules:
 - apiGroups:
-  - infra.desire6g.eu
+  - scheduling.desire6g.eu
   resources:
-  - p4targetsets
+  - networkfunctionbindings
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - infra.desire6g.eu
+  - scheduling.desire6g.eu
   resources:
-  - p4targetsets/status
+  - networkfunctionbindings/status
   verbs:
   - get

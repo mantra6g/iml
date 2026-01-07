@@ -30,7 +30,7 @@ import (
 	infrav1alpha1 "builder/api/infra/v1alpha1"
 )
 
-var _ = Describe("P4TargetSet Controller", func() {
+var _ = Describe("P4TargetDeployment Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,16 +40,21 @@ var _ = Describe("P4TargetSet Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		p4targetset := &infrav1alpha1.P4TargetSet{}
+		p4targetdeployment := &infrav1alpha1.P4TargetDeployment{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind P4TargetSet")
-			err := k8sClient.Get(ctx, typeNamespacedName, p4targetset)
+			By("creating the custom resource for the Kind P4TargetDeployment")
+			err := k8sClient.Get(ctx, typeNamespacedName, p4targetdeployment)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &infrav1alpha1.P4TargetSet{
+				replicas := int32(1)
+				resource := &infrav1alpha1.P4TargetDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
+					},
+					Spec: infrav1alpha1.P4TargetDeploymentSpec{
+						Replicas: &replicas,
+						Class:    "bmv2",
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -59,16 +64,17 @@ var _ = Describe("P4TargetSet Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &infrav1alpha1.P4TargetSet{}
+			resource := &infrav1alpha1.P4TargetDeployment{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance P4TargetSet")
+			By("Cleanup the specific resource instance P4TargetDeployment")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &P4TargetSetReconciler{
+			controllerReconciler := &P4TargetDeploymentReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

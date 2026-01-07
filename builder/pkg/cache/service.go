@@ -11,23 +11,23 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type Service struct {	
+type Service struct {
 	appCache       *Cache[types.UID, dto.ApplicationDefinition]
 	nfCache        *Cache[types.UID, dto.NetworkFunctionDefinition]
 	appChainsCache *Cache[types.UID, dto.ApplicationServiceChains]
 	chainCache     *Cache[types.UID, dto.ServiceChainDefinition]
-	bus            *events.EventBus
+	bus            events.EventBus
 	logger         logr.Logger
 }
 
-func New(eventbus *events.EventBus, logger logr.Logger) (*Service, error) {
+func New(eventbus events.EventBus, logger logr.Logger) (*Service, error) {
 	service := &Service{
-		appCache:   NewCache[types.UID, dto.ApplicationDefinition](),
-		nfCache:    NewCache[types.UID, dto.NetworkFunctionDefinition](),
+		appCache:       NewCache[types.UID, dto.ApplicationDefinition](),
+		nfCache:        NewCache[types.UID, dto.NetworkFunctionDefinition](),
 		appChainsCache: NewCache[types.UID, dto.ApplicationServiceChains](),
-		chainCache: NewCache[types.UID, dto.ServiceChainDefinition](),
-		bus:        eventbus,
-		logger:     logger,
+		chainCache:     NewCache[types.UID, dto.ServiceChainDefinition](),
+		bus:            eventbus,
+		logger:         logger,
 	}
 
 	eventbus.Subscribe(events.EventAppPreUpdated, service.handleAppUpdatedEvent)
@@ -255,11 +255,11 @@ func (s *Service) UpdateServiceChain(chainID types.UID, chain *cachev1alpha1.Ser
 			Seq:       seq,
 			Timestamp: time.Now(),
 		},
-		ID:   string(chainID),
-		Name: chain.Name,
+		ID:        string(chainID),
+		Name:      chain.Name,
 		Namespace: chain.Namespace,
-		SrcAppID: string(chain.Status.SourceAppUID),
-		DstAppID: string(chain.Status.DestinationAppUID),
+		SrcAppID:  string(chain.Status.SourceAppUID),
+		DstAppID:  string(chain.Status.DestinationAppUID),
 		Functions: chain.Status.Functions,
 	}
 	err := updateEntry(s.chainCache, chainID, chainDef)

@@ -14,7 +14,11 @@ spec:
     singular: p4target
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API
@@ -39,78 +43,17 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
-              endpoint:
-                description: Endpoint defines the connection details of the P4 target
-                properties:
-                  gnmiPort:
-                    description: GNMIPort is the gNMI gRPC port of the P4 target
-                    format: int32
-                    type: integer
-                  mgmtAddress:
-                    description: ManagementAddress is the management IP address of
-                      the P4 target
-                    type: string
-                  p4runtimePort:
-                    description: P4RuntimePort is the P4Runtime gRPC port of the P4
-                      target
-                    format: int32
-                    type: integer
-                required:
-                - gnmiPort
-                - mgmtAddress
-                - p4runtimePort
-                type: object
-              resources:
-                description: Resources defines the compute resources allocated to
-                  the P4 target
-                properties:
-                  cpu:
-                    default: 1
-                    description: CPU is the number of CPUs allocated to the P4 target
-                    format: int32
-                    minimum: 1
-                    type: integer
-                  memory:
-                    default: 512
-                    description: Memory is the amount of memory (in MiB) allocated
-                      to the P4 target
-                    format: int32
-                    minimum: 128
-                    type: integer
-                type: object
               targetClass:
                 description: TargetClass is the target class of the P4 target
                 enum:
                 - bmv2
                 type: string
             required:
-            - endpoint
             - targetClass
             type: object
           status:
             description: status defines the observed state of P4Target
             properties:
-              allocatable:
-                description: Allocatable is the amount of resources allocatable on
-                  the P4 target
-                properties:
-                  cpus:
-                    format: int32
-                    type: integer
-                  memory:
-                    format: int32
-                    type: integer
-                type: object
-              capacity:
-                description: Capacity is the total amount of resources on the P4 target
-                properties:
-                  cpus:
-                    format: int32
-                    type: integer
-                  memory:
-                    format: int32
-                    type: integer
-                type: object
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
@@ -175,17 +118,10 @@ spec:
               phase:
                 description: Phase is the current phase of the P4 target
                 type: string
-              used:
-                description: Used is the amount of resources currently used on the
-                  P4 target
-                properties:
-                  cpus:
-                    format: int32
-                    type: integer
-                  memory:
-                    format: int32
-                    type: integer
-                type: object
+              ready:
+                description: Ready indicates if the underlying P4 target is ready
+                  to accept network functions
+                type: boolean
             type: object
         required:
         - spec

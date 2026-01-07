@@ -47,11 +47,12 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
+    namespaced: true
   controller: true
   domain: desire6g.eu
-  group: infra
-  kind: P4TargetSet
-  path: builder/api/infra/v1alpha1
+  group: scheduling
+  kind: NetworkFunctionReplicaSet
+  path: builder/api/scheduling/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -59,7 +60,15 @@ resources:
   controller: true
   domain: desire6g.eu
   group: scheduling
-  kind: NetworkFunctionDeployment
+  kind: NetworkFunctionBinding
   path: builder/api/scheduling/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: desire6g.eu
+  group: infra
+  kind: P4TargetDeployment
+  path: builder/api/infra/v1alpha1
   version: v1alpha1
 version: "3"

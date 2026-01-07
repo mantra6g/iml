@@ -4,20 +4,25 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctions.cache.desire6g.eu
+  name: p4targetdeployments.infra.desire6g.eu
 spec:
-  group: cache.desire6g.eu
+  group: infra.desire6g.eu
   names:
-    kind: NetworkFunction
-    listKind: NetworkFunctionList
-    plural: networkfunctions
-    singular: networkfunction
-  scope: Namespaced
+    kind: P4TargetDeployment
+    listKind: P4TargetDeploymentList
+    plural: p4targetdeployments
+    singular: p4targetdeployment
+  scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkFunction is the Schema for the networkfunctions API
+        description: P4TargetDeployment is the Schema for the p4targetdeployments
+          API
         properties:
           apiVersion:
             description: |-
@@ -37,38 +42,27 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of NetworkFunction
+            description: spec defines the desired state of P4TargetDeployment
             properties:
-              p4File:
-                description: |-
-                  P4File is the actual P4 program file for the network function.
-                  It can be the actual p4program encoded in base64 or
-                  a s3://, http:// or https:// URL pointing to the P4 file location.
+              class:
+                description: Class defines the class of the P4 Target Deployment
+                enum:
+                - bmv2
                 type: string
               replicas:
                 default: 1
-                description: Replicas is the number of desired replicas of the network
-                  function
+                description: Replicas defines the number of instances of the P4 Target
+                  that will be deployed
                 format: int32
                 minimum: 1
                 type: integer
-              supportedTargets:
-                description: Supported target architectures for the network function
-                items:
-                  type: string
-                minItems: 1
-                type: array
             required:
-            - p4File
-            - supportedTargets
+            - class
             type: object
           status:
-            description: status defines the observed state of NetworkFunction
+            description: status defines the observed state of P4TargetDeployment
             properties:
               conditions:
-                description: |-
-                  Conditions represent the latest available observations of the
-                  NetworkFunction's current state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -124,17 +118,12 @@ spec:
                   - type
                   type: object
                 type: array
-              currentReplicas:
-                description: CurrentReplicas is the current number of replicas of
-                  the network function
+              observedReplicas:
                 format: int32
                 type: integer
               phase:
-                description: Phase indicates the current phase of the NetworkFunction
                 type: string
               readyReplicas:
-                description: ReadyReplicas is the number of ready replicas of the
-                  network function
                 format: int32
                 type: integer
             type: object
