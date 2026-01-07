@@ -20,6 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const BINDING_FINALIZER_LABEL = "scheduling.desire6g.eu/networkFunctionBinding-finalizer"
+
+const TARGET_ASSIGNMENT_LABEL = "scheduling.desire6g.eu/assignedTarget"
+
 const (
 	TARGET_BMV2 = "bmv2"
 	// TARGET_TOFINO  = "tofino"

@@ -45,6 +45,8 @@ type P4TargetReconciler struct {
 // +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -94,7 +96,7 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	bindingList := &schedulingv1alpha1.NetworkFunctionBindingList{}
 	if err := r.List(ctx, bindingList,
 		client.MatchingLabels{
-			"scheduling.desire6g.eu/assigned-target": p4target.Name,
+			schedulingv1alpha1.TARGET_ASSIGNMENT_LABEL: p4target.Name,
 		},
 	); err != nil {
 		logger.Error(err, "unable to list NetworkFunctionBindings")
@@ -103,6 +105,7 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if len(bindingList.Items) != 0 {
 		p4target.Status.Ready = false
+		p4target.Status.Phase = corev1alpha1.P4_TARGET_PHASE_OCCUPIED
 		p4target.Status.Conditions = append(p4target.Status.Conditions, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionFalse,
@@ -112,6 +115,7 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		})
 	} else {
 		p4target.Status.Ready = true
+		p4target.Status.Phase = corev1alpha1.P4_TARGET_PHASE_READY
 		p4target.Status.Conditions = append(p4target.Status.Conditions, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionTrue,
@@ -133,7 +137,7 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.P4Target{}).
-		// Watch Pods with label infra.desire6g.eu/target
+		// Watch Pods with label core.desire6g.eu/target
 		// and enqueue reconcile calls when they change
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.mapPodToRequests),
@@ -142,7 +146,7 @@ func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return false
 				}
-				_, hasLabel := pod.Labels["infra.desire6g.eu/target"]
+				_, hasLabel := pod.Labels[corev1alpha1.TARGET_LABEL]
 				return hasLabel
 			}))).
 		Watches(&schedulingv1alpha1.NetworkFunctionBinding{},
@@ -152,7 +156,7 @@ func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return false
 				}
-				_, hasLabel := binding.Labels["scheduling.desire6g.eu/assigned-target"]
+				_, hasLabel := binding.Labels[schedulingv1alpha1.TARGET_ASSIGNMENT_LABEL]
 				return hasLabel
 			}))).
 		Named("core-p4target").
@@ -165,7 +169,7 @@ func (r *P4TargetReconciler) mapPodToRequests(ctx context.Context, obj client.Ob
 		return nil
 	}
 
-	targetName, exists := pod.Labels["infra.desire6g.eu/target"]
+	targetName, exists := pod.Labels[corev1alpha1.TARGET_LABEL]
 	if !exists {
 		return nil
 	}
@@ -184,7 +188,7 @@ func (r *P4TargetReconciler) mapBindingToRequests(ctx context.Context, obj clien
 	if !ok {
 		return nil
 	}
-	targetName, exists := binding.Labels["scheduling.desire6g.eu/assigned-target"]
+	targetName, exists := binding.Labels[schedulingv1alpha1.TARGET_ASSIGNMENT_LABEL]
 	if !exists {
 		return nil
 	}

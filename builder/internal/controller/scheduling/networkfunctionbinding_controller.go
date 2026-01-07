@@ -42,6 +42,7 @@ type NetworkFunctionBindingReconciler struct {
 // +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -136,7 +137,7 @@ func (r *NetworkFunctionBindingReconciler) scheduleBinding(ctx context.Context, 
 
 	chosen := r.pickNode(binding, feasible)
 
-	binding.Labels["scheduling.desire6g.eu/assigned-target"] = chosen.Name
+	binding.Labels[schedulingv1alpha1.TARGET_ASSIGNMENT_LABEL] = chosen.Name
 	binding.Status.AssignedTarget = chosen.Name
 	binding.Status.Phase = "Scheduled"
 

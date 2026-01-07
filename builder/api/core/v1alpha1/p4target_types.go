@@ -23,6 +23,9 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const TARGET_LABEL = "core.desire6g.eu/target"
+const P4TARGET_FINALIZER_LABEL = "core.desire6g.eu/p4Target-finalizer"
+
 const (
 	TARGET_BMV2   = "bmv2"
 	TARGET_TOFINO = "tofino"
@@ -31,10 +34,10 @@ const (
 )
 
 const (
-	P4_TARGET_PHASE_PENDING   = "Pending"
-	P4_TARGET_PHASE_READY     = "Ready"
-	P4_TARGET_PHASE_NOT_READY = "NotReady"
-	P4_TARGET_PHASE_UNKNOWN   = "Unknown"
+	P4_TARGET_PHASE_PENDING  = "Pending"
+	P4_TARGET_PHASE_READY    = "Ready"
+	P4_TARGET_PHASE_OCCUPIED = "Occupied"
+	P4_TARGET_PHASE_UNKNOWN  = "Unknown"
 )
 
 // P4TargetSpec defines the desired state of P4Target

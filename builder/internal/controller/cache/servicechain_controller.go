@@ -60,7 +60,6 @@ type ServiceChainReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	const finalizerName = "cache.desire6g.eu/finalizer"
 
 	logger.Info("Reconciling ServiceChain", "request", req)
 	var serviceChain cachev1alpha1.ServiceChain
@@ -76,14 +75,14 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Check if being deleted
 	if !serviceChain.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
-		if containsString(serviceChain.GetFinalizers(), finalizerName) {
+		if containsString(serviceChain.GetFinalizers(), cachev1alpha1.SERVICE_CHAIN_FINALIZER_LABEL) {
 			r.Bus.Publish(events.Event{
 				Name:    events.EventChainPreDeleted,
 				Payload: &serviceChain,
 			})
 
 			// Remove finalizer
-			serviceChain.SetFinalizers(removeString(serviceChain.GetFinalizers(), finalizerName))
+			serviceChain.SetFinalizers(removeString(serviceChain.GetFinalizers(), cachev1alpha1.SERVICE_CHAIN_FINALIZER_LABEL))
 			if err := r.Update(ctx, &serviceChain); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -92,8 +91,8 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Add finalizer if missing
-	if !containsString(serviceChain.GetFinalizers(), finalizerName) {
-		serviceChain.SetFinalizers(append(serviceChain.GetFinalizers(), finalizerName))
+	if !containsString(serviceChain.GetFinalizers(), cachev1alpha1.SERVICE_CHAIN_FINALIZER_LABEL) {
+		serviceChain.SetFinalizers(append(serviceChain.GetFinalizers(), cachev1alpha1.SERVICE_CHAIN_FINALIZER_LABEL))
 		if err := r.Update(ctx, &serviceChain); err != nil {
 			return ctrl.Result{}, err
 		}

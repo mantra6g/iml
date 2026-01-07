@@ -43,6 +43,7 @@ type NetworkFunctionReconciler struct {
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
 
 // RBAC permissions for Deployments
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -58,7 +59,6 @@ type NetworkFunctionReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	const finalizerName = "cache.desire6g.eu/finalizer"
 
 	logger.Info("Reconciling NetworkFunction", "request", req)
 	nf := &cachev1alpha1.NetworkFunction{}
@@ -74,14 +74,14 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Check if being deleted
 	if !nf.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
-		if containsString(nf.GetFinalizers(), finalizerName) {
+		if containsString(nf.GetFinalizers(), cachev1alpha1.NETWORK_FUNCTION_FINALIZER_LABEL) {
 			r.Bus.Publish(events.Event{
 				Name:    events.EventNfPreDeleted,
 				Payload: nf,
 			})
 
 			// Remove finalizer
-			nf.SetFinalizers(removeString(nf.GetFinalizers(), finalizerName))
+			nf.SetFinalizers(removeString(nf.GetFinalizers(), cachev1alpha1.NETWORK_FUNCTION_FINALIZER_LABEL))
 			if err := r.Update(ctx, nf); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -90,8 +90,8 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Add finalizer if missing
-	if !containsString(nf.GetFinalizers(), finalizerName) {
-		nf.SetFinalizers(append(nf.GetFinalizers(), finalizerName))
+	if !containsString(nf.GetFinalizers(), cachev1alpha1.NETWORK_FUNCTION_FINALIZER_LABEL) {
+		nf.SetFinalizers(append(nf.GetFinalizers(), cachev1alpha1.NETWORK_FUNCTION_FINALIZER_LABEL))
 		if err := r.Update(ctx, nf); err != nil {
 			return ctrl.Result{}, err
 		}

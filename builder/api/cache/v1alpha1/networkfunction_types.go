@@ -23,6 +23,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const NETWORK_FUNCTION_FINALIZER_LABEL = "core.desire6g.eu/networkFunction-finalizer"
+
 const (
 	TARGET_BMV2 = "bmv2"
 	// TARGET_TOFINO = "tofino"

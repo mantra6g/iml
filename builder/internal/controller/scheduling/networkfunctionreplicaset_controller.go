@@ -48,6 +48,7 @@ type NetworkFunctionReplicaSetReconciler struct {
 // +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

@@ -39,8 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const TargetDeploymentNamespace = "p4-targets"
-
 type CNIArgs struct {
 	AppType  string
 	TargetID string
@@ -64,6 +62,8 @@ type P4TargetDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=infra.desire6g.eu,resources=p4targetdeployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infra.desire6g.eu,resources=p4targetdeployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infra.desire6g.eu,resources=p4targetdeployments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -102,10 +102,10 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 		replicaset := &appsv1.ReplicaSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      targetName,
-				Namespace: req.NamespacedName.Namespace,
+				Namespace: infrav1alpha1.BMV2_POD_NAMESPACE,
 				Labels: map[string]string{
-					"infra.desire6g.eu/target":           targetName,
-					"infra.desire6g.eu/targetDeployment": parentName,
+					corev1alpha1.TARGET_LABEL:                  targetName,
+					infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: parentName,
 				},
 			},
 		}
@@ -114,8 +114,8 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if replicaset.Labels == nil {
 				replicaset.Labels = map[string]string{}
 			}
-			replicaset.Labels["infra.desire6g.eu/target"] = targetName
-			replicaset.Labels["infra.desire6g.eu/targetDeployment"] = parentName
+			replicaset.Labels[corev1alpha1.TARGET_LABEL] = targetName
+			replicaset.Labels[infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL] = parentName
 			return controllerutil.SetControllerReference(deployment, replicaset, r.Scheme)
 		})
 		if err != nil {
@@ -132,8 +132,8 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 			ObjectMeta: metav1.ObjectMeta{
 				Name: targetName,
 				Labels: map[string]string{
-					"infra.desire6g.eu/target":           targetName, // helpful label for listing
-					"infra.desire6g.eu/targetDeployment": parentName, // helpful label for listing
+					corev1alpha1.TARGET_LABEL:                  targetName, // helpful label for listing
+					infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: parentName, // helpful label for listing
 				},
 			},
 		}
@@ -143,8 +143,8 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if target.Labels == nil {
 				target.Labels = map[string]string{}
 			}
-			target.Labels["infra.desire6g.eu/target"] = targetName
-			target.Labels["infra.desire6g.eu/targetDeployment"] = parentName
+			target.Labels[corev1alpha1.TARGET_LABEL] = targetName
+			target.Labels[infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL] = parentName
 			return controllerutil.SetControllerReference(deployment, target, r.Scheme)
 		})
 		if err != nil {
@@ -155,7 +155,7 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	var list corev1alpha1.P4TargetList
 	if err := r.List(ctx, &list,
-		client.MatchingLabels(map[string]string{"infra.desire6g.eu/targetDeployment": parentName}),
+		client.MatchingLabels(map[string]string{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: parentName}),
 	); err != nil {
 		logger.Error(err, "failed to list p4targets for cleanup")
 		return ctrl.Result{}, err
@@ -182,7 +182,7 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Reconciliation finished, now obtain status
 	var targets corev1alpha1.P4TargetList
 	err = r.List(ctx, &targets,
-		client.MatchingLabels{"infra.desire6g.eu/targetDeployment": parentName},
+		client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: parentName},
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -235,15 +235,15 @@ func (r *P4TargetDeploymentReconciler) desiredReplicaSetSpec(targetDeployment *i
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"infra.desire6g.eu/target":           targetName,
-				"infra.desire6g.eu/targetDeployment": targetDeployment.Name,
+				corev1alpha1.TARGET_LABEL:                  targetName,
+				infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: targetDeployment.Name,
 			},
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					"infra.desire6g.eu/target":           targetName,
-					"infra.desire6g.eu/targetDeployment": targetDeployment.Name,
+					corev1alpha1.TARGET_LABEL:                  targetName,
+					infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: targetDeployment.Name,
 				},
 				Annotations: map[string]string{
 					"k8s.v1.cni.cncf.io/networks": "[" + CNIConfig{
@@ -258,18 +258,19 @@ func (r *P4TargetDeploymentReconciler) desiredReplicaSetSpec(targetDeployment *i
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name:  "control-plane",
-						Image: "tomasagata/p4target-control-plane:latest",
+						Name:  infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_NAME,
+						Image: infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_IMAGE,
 						Ports: []corev1.ContainerPort{
 							{
-								ContainerPort: 5000,
+								Name:          "health",
+								ContainerPort: infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT,
 							},
 						},
 						ReadinessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/ready",
-									Port: intstr.FromInt32(5000),
+									Path: infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PATH,
+									Port: intstr.FromInt32(infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT),
 								},
 							},
 							InitialDelaySeconds: 5,
@@ -277,8 +278,8 @@ func (r *P4TargetDeploymentReconciler) desiredReplicaSetSpec(targetDeployment *i
 						},
 					},
 					{
-						Name:  "data-plane",
-						Image: "tomasagata/p4target-dp-bmv2:latest",
+						Name:  infrav1alpha1.BMV2_DATAPLANE_CONTAINER_NAME,
+						Image: infrav1alpha1.BMV2_DATAPLANE_CONTAINER_IMAGE,
 					},
 				},
 			},

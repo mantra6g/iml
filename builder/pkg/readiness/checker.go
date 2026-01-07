@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	corev1alpha1 "builder/api/core/v1alpha1"
+	infrav1alpha1 "builder/api/infra/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,10 +41,12 @@ type PodBasedTargetChecker struct {
 
 func (p *PodBasedTargetChecker) Check(ctx context.Context, target *corev1alpha1.P4Target) ReadyStatus {
 	var pods corev1.PodList
+	// BMv2 pods are deployed in a dedicated infrastructure namespace
+	namespace := infrav1alpha1.BMV2_POD_NAMESPACE
 	if err := p.Client.List(ctx, &pods,
-		client.InNamespace(target.Namespace),
+		client.InNamespace(namespace),
 		client.MatchingLabels{
-			"infra.desire6g.eu/target": target.Name,
+			corev1alpha1.TARGET_LABEL: target.Name,
 		},
 	); err != nil {
 		if apierrors.IsNotFound(err) {

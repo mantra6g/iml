@@ -51,7 +51,6 @@ type ApplicationReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	const finalizerName = "cache.desire6g.eu/finalizer"
 
 	logger.Info("Reconciling Application", "request", req)
 	var app cachev1alpha1.Application
@@ -67,14 +66,14 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Check if being deleted
 	if !app.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
-		if containsString(app.GetFinalizers(), finalizerName) {
+		if containsString(app.GetFinalizers(), cachev1alpha1.APPLICATION_FINALIZER_LABEL) {
 			r.Bus.Publish(events.Event{
 				Name:    events.EventAppPreDeleted,
 				Payload: &app,
 			})
 
 			// Remove finalizer
-			app.SetFinalizers(removeString(app.GetFinalizers(), finalizerName))
+			app.SetFinalizers(removeString(app.GetFinalizers(), cachev1alpha1.APPLICATION_FINALIZER_LABEL))
 			if err := r.Update(ctx, &app); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -83,8 +82,8 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Add finalizer if missing
-	if !containsString(app.GetFinalizers(), finalizerName) {
-		app.SetFinalizers(append(app.GetFinalizers(), finalizerName))
+	if !containsString(app.GetFinalizers(), cachev1alpha1.APPLICATION_FINALIZER_LABEL) {
+		app.SetFinalizers(append(app.GetFinalizers(), cachev1alpha1.APPLICATION_FINALIZER_LABEL))
 		if err := r.Update(ctx, &app); err != nil {
 			return ctrl.Result{}, err
 		}

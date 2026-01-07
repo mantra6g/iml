@@ -20,6 +20,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const TGT_DEP_FINALIZER_LABEL = "infra.desire6g.eu/targetDeployment-finalizer"
+
+const BMV2_POD_NAMESPACE = "iml-infra"
+const BMV2_TARGET_DEPLOYMENT_LABEL = "infra.desire6g.eu/targetDeployment"
+const BMV2_DATAPLANE_CONTAINER_NAME = "data-plane"
+const BMV2_DATAPLANE_CONTAINER_IMAGE = "tomasagata/p4target-dp-bmv2:latest"
+const BMV2_CONTROLPLANE_CONTAINER_NAME = "control-plane"
+const BMV2_CONTROLPLANE_CONTAINER_IMAGE = "tomasagata/p4target-control-plane:latest"
+const BMV2_CONTROLPLANE_READY_PROBE_PORT = 5000
+const BMV2_CONTROLPLANE_READY_PROBE_PATH = "/healthz"
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 

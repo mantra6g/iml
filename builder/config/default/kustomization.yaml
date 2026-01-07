@@ -34,6 +34,8 @@ resources:
 #- ../network-policy
 # [UPDATES] Exposes a service for updates on apps/nfs/chains definitions.
 - updates_service.yaml
+# [INFRASTRUCTURE] Creates a namespace for infrastructure pods and replicasets.
+- infra.yaml
 
 # Uncomment the patches line if you enable Metrics
 patches:
