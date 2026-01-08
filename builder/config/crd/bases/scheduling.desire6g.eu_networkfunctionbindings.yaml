@@ -46,15 +46,22 @@ spec:
                   It can be the actual p4program encoded in base64 or
                   a s3://, http:// or https:// URL pointing to the P4 file location.
                 type: string
-              supportedTargets:
-                description: Supported target architectures for the network function
-                items:
-                  type: string
-                minItems: 1
-                type: array
+              selector:
+                description: Selector is used to select P4 targets based on their
+                  supported architectures
+                properties:
+                  supportedTargets:
+                    description: Supported target architectures for the network function
+                    items:
+                      type: string
+                    minItems: 1
+                    type: array
+                required:
+                - supportedTargets
+                type: object
             required:
             - p4File
-            - supportedTargets
+            - selector
             type: object
           status:
             description: status defines the observed state of NetworkFunctionBinding

@@ -31,6 +31,7 @@ import (
 	corev1alpha1 "builder/api/core/v1alpha1"
 	infrav1alpha1 "builder/api/infra/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+	"builder/test/mocks"
 )
 
 var _ = Describe("P4Target Controller", func() {
@@ -67,7 +68,7 @@ var _ = Describe("P4Target Controller", func() {
 						Namespace: "default",
 					},
 					Spec: corev1alpha1.P4TargetSpec{
-						TargetClass: corev1alpha1.TARGET_BMV2,
+						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -78,7 +79,7 @@ var _ = Describe("P4Target Controller", func() {
 			createdResource := &corev1alpha1.P4Target{}
 			err = k8sClient.Get(ctx, typeNamespacedName, createdResource)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(createdResource.Spec.TargetClass).To(Equal(corev1alpha1.TARGET_BMV2))
+			Expect(createdResource.Spec.TargetClass).To(Equal(corev1alpha1.TARGET_CLASS_BMV2))
 
 			By("Cleanup the specific resource instance P4Target")
 			Expect(k8sClient.Delete(ctx, createdResource)).To(Succeed())
@@ -112,7 +113,7 @@ var _ = Describe("P4Target Controller", func() {
 						Namespace: "some-other-namespace",
 					},
 					Spec: corev1alpha1.P4TargetSpec{
-						TargetClass: corev1alpha1.TARGET_BMV2,
+						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -151,7 +152,7 @@ var _ = Describe("P4Target Controller", func() {
 						Namespace: "default",
 					},
 					Spec: corev1alpha1.P4TargetSpec{
-						TargetClass: corev1alpha1.TARGET_BMV2,
+						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -200,7 +201,7 @@ var _ = Describe("P4Target Controller", func() {
 			Expect(reconciledResource.Status.Ready).To(BeFalse())
 		})
 
-		It("should be not ready when the associated pod exists but isn't ready", func() {
+		It("should be not ready when the checker says the infra isn't ready", func() {
 			By("Creating the namespace for the infrastructure resources")
 			namespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -209,18 +210,17 @@ var _ = Describe("P4Target Controller", func() {
 			}
 			k8sClient.Create(ctx, namespace)
 
-			By("Creating the associated pod")
-			pod := createBMv2Pod(resourceName, true)
-			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-
-			By("Updating the pod status to NotReady")
-			setPodReadyCondition(pod, false)
-			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+			By("Setting up the mocks for the readiness check")
+			fakeChecker := mocks.FakeReadinessChecker{Ready: false}
+			checkers := CheckerRegistry{
+				corev1alpha1.TARGET_CLASS_BMV2: &fakeChecker,
+			}
 
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Checkers: checkers,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -237,7 +237,7 @@ var _ = Describe("P4Target Controller", func() {
 			Expect(reconciledResource.Status.Ready).To(BeFalse())
 		})
 
-		It("should be ready when the associated pod is ready and no bindings exist for that target", func() {
+		It("should be ready when the checker says the infra is ready and no bindings exist for that target", func() {
 			By("Creating the namespace for the infrastructure resources")
 			namespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -246,18 +246,17 @@ var _ = Describe("P4Target Controller", func() {
 			}
 			k8sClient.Create(ctx, namespace)
 
-			By("Creating the associated pod in ready state")
-			pod := createBMv2Pod(resourceName, true)
-			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-
-			By("Updating the pod status to Running")
-			setPodReadyCondition(pod, true)
-			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+			By("Setting up the mocks for the readiness check")
+			fakeChecker := mocks.FakeReadinessChecker{Ready: true}
+			checkers := CheckerRegistry{
+				corev1alpha1.TARGET_CLASS_BMV2: &fakeChecker,
+			}
 
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Checkers: checkers,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -283,14 +282,6 @@ var _ = Describe("P4Target Controller", func() {
 			}
 			k8sClient.Create(ctx, namespace)
 
-			By("Creating the associated pod in ready state")
-			pod := createBMv2Pod(resourceName, true)
-			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-
-			By("Updating the pod status to Running")
-			setPodReadyCondition(pod, true)
-			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
-
 			By("Creating a binding for that target")
 			binding := &schedulingv1alpha1.NetworkFunctionBinding{
 				ObjectMeta: metav1.ObjectMeta{
@@ -301,8 +292,10 @@ var _ = Describe("P4Target Controller", func() {
 					},
 				},
 				Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
-					SupportedTargets: []string{corev1alpha1.TARGET_BMV2},
-					P4File:           "https://example.com/p4example.p4",
+					Selector: corev1alpha1.P4TargetSelector{
+						SupportedTargets: []corev1alpha1.TargetClass{corev1alpha1.TARGET_CLASS_BMV2},
+					},
+					P4File: "https://example.com/p4example.p4",
 				},
 			}
 			Expect(k8sClient.Create(ctx, binding)).To(Succeed())
@@ -311,10 +304,17 @@ var _ = Describe("P4Target Controller", func() {
 				Expect(k8sClient.Delete(ctx, binding)).To(Succeed())
 			}()
 
+			By("Setting up the mocks for the readiness check")
+			fakeChecker := mocks.FakeReadinessChecker{Ready: true}
+			checkers := CheckerRegistry{
+				corev1alpha1.TARGET_CLASS_BMV2: &fakeChecker,
+			}
+
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Checkers: checkers,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -333,49 +333,3 @@ var _ = Describe("P4Target Controller", func() {
 		})
 	})
 })
-
-func createBMv2Pod(targetName string, ready bool) *corev1.Pod {
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      targetName + "-xyz",
-			Namespace: infrav1alpha1.BMV2_POD_NAMESPACE,
-			Labels: map[string]string{
-				corev1alpha1.TARGET_LABEL: targetName,
-			},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "dummy",
-					Image: "dummy-image",
-				},
-			},
-		},
-	}
-}
-
-func setPodReadyCondition(pod *corev1.Pod, ready bool) {
-	if !ready {
-		return
-	}
-	pod.Status.Phase = corev1.PodRunning
-	pod.Status.Conditions = []corev1.PodCondition{
-		{
-			Type:   corev1.PodReady,
-			Status: corev1.ConditionTrue,
-		},
-	}
-	pod.Status.ContainerStatuses = []corev1.ContainerStatus{
-		{
-			Name:    "dummy",
-			Image:   "dummy-image",
-			ImageID: "dummy-image:latest",
-			State: corev1.ContainerState{
-				Running: &corev1.ContainerStateRunning{
-					StartedAt: metav1.Now(),
-				},
-			},
-			Ready: true,
-		},
-	}
-}

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1alpha1 "builder/api/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -47,10 +48,9 @@ type P4TargetDeploymentSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Class defines the class of the P4 Target Deployment
+	// Template defines the template for creating P4 Targets
 	// +required
-	// +kubebuilder:validation:Enum=bmv2
-	Class string `json:"class"`
+	Template corev1alpha1.P4TargetTemplate `json:"template,omitempty"`
 }
 
 // P4TargetDeploymentStatus defines the observed state of P4TargetDeployment.

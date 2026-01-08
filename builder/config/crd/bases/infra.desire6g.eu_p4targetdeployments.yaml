@@ -44,11 +44,6 @@ spec:
           spec:
             description: spec defines the desired state of P4TargetDeployment
             properties:
-              class:
-                description: Class defines the class of the P4 Target Deployment
-                enum:
-                - bmv2
-                type: string
               replicas:
                 default: 1
                 description: Replicas defines the number of instances of the P4 Target
@@ -56,8 +51,19 @@ spec:
                 format: int32
                 minimum: 1
                 type: integer
+              template:
+                description: Template defines the template for creating P4 Targets
+                properties:
+                  targetClass:
+                    description: TargetClass is the target class of the P4 target
+                    enum:
+                    - bmv2
+                    type: string
+                required:
+                - targetClass
+                type: object
             required:
-            - class
+            - template
             type: object
           status:
             description: status defines the observed state of P4TargetDeployment

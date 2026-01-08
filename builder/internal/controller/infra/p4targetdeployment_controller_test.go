@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	corev1alpha1 "builder/api/core/v1alpha1"
 	infrav1alpha1 "builder/api/infra/v1alpha1"
 )
 
@@ -62,7 +63,9 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 				},
 				Spec: infrav1alpha1.P4TargetDeploymentSpec{
 					Replicas: nil,
-					Class:    "bmv2",
+					Template: corev1alpha1.P4TargetTemplate{
+						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -77,7 +80,9 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 				},
 				Spec: infrav1alpha1.P4TargetDeploymentSpec{
 					Replicas: nil,
-					Class:    "unknown-class",
+					Template: corev1alpha1.P4TargetTemplate{
+						TargetClass: "unknown-class",
+					},
 				},
 			}
 			err := k8sClient.Create(ctx, resource)
@@ -95,7 +100,9 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 				},
 				Spec: infrav1alpha1.P4TargetDeploymentSpec{
 					Replicas: &replicas,
-					Class:    "bmv2",
+					Template: corev1alpha1.P4TargetTemplate{
+						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
+					},
 				},
 			}
 			err := k8sClient.Create(ctx, resource)
@@ -135,7 +142,9 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 					},
 					Spec: infrav1alpha1.P4TargetDeploymentSpec{
 						Replicas: &replicas,
-						Class:    "bmv2",
+						Template: corev1alpha1.P4TargetTemplate{
+							TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
+						},
 					},
 					// TODO(user): Specify other spec details if needed.
 				}

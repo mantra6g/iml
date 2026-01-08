@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1alpha1 "builder/api/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -24,15 +25,20 @@ const BINDING_FINALIZER_LABEL = "scheduling.desire6g.eu/networkFunctionBinding-f
 
 const TARGET_ASSIGNMENT_LABEL = "scheduling.desire6g.eu/assignedTarget"
 
-const (
-	TARGET_BMV2 = "bmv2"
-	// TARGET_TOFINO  = "tofino"
-	// TARGET_XDP 	   = "xdp"
-	// TARGET_DPDK 	 = "dpdk"
-)
-
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+type NetworkFunctionBindingTemplate struct {
+	// Selector is used to select P4 targets based on their supported architectures
+	// +required
+	Selector corev1alpha1.P4TargetSelector `json:"selector,omitempty"`
+
+	// P4File is the actual P4 program file for the network function.
+	// It can be the actual p4program encoded in base64 or
+	// a s3://, http:// or https:// URL pointing to the P4 file location.
+	// +required
+	P4File string `json:"p4File,omitempty"`
+}
 
 // NetworkFunctionBindingSpec defines the desired state of NetworkFunctionBinding
 type NetworkFunctionBindingSpec struct {
@@ -41,11 +47,9 @@ type NetworkFunctionBindingSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// Supported target architectures for the network function
+	// Selector is used to select P4 targets based on their supported architectures
 	// +required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:Items=enum=bmv2
-	SupportedTargets []string `json:"supportedTargets,omitempty"`
+	Selector corev1alpha1.P4TargetSelector `json:"selector,omitempty"`
 
 	// P4File is the actual P4 program file for the network function.
 	// It can be the actual p4program encoded in base64 or

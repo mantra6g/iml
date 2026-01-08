@@ -171,7 +171,7 @@ func filterFeasible(binding *schedulingv1alpha1.NetworkFunctionBinding, targetLi
 	feasible := []corev1alpha1.P4Target{}
 	for _, t := range targetList {
 		// Match supported architecture
-		supportedArchitectures := binding.Spec.SupportedTargets
+		supportedArchitectures := binding.Spec.Selector.SupportedTargets
 		targetArch := t.Spec.TargetClass
 
 		if !matchesSupportedArchitectures(targetArch, supportedArchitectures) {
@@ -190,7 +190,7 @@ func filterFeasible(binding *schedulingv1alpha1.NetworkFunctionBinding, targetLi
 	return feasible
 }
 
-func matchesSupportedArchitectures(targetArch string, architectures []string) bool {
+func matchesSupportedArchitectures(targetArch corev1alpha1.TargetClass, architectures []corev1alpha1.TargetClass) bool {
 	for _, arch := range architectures {
 		if arch == targetArch {
 			return true

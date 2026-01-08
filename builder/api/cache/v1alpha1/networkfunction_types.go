@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -24,13 +25,6 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const NETWORK_FUNCTION_FINALIZER_LABEL = "core.desire6g.eu/networkFunction-finalizer"
-
-const (
-	TARGET_BMV2 = "bmv2"
-	// TARGET_TOFINO = "tofino"
-	// TARGET_XDP 	 = "xdp"
-	// TARGET_DPDK 	 = "dpdk"
-)
 
 // NetworkFunctionSpec defines the desired state of NetworkFunction
 type NetworkFunctionSpec struct {
@@ -45,17 +39,9 @@ type NetworkFunctionSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Supported target architectures for the network function
+	// Template describes the NetworkFunction that will be created
 	// +required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:Items=enum=bmv2
-	SupportedTargets []string `json:"supportedTargets,omitempty"`
-
-	// P4File is the actual P4 program file for the network function.
-	// It can be the actual p4program encoded in base64 or
-	// a s3://, http:// or https:// URL pointing to the P4 file location.
-	// +required
-	P4File string `json:"p4File,omitempty"`
+	Template schedulingv1alpha1.NetworkFunctionBindingTemplate `json:"template,omitempty"`
 }
 
 // NetworkFunctionStatus defines the observed state of NetworkFunction.

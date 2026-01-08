@@ -36,10 +36,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type CheckerRegistry map[corev1alpha1.TargetClass]readiness.Checker
+
 // P4TargetReconciler reconciles a P4Target object
 type P4TargetReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Checkers CheckerRegistry
 }
 
 // +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
@@ -70,16 +73,10 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	var checker readiness.Checker
-	switch p4target.Spec.TargetClass {
-	case corev1alpha1.TARGET_BMV2:
-		checker = &readiness.PodBasedTargetChecker{
-			Client: r.Client,
-		}
-	case corev1alpha1.TARGET_TOFINO:
-		checker = &readiness.ExternalTargetChecker{}
-	default:
+	checker, exists := r.Checkers[p4target.Spec.TargetClass]
+	if !exists {
 		logger.Error(nil, "Unknown P4Target class", "targetClass", p4target.Spec.TargetClass)
+		return ctrl.Result{}, nil
 	}
 
 	readyStatus := checker.Check(ctx, p4target)
@@ -135,6 +132,9 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Checkers == nil {
+		r.Checkers = make(CheckerRegistry)
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.P4Target{}).
 		// Watch Pods with label core.desire6g.eu/target

@@ -8,7 +8,6 @@ import (
 	infrav1alpha1 "builder/api/infra/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -49,13 +48,6 @@ func (p *PodBasedTargetChecker) Check(ctx context.Context, target *corev1alpha1.
 			corev1alpha1.TARGET_LABEL: target.Name,
 		},
 	); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ReadyStatus{
-				Ready:   false,
-				Reason:  ReasonPodNotFound,
-				Message: "Target's pod not found",
-			}
-		}
 		return ReadyStatus{
 			Ready:   false,
 			Reason:  ReasonUnknown,

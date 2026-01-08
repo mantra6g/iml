@@ -27,6 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	corev1alpha1 "builder/api/core/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 )
 
@@ -52,8 +53,10 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 						Namespace: "default",
 					},
 					Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
-						SupportedTargets: []string{schedulingv1alpha1.TARGET_BMV2},
-						P4File:           "https://example.com/p4file.p4",
+						Selector: corev1alpha1.P4TargetSelector{
+							SupportedTargets: []corev1alpha1.TargetClass{corev1alpha1.TARGET_CLASS_BMV2},
+						},
+						P4File: "https://example.com/p4file.p4",
 					},
 					// TODO(user): Specify other spec details if needed.
 				}

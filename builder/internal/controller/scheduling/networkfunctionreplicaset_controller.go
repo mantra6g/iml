@@ -180,8 +180,8 @@ func (r *NetworkFunctionReplicaSetReconciler) createBindingFromReplicaSet(replic
 			Namespace: replicaSet.Namespace,
 		},
 		Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
-			SupportedTargets: replicaSet.Spec.SupportedTargets,
-			P4File:           replicaSet.Spec.P4File,
+			Selector: replicaSet.Spec.Template.Selector,
+			P4File:   replicaSet.Spec.Template.P4File,
 		},
 	}
 

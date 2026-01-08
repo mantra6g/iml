@@ -26,11 +26,15 @@ import (
 const TARGET_LABEL = "core.desire6g.eu/target"
 const P4TARGET_FINALIZER_LABEL = "core.desire6g.eu/p4Target-finalizer"
 
+type TargetClass string
+
 const (
-	TARGET_BMV2   = "bmv2"
-	TARGET_TOFINO = "tofino"
-	// TARGET_XDP  = "xdp"
-	// TARGET_DPDK = "dpdk"
+	TARGET_CLASS_BMV2 TargetClass = "bmv2"
+	// TARGET_CLASS_TOFINO TargetClass = "tofino"
+	// TARGET_CLASS_XDP    TargetClass = "xdp"
+	// TARGET_CLASS_DPDK   TargetClass = "dpdk"
+	// TARGET_CLASS_EBPF   TargetClass = "ebpf"
+	// TARGET_CLASS_FPGA   TargetClass = "fpga"
 )
 
 const (
@@ -39,6 +43,23 @@ const (
 	P4_TARGET_PHASE_OCCUPIED = "Occupied"
 	P4_TARGET_PHASE_UNKNOWN  = "Unknown"
 )
+
+// P4TargetSelector is used to select P4 targets based on their supported architectures
+type P4TargetSelector struct {
+	// Supported target architectures for the network function
+	// +required
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:Items=enum=bmv2
+	SupportedTargets []TargetClass `json:"supportedTargets,omitempty"`
+}
+
+// P4TargetTemplate defines the template for creating P4 targets
+type P4TargetTemplate struct {
+	// TargetClass is the target class of the P4 target
+	// +required
+	// +kubebuilder:validation:Enum=bmv2
+	TargetClass TargetClass `json:"targetClass,omitempty"`
+}
 
 // P4TargetSpec defines the desired state of P4Target
 type P4TargetSpec struct {
@@ -50,7 +71,7 @@ type P4TargetSpec struct {
 	// TargetClass is the target class of the P4 target
 	// +required
 	// +kubebuilder:validation:Enum=bmv2
-	TargetClass string `json:"targetClass,omitempty"`
+	TargetClass TargetClass `json:"targetClass,omitempty"`
 }
 
 // P4TargetStatus defines the observed state of P4Target.

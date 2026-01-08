@@ -289,6 +289,6 @@ func (r *P4TargetDeploymentReconciler) desiredReplicaSetSpec(targetDeployment *i
 
 func (r *P4TargetDeploymentReconciler) desiredP4TargetSpec(targetDeployment *infrav1alpha1.P4TargetDeployment) corev1alpha1.P4TargetSpec {
 	return corev1alpha1.P4TargetSpec{
-		TargetClass: targetDeployment.Spec.Class,
+		TargetClass: targetDeployment.Spec.Template.TargetClass,
 	}
 }

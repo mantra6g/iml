@@ -28,6 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
+	corev1alpha1 "builder/api/core/v1alpha1"
+	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 	"builder/test/mocks"
 )
 
@@ -54,9 +56,13 @@ var _ = Describe("NetworkFunction Controller", func() {
 						Namespace: "default",
 					},
 					Spec: cachev1alpha1.NetworkFunctionSpec{
-						Replicas:         &replicas,
-						SupportedTargets: []string{cachev1alpha1.TARGET_BMV2},
-						P4File:           "https://example.com/p4file.p4",
+						Replicas: &replicas,
+						Template: schedulingv1alpha1.NetworkFunctionBindingTemplate{
+							Selector: corev1alpha1.P4TargetSelector{
+								SupportedTargets: []corev1alpha1.TargetClass{corev1alpha1.TARGET_CLASS_BMV2},
+							},
+							P4File: "https://example.com/p4file.p4",
+						},
 					},
 					// TODO(user): Specify other spec details if needed.
 				}

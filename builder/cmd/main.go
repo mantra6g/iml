@@ -49,6 +49,7 @@ import (
 	"builder/pkg/cache"
 	"builder/pkg/events"
 	"builder/pkg/mqtt"
+	"builder/pkg/readiness"
 	"builder/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
@@ -266,9 +267,24 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)
 	}
-	if err := (&corecontroller.P4TargetReconciler{
+
+	podBasedChecker := &readiness.PodBasedTargetChecker{
 		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	}
+	// externalChecker := &readiness.ExternalTargetChecker{}
+	checkers := corecontroller.CheckerRegistry{
+		corev1alpha1.TARGET_CLASS_BMV2: podBasedChecker,
+		// corev1alpha1.TARGET_CLASS_EBPF: podBasedChecker,
+		// corev1alpha1.TARGET_CLASS_XDP: podBasedChecker,
+		// corev1alpha1.TARGET_CLASS_DPDK: podBasedChecker,
+		// corev1alpha1.TARGET_CLASS_TOFINO: externalChecker,
+		// corev1alpha1.TARGET_CLASS_FPGA: externalChecker,
+	}
+
+	if err := (&corecontroller.P4TargetReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Checkers: checkers,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 		os.Exit(1)

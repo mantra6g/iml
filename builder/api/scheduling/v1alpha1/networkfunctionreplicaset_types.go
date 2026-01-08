@@ -37,17 +37,9 @@ type NetworkFunctionReplicaSetSpec struct {
 	// +kubebuilder:default:=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Supported target architectures for the network function
+	// Template describes the NetworkFunction that will be created
 	// +required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:Items=enum=bmv2
-	SupportedTargets []string `json:"supportedTargets,omitempty"`
-
-	// P4File is the actual P4 program file for the network function.
-	// It can be the actual p4program encoded in base64 or
-	// a s3://, http:// or https:// URL pointing to the P4 file location.
-	// +required
-	P4File string `json:"p4File,omitempty"`
+	Template NetworkFunctionBindingTemplate `json:"template,omitempty"`
 }
 
 // NetworkFunctionReplicaSetStatus defines the observed state of NetworkFunctionReplicaSet.

@@ -143,9 +143,8 @@ func (r *NetworkFunctionReconciler) replicaSetForNetworkFunction(
 			Namespace: nf.Namespace,
 		},
 		Spec: schedulingv1alpha1.NetworkFunctionReplicaSetSpec{
-			Replicas:         nf.Spec.Replicas,
-			SupportedTargets: nf.Spec.SupportedTargets,
-			P4File:           nf.Spec.P4File,
+			Replicas: nf.Spec.Replicas,
+			Template: nf.Spec.Template,
 		},
 	}
 
