@@ -79,9 +79,6 @@ type P4TargetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Phase is the current phase of the P4 target
-	Phase string `json:"phase,omitempty"`
-
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// Ready indicates if the underlying P4 target is ready to accept network functions
@@ -94,7 +91,8 @@ type P4TargetStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="READY",type=string,JSONPath=".status.ready"
+// +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=".metadata.creationTimestamp"
 
 // P4Target is the Schema for the p4targets API
 type P4Target struct {

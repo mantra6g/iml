@@ -31,8 +31,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-const finalizerName = "scheduling.desire6g.eu/finalizer"
-
 // NetworkFunctionBindingReconciler reconciles a NetworkFunctionBinding object
 type NetworkFunctionBindingReconciler struct {
 	client.Client
@@ -70,7 +68,7 @@ func (r *NetworkFunctionBindingReconciler) Reconcile(ctx context.Context, req ct
 	// Check if being deleted
 	if !binding.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Handle deletion
-		if containsString(binding.GetFinalizers(), finalizerName) {
+		if containsString(binding.GetFinalizers(), schedulingv1alpha1.BINDING_FINALIZER_LABEL) {
 			// Perform any cleanup logic here before removing finalizer
 
 			// r.Bus.Publish(events.Event{
@@ -80,7 +78,7 @@ func (r *NetworkFunctionBindingReconciler) Reconcile(ctx context.Context, req ct
 			// ... any additional cleanup logic ...
 
 			// Remove finalizer
-			binding.SetFinalizers(removeString(binding.GetFinalizers(), finalizerName))
+			binding.SetFinalizers(removeString(binding.GetFinalizers(), schedulingv1alpha1.BINDING_FINALIZER_LABEL))
 			if err := r.Update(ctx, binding); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -89,9 +87,8 @@ func (r *NetworkFunctionBindingReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	// Add finalizer if not present
-	const finalizerName = "scheduling.desire6g.eu/finalizer"
-	if !containsString(binding.Finalizers, finalizerName) {
-		binding.Finalizers = append(binding.Finalizers, finalizerName)
+	if !containsString(binding.Finalizers, schedulingv1alpha1.BINDING_FINALIZER_LABEL) {
+		binding.Finalizers = append(binding.Finalizers, schedulingv1alpha1.BINDING_FINALIZER_LABEL)
 		if err := r.Update(ctx, binding); err != nil {
 			logger.Error(err, "failed to add finalizer to NetworkFunctionBinding")
 			return ctrl.Result{}, err
@@ -173,13 +170,10 @@ func filterFeasible(binding *schedulingv1alpha1.NetworkFunctionBinding, targetLi
 		// Match supported architecture
 		supportedArchitectures := binding.Spec.Selector.SupportedTargets
 		targetArch := t.Spec.TargetClass
-
 		if !matchesSupportedArchitectures(targetArch, supportedArchitectures) {
 			continue
 		}
-
-		// Is target not ready/occupied? => skip
-		if t.Status.Phase != "Ready" {
+		if !t.Status.Ready {
 			continue
 		}
 

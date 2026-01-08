@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
@@ -128,6 +129,27 @@ var _ = Describe("P4Target Controller", func() {
 
 			By("Cleanup the specific resource instance P4Target")
 			Expect(k8sClient.Delete(ctx, createdResource)).To(Succeed())
+		})
+	})
+
+	Context("When reconciling edge cases", func() {
+		const resourceName = "edge-resource"
+
+		ctx := context.Background()
+
+		It("should ignore missing P4Targets without returning an error", func() {
+			reconciler := &P4TargetReconciler{
+				Client: k8sClient,
+				Scheme: scheme.Scheme,
+			}
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
@@ -329,7 +351,6 @@ var _ = Describe("P4Target Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, reconciledResource)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reconciledResource.Status.Ready).To(BeFalse())
-			Expect(reconciledResource.Status.Phase).To(Equal(corev1alpha1.P4_TARGET_PHASE_OCCUPIED))
 		})
 	})
 })

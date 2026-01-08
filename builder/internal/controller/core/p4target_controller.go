@@ -32,8 +32,16 @@ import (
 	"builder/pkg/readiness"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+)
+
+const (
+	CONDITION_AVAILABLE   = "Available"
+	CONDITION_INUSE       = "InUse"
+	CONDITION_READINESS_PROBE_FAILED = "ReadinessProbeFailed"
+	CONDITION_READINESS_PROBE_UNIMPLEMENTED = "ReadinessProbeUnimplemented"
+	CONDITION_UNKNOWN     = "Unknown"
 )
 
 type CheckerRegistry map[corev1alpha1.TargetClass]readiness.Checker
@@ -75,19 +83,20 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	checker, exists := r.Checkers[p4target.Spec.TargetClass]
 	if !exists {
-		logger.Error(nil, "Unknown P4Target class", "targetClass", p4target.Spec.TargetClass)
-		return ctrl.Result{}, nil
+		logger.Error(nil, "Checker not found", "targetClass", p4target.Spec.TargetClass)
+		p4target.Status.Ready = false
+		r.setCondition(p4target, CONDITION_READINESS_PROBE_UNIMPLEMENTED)
+		err := r.Client.Status().Update(ctx, p4target)
+		return ctrl.Result{}, err
 	}
 
 	readyStatus := checker.Check(ctx, p4target)
 	if !readyStatus.Ready {
 		logger.Info("P4Target not ready", "reason", readyStatus.Reason, "message", readyStatus.Message)
-		updateP4TargetStatus(p4target, readyStatus)
-		if err := r.Status().Update(ctx, p4target); err != nil {
-			logger.Error(err, "Failed to update P4Target status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+		p4target.Status.Ready = false
+		r.setCondition(p4target, CONDITION_READINESS_PROBE_FAILED)
+		err := r.Client.Status().Update(ctx, p4target)
+		return ctrl.Result{}, err
 	}
 
 	bindingList := &schedulingv1alpha1.NetworkFunctionBindingList{}
@@ -97,29 +106,17 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		},
 	); err != nil {
 		logger.Error(err, "unable to list NetworkFunctionBindings")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		p4target.Status.Ready = false
+		r.setCondition(p4target, CONDITION_UNKNOWN)
+		err := r.Client.Status().Update(ctx, p4target)
+		return ctrl.Result{}, err
 	}
-
 	if len(bindingList.Items) != 0 {
 		p4target.Status.Ready = false
-		p4target.Status.Phase = corev1alpha1.P4_TARGET_PHASE_OCCUPIED
-		p4target.Status.Conditions = append(p4target.Status.Conditions, metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionFalse,
-			Reason:             readiness.ReasonTargetInUse,
-			Message:            "P4Target is assigned to one or more NetworkFunctionBindings",
-			LastTransitionTime: metav1.Now(),
-		})
+		r.setCondition(p4target, CONDITION_INUSE)
 	} else {
 		p4target.Status.Ready = true
-		p4target.Status.Phase = corev1alpha1.P4_TARGET_PHASE_READY
-		p4target.Status.Conditions = append(p4target.Status.Conditions, metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionTrue,
-			Reason:             readiness.ReasonAvailable,
-			Message:            "P4Target is available",
-			LastTransitionTime: metav1.Now(),
-		})
+		r.setCondition(p4target, CONDITION_AVAILABLE)
 	}
 
 	if err := r.Status().Update(ctx, p4target); err != nil {
@@ -202,24 +199,57 @@ func (r *P4TargetReconciler) mapBindingToRequests(ctx context.Context, obj clien
 	}
 }
 
-func updateP4TargetStatus(target *corev1alpha1.P4Target, readyStatus readiness.ReadyStatus) {
-	var condition metav1.Condition
-	if readyStatus.Ready {
-		target.Status.Phase = "Ready"
-		condition = metav1.Condition{
-			Type:   "Ready",
-			Status: metav1.ConditionTrue,
+func (r *P4TargetReconciler) setCondition(p4target *corev1alpha1.P4Target, conditionType string) {
+	switch conditionType {
+	case CONDITION_AVAILABLE:
+		p4target.Status.Ready = true
+		condition := metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionTrue,
+			Reason:             "Available",
+			Message:            "P4Target is available for assignment",
+			LastTransitionTime: metav1.Now(),
 		}
-	} else {
-		target.Status.Phase = "NotReady"
-		condition = metav1.Condition{
-			Type:   "Ready",
-			Status: metav1.ConditionFalse,
+		p4target.Status.Conditions = append(p4target.Status.Conditions, condition)
+	case CONDITION_INUSE:
+		p4target.Status.Ready = false
+		condition := metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "InUse",
+			Message:            "P4Target is currently assigned to a NetworkFunction",
+			LastTransitionTime: metav1.Now(),
 		}
+		p4target.Status.Conditions = append(p4target.Status.Conditions, condition)
+	case CONDITION_READINESS_PROBE_FAILED:
+		p4target.Status.Ready = false
+		condition := metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "ReadinessProbeFailed",
+			Message:            "P4Target readiness probe failed",
+			LastTransitionTime: metav1.Now(),
+		}
+		p4target.Status.Conditions = append(p4target.Status.Conditions, condition)
+	case CONDITION_READINESS_PROBE_UNIMPLEMENTED:
+		p4target.Status.Ready = false
+		condition := metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "ReadinessProbeUnimplemented",
+			Message:            "P4Target readiness probe is unimplemented for this target class",
+			LastTransitionTime: metav1.Now(),
+		}
+		p4target.Status.Conditions = append(p4target.Status.Conditions, condition)
+	case CONDITION_UNKNOWN:
+		p4target.Status.Ready = false
+		condition := metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "Unknown",
+			Message:            "P4Target status is unknown due to an error",
+			LastTransitionTime: metav1.Now(),
+		}
+		p4target.Status.Conditions = append(p4target.Status.Conditions, condition)
 	}
-	condition.Reason = readyStatus.Reason
-	condition.Message = readyStatus.Message
-	condition.LastTransitionTime = metav1.Now()
-
-	target.Status.Conditions = append(target.Status.Conditions, condition)
 }

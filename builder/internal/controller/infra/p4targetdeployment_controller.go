@@ -95,7 +95,7 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 	replicas := int(*deployment.Spec.Replicas)
 	parentName := deployment.Name
 
-	for i := 0; i < replicas; i++ {
+	for i := range replicas {
 		targetName := fmt.Sprintf("%s-%d", parentName, i)
 
 		// Create the ReplicaSet for the P4 Target's pod
