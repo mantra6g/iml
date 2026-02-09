@@ -15,9 +15,12 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
+    - jsonPath: .status.ready
+      name: READY
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -114,9 +117,6 @@ spec:
                 description: LastHeartbeatTime is the last time the P4 target sent
                   a heartbeat
                 format: date-time
-                type: string
-              phase:
-                description: Phase is the current phase of the P4 target
                 type: string
               ready:
                 description: Ready indicates if the underlying P4 target is ready

@@ -23,8 +23,9 @@ import (
 
 const TGT_DEP_FINALIZER_LABEL = "infra.desire6g.eu/targetDeployment-finalizer"
 
-const BMV2_POD_NAMESPACE = "iml-infra"
+const BMV2_POD_NAMESPACE = "desire6g-system"
 const BMV2_TARGET_DEPLOYMENT_LABEL = "infra.desire6g.eu/targetDeployment"
+const BMV2_TARGET_REPLICA_INDEX_LABEL = "infra.desire6g.eu/targetReplicaIndex"
 const BMV2_DATAPLANE_CONTAINER_NAME = "data-plane"
 const BMV2_DATAPLANE_CONTAINER_IMAGE = "tomasagata/p4target-dp-bmv2:latest"
 const BMV2_CONTROLPLANE_CONTAINER_NAME = "control-plane"

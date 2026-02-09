@@ -32,16 +32,16 @@ import (
 	"builder/pkg/readiness"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	CONDITION_AVAILABLE   = "Available"
-	CONDITION_INUSE       = "InUse"
-	CONDITION_READINESS_PROBE_FAILED = "ReadinessProbeFailed"
+	CONDITION_AVAILABLE                     = "Available"
+	CONDITION_INUSE                         = "InUse"
+	CONDITION_READINESS_PROBE_FAILED        = "ReadinessProbeFailed"
 	CONDITION_READINESS_PROBE_UNIMPLEMENTED = "ReadinessProbeUnimplemented"
-	CONDITION_UNKNOWN     = "Unknown"
+	CONDITION_UNKNOWN                       = "Unknown"
 )
 
 type CheckerRegistry map[corev1alpha1.TargetClass]readiness.Checker

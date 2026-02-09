@@ -61,7 +61,7 @@ func (r *NetworkFunctionBindingReconciler) Reconcile(ctx context.Context, req ct
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "unable to fetch NetworkFunctionBinding")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, err
 	}
 	logger.Info("Reconciling NetworkFunctionBinding", "name", binding.Name, "namespace", binding.Namespace)
 
