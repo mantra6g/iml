@@ -1,0 +1,12 @@
+site_name: IML Documentation
+site_description: Documentation for the Infrastructure Management Layer (IML) project.
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+
+theme:
+  name: material
+
+extra_javascript:
+  - js/readthedocs.js
