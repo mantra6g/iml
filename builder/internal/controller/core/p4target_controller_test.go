@@ -43,21 +43,13 @@ var _ = Describe("P4Target Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		p4target := &corev1alpha1.P4Target{}
 
 		BeforeEach(func() {})
 
-		AfterEach(func() {
-			// // TODO(user): Cleanup logic after each test, like removing the resource instance.
-			// resource := &corev1alpha1.P4Target{}
-			// err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			// Expect(err).NotTo(HaveOccurred())
-
-			// By("Cleanup the specific resource instance P4Target")
-			// Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
+		AfterEach(func() {})
 
 		It("should successfully create a target of class bmv2", func() {
 			By("creating the custom resource for the Kind P4Target")
@@ -71,7 +63,6 @@ var _ = Describe("P4Target Controller", func() {
 					Spec: corev1alpha1.P4TargetSpec{
 						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -98,7 +89,6 @@ var _ = Describe("P4Target Controller", func() {
 					Spec: corev1alpha1.P4TargetSpec{
 						TargetClass: "an_unknown_class",
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(MatchError(ContainSubstring("Unsupported value")))
 			}
@@ -116,7 +106,6 @@ var _ = Describe("P4Target Controller", func() {
 					Spec: corev1alpha1.P4TargetSpec{
 						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -160,7 +149,7 @@ var _ = Describe("P4Target Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		p4target := &corev1alpha1.P4Target{}
 
@@ -176,14 +165,12 @@ var _ = Describe("P4Target Controller", func() {
 					Spec: corev1alpha1.P4TargetSpec{
 						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &corev1alpha1.P4Target{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -213,8 +200,6 @@ var _ = Describe("P4Target Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 
 			By("Verifying the status of the reconciled resource")
 			reconciledResource := &corev1alpha1.P4Target{}
@@ -230,7 +215,7 @@ var _ = Describe("P4Target Controller", func() {
 					Name: infrav1alpha1.BMV2_POD_NAMESPACE,
 				},
 			}
-			k8sClient.Create(ctx, namespace)
+			_ = k8sClient.Create(ctx, namespace)
 
 			By("Setting up the mocks for the readiness check")
 			fakeChecker := mocks.FakeReadinessChecker{Ready: false}
@@ -249,8 +234,6 @@ var _ = Describe("P4Target Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 
 			By("Verifying the status of the reconciled resource")
 			reconciledResource := &corev1alpha1.P4Target{}
@@ -266,7 +249,7 @@ var _ = Describe("P4Target Controller", func() {
 					Name: infrav1alpha1.BMV2_POD_NAMESPACE,
 				},
 			}
-			k8sClient.Create(ctx, namespace)
+			_ = k8sClient.Create(ctx, namespace)
 
 			By("Setting up the mocks for the readiness check")
 			fakeChecker := mocks.FakeReadinessChecker{Ready: true}
@@ -285,8 +268,6 @@ var _ = Describe("P4Target Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 
 			By("Verifying the status of the reconciled resource")
 			reconciledResource := &corev1alpha1.P4Target{}
@@ -302,7 +283,7 @@ var _ = Describe("P4Target Controller", func() {
 					Name: infrav1alpha1.BMV2_POD_NAMESPACE,
 				},
 			}
-			k8sClient.Create(ctx, namespace)
+			_ = k8sClient.Create(ctx, namespace)
 
 			By("Creating a binding for that target")
 			binding := &schedulingv1alpha1.NetworkFunctionBinding{
@@ -343,8 +324,6 @@ var _ = Describe("P4Target Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 
 			By("Verifying the status of the reconciled resource")
 			reconciledResource := &corev1alpha1.P4Target{}

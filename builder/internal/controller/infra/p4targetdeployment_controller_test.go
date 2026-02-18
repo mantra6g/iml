@@ -143,7 +143,6 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &infrav1alpha1.P4TargetDeployment{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if err != nil && errors.IsNotFound(err) {
@@ -182,7 +181,6 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 						TargetClass: corev1alpha1.TARGET_CLASS_BMV2,
 					},
 				},
-				// TODO(user): Specify other spec details if needed.
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
@@ -196,8 +194,6 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 
 		It("should handle reconciliation when the resource is not found", func() {

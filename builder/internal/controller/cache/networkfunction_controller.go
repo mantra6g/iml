@@ -50,10 +50,6 @@ type NetworkFunctionReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the NetworkFunction object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
@@ -102,7 +98,11 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	err := r.Get(ctx, req.NamespacedName, found)
 	if err != nil && apierrors.IsNotFound(err) {
 		// Deployment not found, create it
-		dep := r.replicaSetForNetworkFunction(nf)
+		dep, err := r.replicaSetForNetworkFunction(nf)
+		if err != nil {
+			logger.Error(err, "Failed to create NetworkFunctionReplicaSet object from NetworkFunction", "NetworkFunction.Namespace", nf.Namespace, "NetworkFunction.Name", nf.Name)
+			return ctrl.Result{}, err
+		}
 
 		logger.Info("Creating a new NetworkFunctionReplicaSet", "NetworkFunctionReplicaSet.Namespace", dep.Namespace, "NetworkFunctionReplicaSet.Name", dep.Name)
 		if err := r.Create(ctx, dep); err != nil {
@@ -135,7 +135,7 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *NetworkFunctionReconciler) replicaSetForNetworkFunction(
-	nf *cachev1alpha1.NetworkFunction) *schedulingv1alpha1.NetworkFunctionReplicaSet {
+	nf *cachev1alpha1.NetworkFunction) (*schedulingv1alpha1.NetworkFunctionReplicaSet, error) {
 
 	dep := &schedulingv1alpha1.NetworkFunctionReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -149,9 +149,9 @@ func (r *NetworkFunctionReconciler) replicaSetForNetworkFunction(
 	}
 
 	// Set the ownerRef for the ReplicaSet, ensuring that the ReplicaSet
-	// will be deleted when the Busybox CR is deleted.
-	controllerutil.SetControllerReference(nf, dep, r.Scheme)
-	return dep
+	// will be deleted when the NetworkFunction CR is deleted.
+	err := controllerutil.SetControllerReference(nf, dep, r.Scheme)
+	return dep, err
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -39,7 +39,7 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		networkfunctionreplicaset := &schedulingv1alpha1.NetworkFunctionReplicaSet{}
 
@@ -62,14 +62,12 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 							P4File: "https://example.com/p4file.p4",
 						},
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &schedulingv1alpha1.NetworkFunctionReplicaSet{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -89,8 +87,6 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })

@@ -31,7 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
@@ -52,10 +52,6 @@ type NetworkFunctionReplicaSetReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the NetworkFunctionReplicaSet object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
@@ -86,7 +82,11 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 		logger.Info("Creating missing NetworkFunctionBindings", "count", missingBindings)
 
 		for range missingBindings {
-			binding := r.createBindingFromReplicaSet(replicaSet)
+			binding, err := r.createBindingFromReplicaSet(replicaSet)
+			if err != nil {
+				logger.Error(err, "unable to create NetworkFunctionBinding from NetworkFunctionReplicaSet", "replicaSet", replicaSet)
+				return ctrl.Result{}, err
+			}
 			if err := r.Create(ctx, binding); err != nil {
 				logger.Error(err, "unable to create NetworkFunctionBinding", "binding", binding)
 				return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -173,7 +173,7 @@ func (r *NetworkFunctionReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager)
 		Complete(r)
 }
 
-func (r *NetworkFunctionReplicaSetReconciler) createBindingFromReplicaSet(replicaSet *schedulingv1alpha1.NetworkFunctionReplicaSet) *schedulingv1alpha1.NetworkFunctionBinding {
+func (r *NetworkFunctionReplicaSetReconciler) createBindingFromReplicaSet(replicaSet *schedulingv1alpha1.NetworkFunctionReplicaSet) (*schedulingv1alpha1.NetworkFunctionBinding, error) {
 	binding := &schedulingv1alpha1.NetworkFunctionBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      replicaSet.Name + "-" + randSeq(5),
@@ -187,8 +187,8 @@ func (r *NetworkFunctionReplicaSetReconciler) createBindingFromReplicaSet(replic
 
 	// Set the ownerRef for the Binding, ensuring that the Binding
 	// will be deleted when the NetworkFunctionReplicaSet CR is deleted.
-	controllerutil.SetControllerReference(replicaSet, binding, r.Scheme)
-	return binding
+	err := controllerutil.SetControllerReference(replicaSet, binding, r.Scheme)
+	return binding, err
 }
 
 func randSeq(n int) string {
