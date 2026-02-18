@@ -1,7 +1,17 @@
+# nfvo-api.py generated files
 deploys
 files
 kustomize
+
+# Python
 .venv
+
+# IDE and OS generated files
 .vscode
+.idea/
+
+# macOS generated files
 .DS_Store
-.idea
+
+# Webdocs generated files
+site/
