@@ -24,12 +24,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	
+
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
-	
+
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 

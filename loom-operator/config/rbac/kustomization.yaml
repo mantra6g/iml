@@ -34,13 +34,13 @@ resources:
 - core_p4target_admin_role.yaml
 - core_p4target_editor_role.yaml
 - core_p4target_viewer_role.yaml
-- cache_servicechain_admin_role.yaml
-- cache_servicechain_editor_role.yaml
-- cache_servicechain_viewer_role.yaml
-- cache_networkfunction_admin_role.yaml
-- cache_networkfunction_editor_role.yaml
-- cache_networkfunction_viewer_role.yaml
-- cache_application_admin_role.yaml
-- cache_application_editor_role.yaml
-- cache_application_viewer_role.yaml
+- core_servicechain_admin_role.yaml
+- core_servicechain_editor_role.yaml
+- core_servicechain_viewer_role.yaml
+- core_networkfunction_admin_role.yaml
+- core_networkfunction_editor_role.yaml
+- core_networkfunction_viewer_role.yaml
+- core_application_admin_role.yaml
+- core_application_editor_role.yaml
+- core_application_viewer_role.yaml
 

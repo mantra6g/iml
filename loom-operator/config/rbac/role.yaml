@@ -29,38 +29,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.loom.io
-  resources:
-  - applications
-  - networkfunctions
-  - servicechains
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cache.loom.io
-  resources:
-  - applications/finalizers
-  - networkfunctions/finalizers
-  - servicechains/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - cache.loom.io
-  resources:
-  - applications/status
-  - networkfunctions/status
-  - servicechains/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
   - coordination.k8s.io
   resources:
   - leases
@@ -71,7 +39,10 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
+  - applications
+  - networkfunctions
   - p4targets
+  - servicechains
   verbs:
   - create
   - delete
@@ -83,13 +54,19 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
+  - applications/finalizers
+  - networkfunctions/finalizers
   - p4targets/finalizers
+  - servicechains/finalizers
   verbs:
   - update
 - apiGroups:
   - core.loom.io
   resources:
+  - applications/status
+  - networkfunctions/status
   - p4targets/status
+  - servicechains/status
   verbs:
   - get
   - patch

@@ -8,7 +8,7 @@ import (
 )
 
 var Resource = schema.GroupVersionResource{
-	Group:    "cache.desire6g.eu",
+	Group:    "core.desire6g.eu",
 	Version:  "v1alpha1",
 	Resource: "applications",
 }

@@ -21,11 +21,11 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -36,16 +36,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	
-	"loom/internal/controller/cache/application"
-	"loom/internal/controller/cache/networkfunction"
-	cachecontroller "loom/internal/controller/cache/servicechain"
+
+	"loom/internal/controller/core/application"
+	"loom/internal/controller/core/networkfunction"
 	corecontroller "loom/internal/controller/core/p4target"
+	"loom/internal/controller/core/servicechain"
 	infracontroller "loom/internal/controller/infra/bmv2target"
 	schedulingcontroller "loom/internal/controller/scheduling/nf_binding"
 	"loom/internal/controller/scheduling/nf_replicaset"
 
-	cachev1alpha1 "loom/api/cache/v1alpha1"
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
@@ -61,7 +60,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(cachev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(infrav1alpha1.AddToScheme(scheme))
 	utilruntime.Must(schedulingv1alpha1.AddToScheme(scheme))
@@ -236,7 +234,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)
 	}
-	if err := (&cachecontroller.ServiceChainReconciler{
+	if err := (&servicechain.ServiceChainReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {

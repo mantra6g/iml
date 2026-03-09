@@ -52,7 +52,7 @@ deployment procedure, you can view the `examples` folder, where three examples a
 These are the source and destinations for the traffic. All traffic must flow from one application to another. Currently, these must be defined first in IML, and then deployed using the CNI. Here is an example extracted from the `examples/simple/definitions.yaml` file.
 
 ```yaml
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.desire6g.eu/v1alpha1
 kind: Application
 metadata:
   name: web-client
@@ -60,7 +60,7 @@ metadata:
 spec: 
   override_id: dead-beef
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.desire6g.eu/v1alpha1
 kind: Application
 metadata:
   name: web-server
@@ -73,7 +73,7 @@ spec:
 These are middleboxes that take in packets in real time and perform some operation with them. In this scenario, we'll be using a simple packet logger NF that essentially prints "Function executed" every time a packet from the App-App flow is successfully identified. Network Functions, unlike applications, are automatically deployed.
 
 ```yaml
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.desire6g.eu/v1alpha1
 kind: NetworkFunction
 metadata:
   name: pkt-logger
@@ -90,7 +90,7 @@ spec:
 They describe how the traffic should flow between the applications. In this case, we want the traffic from A to B to flow through the packet logger network function. **These traffic flows are NOT bidirectional**. Meaning, you can define a packet function when traffic flows from A to B and another network function when traffic flows from B to A. If you want to make it bidirectional, just create a service chain in the opposite direction.
 
 ```yaml
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.desire6g.eu/v1alpha1
 kind: ServiceChain
 metadata:
   name: client-server-with-logger

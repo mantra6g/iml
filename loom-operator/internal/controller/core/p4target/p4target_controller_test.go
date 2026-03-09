@@ -18,21 +18,20 @@ package p4target
 
 import (
 	"context"
-	
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	
-	
-	p4targetutil "loom/internal/controller/core/p4target/util"
+
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	p4targetutil "loom/internal/controller/core/p4target/util"
 )
 
 const (

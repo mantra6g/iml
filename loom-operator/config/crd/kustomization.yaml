@@ -2,9 +2,9 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/cache.loom.io_applications.yaml
-- bases/cache.loom.io_networkfunctions.yaml
-- bases/cache.loom.io_servicechains.yaml
+- bases/core.loom.io_applications.yaml
+- bases/core.loom.io_networkfunctions.yaml
+- bases/core.loom.io_servicechains.yaml
 - bases/core.loom.io_p4targets.yaml
 - bases/scheduling.loom.io_networkfunctionreplicasets.yaml
 - bases/scheduling.loom.io_networkfunctionbindings.yaml

@@ -1,8 +1,8 @@
 ## Append samples of your project ##
 resources:
-- cache_v1alpha1_application.yaml
-- cache_v1alpha1_networkfunction.yaml
-- cache_v1alpha1_servicechain.yaml
+- core_v1alpha1_application.yaml
+- core_v1alpha1_networkfunction.yaml
+- core_v1alpha1_servicechain.yaml
 - core_v1alpha1_p4target.yaml
 - scheduling_v1alpha1_networkfunctionreplicaset.yaml
 - scheduling_v1alpha1_networkfunctionbinding.yaml

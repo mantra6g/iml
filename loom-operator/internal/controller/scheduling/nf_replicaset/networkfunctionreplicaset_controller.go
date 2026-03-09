@@ -19,18 +19,18 @@ package nf_replicaset
 import (
 	"context"
 	"time"
-	
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	
-	"loom/pkg/util/ptr"
+
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 	"loom/internal/controller/scheduling/nf_replicaset/util"
 	rsutil "loom/internal/controller/scheduling/nf_replicaset/util"
+	"loom/pkg/util/ptr"
 )
 
 const (

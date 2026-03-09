@@ -2,7 +2,7 @@ package util
 
 import (
 	"math"
-	
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"

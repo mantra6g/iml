@@ -19,19 +19,19 @@ package bmv2target
 import (
 	"context"
 	"fmt"
-	
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	
-	p4targetutil "loom/internal/controller/core/p4target/util"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
+	p4targetutil "loom/internal/controller/core/p4target/util"
 	bmv2utils "loom/internal/controller/infra/bmv2target/util"
 )
 
