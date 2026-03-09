@@ -17,7 +17,6 @@ limitations under the License.
 package servicechain
 
 import (
-	stringutils "builder/pkg/util/string"
 	"context"
 	"fmt"
 	"time"
@@ -32,14 +31,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
-	"builder/pkg/events"
+	stringutils "builder/pkg/util/string"
 )
 
 // ServiceChainReconciler reconciles a ServiceChain object
 type ServiceChainReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Bus    events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains,verbs=get;list;watch;create;update;patch;delete
@@ -73,11 +71,6 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !serviceChain.DeletionTimestamp.IsZero() {
 		// Handle deletion
 		if stringutils.ContainsElement(serviceChain.GetFinalizers(), cachev1alpha1.SERVICE_CHAIN_FINALIZER_LABEL) {
-			r.Bus.Publish(events.Event{
-				Name:    events.EventChainPreDeleted,
-				Payload: &serviceChain,
-			})
-
 			// Remove finalizer
 			serviceChain.SetFinalizers(stringutils.RemoveElement(serviceChain.GetFinalizers(), cachev1alpha1.SERVICE_CHAIN_FINALIZER_LABEL))
 			if err := r.Update(ctx, &serviceChain); err != nil {
@@ -130,12 +123,6 @@ func (r *ServiceChainReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Error(err, "Failed to update ServiceChain status")
 		return ctrl.Result{}, err
 	}
-
-	// All is well
-	r.Bus.Publish(events.Event{
-		Name:    events.EventChainPreUpdated,
-		Payload: &serviceChain,
-	})
 
 	return ctrl.Result{}, nil
 }

@@ -28,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
-	"builder/test/mocks"
 )
 
 var _ = Describe("Application Controller", func() {
@@ -69,12 +68,9 @@ var _ = Describe("Application Controller", func() {
 
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			fakeEventBus := &mocks.FakeEventBus{}
-
 			controllerReconciler := &ApplicationReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
-				Bus:    fakeEventBus,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

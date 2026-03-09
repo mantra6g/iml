@@ -27,14 +27,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
-	"builder/pkg/events"
 )
 
 // ApplicationReconciler reconciles an Application object
 type ApplicationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Bus    events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -64,11 +62,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !app.DeletionTimestamp.IsZero() {
 		// Handle deletion
 		if stringutils.ContainsElement(app.GetFinalizers(), cachev1alpha1.APPLICATION_FINALIZER_LABEL) {
-			r.Bus.Publish(events.Event{
-				Name:    events.EventAppPreDeleted,
-				Payload: &app,
-			})
-
 			// Remove finalizer
 			app.SetFinalizers(stringutils.RemoveElement(app.GetFinalizers(), cachev1alpha1.APPLICATION_FINALIZER_LABEL))
 			if err := r.Update(ctx, &app); err != nil {
@@ -85,12 +78,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 	}
-
-	// All is well
-	r.Bus.Publish(events.Event{
-		Name:    events.EventAppPreUpdated,
-		Payload: &app,
-	})
 
 	return ctrl.Result{}, nil
 }

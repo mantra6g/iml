@@ -31,7 +31,6 @@ import (
 	cachev1alpha1 "builder/api/cache/v1alpha1"
 	corev1alpha1 "builder/api/core/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/test/mocks"
 )
 
 const (
@@ -95,12 +94,9 @@ var _ = Describe("NetworkFunction Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			fakeEventBus := &mocks.FakeEventBus{}
-
 			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
-				Bus:    fakeEventBus,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -154,12 +150,9 @@ var _ = Describe("NetworkFunction Controller", func() {
 				Expect(k8sClient.Create(ctx, original)).To(Succeed())
 
 				By("Reconciling the created resource")
-				fakeEventBus := &mocks.FakeEventBus{}
-
 				controllerReconciler := &NetworkFunctionReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
-					Bus:    fakeEventBus,
 				}
 
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

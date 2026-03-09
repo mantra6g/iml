@@ -29,7 +29,6 @@ import (
 
 	cachev1alpha1 "builder/api/cache/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/test/mocks"
 )
 
 var _ = Describe("ServiceChain Controller", func() {
@@ -134,12 +133,9 @@ var _ = Describe("ServiceChain Controller", func() {
 			}
 
 			By("Reconciling the created resource")
-			fakeEventBus := &mocks.FakeEventBus{}
-
 			controllerReconciler := &ServiceChainReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
-				Bus:    fakeEventBus,
 			}
 
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{

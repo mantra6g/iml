@@ -48,10 +48,6 @@ import (
 	corev1alpha1 "builder/api/core/v1alpha1"
 	infrav1alpha1 "builder/api/infra/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/pkg/appchains"
-	"builder/pkg/cache"
-	"builder/pkg/events"
-	"builder/pkg/mqtt"
 	"builder/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
@@ -219,27 +215,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	eventbus := events.New()
-
-	cacheService, err := cache.New(eventbus, ctrl.Log.WithName("cache"))
-	if err != nil {
-		setupLog.Error(err, "unable to initialize cache service")
-		os.Exit(1)
-	}
-
-	_, err = appchains.NewService(cacheService, eventbus, ctrl.Log.WithName("appchains"))
-	if err != nil {
-		setupLog.Error(err, "unable to initialize appchains service")
-		os.Exit(1)
-	}
-
-	_, err = mqtt.Initialize(eventbus, ctrl.Log.WithName("mqtt"))
-	if err != nil {
-		setupLog.Error(err, "unable to initialize MQTT service")
-		os.Exit(1)
-	}
-
-	_, err = southapi.InitializeSouthboundAPI(cacheService, ctrl.Log.WithName("south-api"))
+	_, err = southapi.InitializeSouthboundAPI(ctrl.Log.WithName("south-api"))
 	if err != nil {
 		setupLog.Error(err, "unable to initialize southbound API")
 		os.Exit(1)
@@ -248,7 +224,6 @@ func main() {
 	if err := (&application.ApplicationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
@@ -256,7 +231,6 @@ func main() {
 	if err := (&networkfunction.NetworkFunctionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)
@@ -264,7 +238,6 @@ func main() {
 	if err := (&cachecontroller.ServiceChainReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Bus:    eventbus,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)

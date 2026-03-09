@@ -5,7 +5,6 @@ import (
 	"sort"
 	"time"
 
-	corev1alpha1 "builder/api/core/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 	"builder/pkg/util/ptr"
 
@@ -15,12 +14,12 @@ import (
 )
 
 func IsBindingReady(b *schedulingv1alpha1.NetworkFunctionBinding) bool {
-	cond := GetBindingCondition(b, corev1alpha1.P4_TARGET_CONDITION_READY)
+	cond := GetBindingCondition(b, schedulingv1alpha1.BindingReady)
 	return cond != nil && cond.Status == metav1.ConditionTrue
 }
 
 func IsBindingAvailable(b *schedulingv1alpha1.NetworkFunctionBinding, minReadySeconds int32, now time.Time) bool {
-	readyCondition := GetBindingCondition(b, corev1alpha1.P4_TARGET_CONDITION_READY)
+	readyCondition := GetBindingCondition(b, schedulingv1alpha1.BindingReady)
 	if readyCondition == nil || readyCondition.Status != metav1.ConditionTrue {
 		return false
 	}
@@ -32,8 +31,8 @@ func IsBindingAvailable(b *schedulingv1alpha1.NetworkFunctionBinding, minReadySe
 	return true
 }
 
-func GetBindingCondition(b *schedulingv1alpha1.NetworkFunctionBinding, conditionType string,
-) *metav1.Condition {
+func GetBindingCondition(b *schedulingv1alpha1.NetworkFunctionBinding,
+	conditionType schedulingv1alpha1.BindingConditionType) *schedulingv1alpha1.BindingCondition {
 	for _, cond := range b.Status.Conditions {
 		if cond.Type == conditionType {
 			return &cond
@@ -287,9 +286,10 @@ func nextBindingAvailabilityCheck(binding *schedulingv1alpha1.NetworkFunctionBin
 	return nil
 }
 
-func GetBindingReadyCondition(status *schedulingv1alpha1.NetworkFunctionBindingStatus) *metav1.Condition {
+func GetBindingReadyCondition(status *schedulingv1alpha1.NetworkFunctionBindingStatus,
+) *schedulingv1alpha1.BindingCondition {
 	for _, cond := range status.Conditions {
-		if cond.Type == corev1alpha1.P4_TARGET_CONDITION_READY {
+		if cond.Type == schedulingv1alpha1.BindingReady {
 			return &cond
 		}
 	}

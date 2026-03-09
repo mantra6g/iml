@@ -30,7 +30,6 @@ import (
 	cachev1alpha1 "builder/api/cache/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 	nfutil "builder/internal/controller/cache/networkfunction/util"
-	"builder/pkg/events"
 	stringutils "builder/pkg/util/string"
 )
 
@@ -38,7 +37,6 @@ import (
 type NetworkFunctionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Bus    events.EventBus
 }
 
 // +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
@@ -81,11 +79,6 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if !nf.DeletionTimestamp.IsZero() {
 		// Handle deletion
 		if stringutils.ContainsElement(nf.GetFinalizers(), cachev1alpha1.NETWORK_FUNCTION_FINALIZER_LABEL) {
-			r.Bus.Publish(events.Event{
-				Name:    events.EventNfPreDeleted,
-				Payload: nf,
-			})
-
 			// Remove finalizer
 			nf.SetFinalizers(stringutils.RemoveElement(nf.GetFinalizers(), cachev1alpha1.NETWORK_FUNCTION_FINALIZER_LABEL))
 			if err := r.Update(ctx, nf); err != nil {
@@ -167,13 +160,6 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			"NetworkFunction.Namespace", nf.Namespace, "NetworkFunction.Name", nf.Name)
 		return ctrl.Result{}, err
 	}
-
-	// All is well.
-	// Publish creation/update event
-	r.Bus.Publish(events.Event{
-		Name:    events.EventNfPreUpdated,
-		Payload: nf,
-	})
 
 	return ctrl.Result{}, nil
 }
