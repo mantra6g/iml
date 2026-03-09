@@ -1,9 +1,9 @@
 package util
 
 import (
-	corev1alpha1 "builder/api/core/v1alpha1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	
+	corev1alpha1 "loom/api/core/v1alpha1"
 )
 
 // NewReadyCondition creates a new Condition of type Ready with the given status, reason, and message.

@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: p4targets.core.desire6g.eu
+  name: p4targets.core.loom.io
 spec:
-  group: core.desire6g.eu
+  group: core.loom.io
   names:
     kind: P4Target
     listKind: P4TargetList

@@ -1,10 +1,11 @@
 package util
 
 import (
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
 	"math"
-
+	
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 var bindingPhaseToOrdinal = map[schedulingv1alpha1.BindingPhase]int{

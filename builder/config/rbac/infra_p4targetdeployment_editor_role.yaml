@@ -1,7 +1,7 @@
 # This rule is not used by the project builder itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants permissions to create, update, and delete resources within the infra.desire6g.eu.
+# Grants permissions to create, update, and delete resources within the infra.loom.io.
 # This role is intended for users who need to manage these resources
 # but should not control RBAC or manage permissions for others.
 
@@ -9,12 +9,12 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    app.kubernetes.io/name: builder
+    app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
   name: infra-p4targetdeployment-editor-role
 rules:
 - apiGroups:
-  - infra.desire6g.eu
+  - infra.loom.io
   resources:
   - p4targetdeployments
   verbs:
@@ -26,7 +26,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - infra.desire6g.eu
+  - infra.loom.io
   resources:
   - p4targetdeployments/status
   verbs:

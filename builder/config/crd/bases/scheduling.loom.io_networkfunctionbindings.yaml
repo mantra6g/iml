@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctionbindings.scheduling.desire6g.eu
+  name: networkfunctionbindings.scheduling.loom.io
 spec:
-  group: scheduling.desire6g.eu
+  group: scheduling.loom.io
   names:
     kind: NetworkFunctionBinding
     listKind: NetworkFunctionBindingList

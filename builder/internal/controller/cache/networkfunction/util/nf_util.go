@@ -7,11 +7,7 @@ import (
 	"hash/fnv"
 	"math"
 	"strconv"
-
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/pkg/util/hash"
-
+	
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	"loom/pkg/util/hash"
 )
 
 const (

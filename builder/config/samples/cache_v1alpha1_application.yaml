@@ -1,8 +1,8 @@
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: cache.loom.io/v1alpha1
 kind: Application
 metadata:
   labels:
-    app.kubernetes.io/name: builder
+    app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
   name: application-sample
 spec:

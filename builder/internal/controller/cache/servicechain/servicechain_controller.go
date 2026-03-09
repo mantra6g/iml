@@ -30,8 +30,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	stringutils "builder/pkg/util/string"
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	stringutils "loom/pkg/util/string"
 )
 
 // ServiceChainReconciler reconciles a ServiceChain object
@@ -40,13 +40,13 @@ type ServiceChainReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=servicechains/finalizers,verbs=update
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications,verbs=get;list;watch
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=applications/status,verbs=get
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions/status,verbs=get
+// +kubebuilder:rbac:groups=cache.loom.io,resources=servicechains,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cache.loom.io,resources=servicechains/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cache.loom.io,resources=servicechains/finalizers,verbs=update
+// +kubebuilder:rbac:groups=cache.loom.io,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cache.loom.io,resources=applications/status,verbs=get
+// +kubebuilder:rbac:groups=cache.loom.io,resources=networkfunctions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cache.loom.io,resources=networkfunctions/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

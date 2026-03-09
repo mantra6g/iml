@@ -29,7 +29,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.desire6g.eu
+  - cache.loom.io
   resources:
   - applications
   - networkfunctions
@@ -43,7 +43,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.desire6g.eu
+  - cache.loom.io
   resources:
   - applications/finalizers
   - networkfunctions/finalizers
@@ -51,7 +51,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - cache.desire6g.eu
+  - cache.loom.io
   resources:
   - applications/status
   - networkfunctions/status
@@ -69,7 +69,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - core.desire6g.eu
+  - core.loom.io
   resources:
   - p4targets
   verbs:
@@ -81,13 +81,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - core.desire6g.eu
+  - core.loom.io
   resources:
   - p4targets/finalizers
   verbs:
   - update
 - apiGroups:
-  - core.desire6g.eu
+  - core.loom.io
   resources:
   - p4targets/status
   verbs:
@@ -95,7 +95,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - infra.desire6g.eu
+  - infra.loom.io
   resources:
   - p4targetdeployments
   verbs:
@@ -107,13 +107,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - infra.desire6g.eu
+  - infra.loom.io
   resources:
   - p4targetdeployments/finalizers
   verbs:
   - update
 - apiGroups:
-  - infra.desire6g.eu
+  - infra.loom.io
   resources:
   - p4targetdeployments/status
   verbs:
@@ -121,7 +121,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - scheduling.desire6g.eu
+  - scheduling.loom.io
   resources:
   - networkfunctionbindings
   - networkfunctionreplicasets
@@ -134,14 +134,14 @@ rules:
   - update
   - watch
 - apiGroups:
-  - scheduling.desire6g.eu
+  - scheduling.loom.io
   resources:
   - networkfunctionbindings/finalizers
   - networkfunctionreplicasets/finalizers
   verbs:
   - update
 - apiGroups:
-  - scheduling.desire6g.eu
+  - scheduling.loom.io
   resources:
   - networkfunctionbindings/status
   - networkfunctionreplicasets/status

@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"time"
 
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	rsutil "builder/internal/controller/scheduling/nf_replicaset/util"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	rsutil "loom/internal/controller/scheduling/nf_replicaset/util"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"

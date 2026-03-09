@@ -4,20 +4,25 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: applications.cache.desire6g.eu
+  name: p4targetdeployments.infra.loom.io
 spec:
-  group: cache.desire6g.eu
+  group: infra.loom.io
   names:
-    kind: Application
-    listKind: ApplicationList
-    plural: applications
-    singular: application
-  scope: Namespaced
+    kind: P4TargetDeployment
+    listKind: P4TargetDeploymentList
+    plural: p4targetdeployments
+    singular: p4targetdeployment
+  scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Application is the Schema for the applications API
+        description: P4TargetDeployment is the Schema for the p4targetdeployments
+          API
         properties:
           apiVersion:
             description: |-
@@ -37,15 +42,32 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Application
-            properties:
-              override_id:
-                description: Instead of letting the system generate an ID, use this
-                  field to override it
-                type: string
+            description: spec defines the desired state of P4TargetDeployment
             type: object
           status:
-            description: status defines the observed state of Application
+            description: status defines the observed state of P4TargetDeployment
+            properties:
+              conditions:
+                items:
+                  description: BMv2TargetCondition describes the state of a BMv2 target
+                    at a certain point.
+                  properties:
+                    lastUpdateTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
             type: object
         required:
         - spec

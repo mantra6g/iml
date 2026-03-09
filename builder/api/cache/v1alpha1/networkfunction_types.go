@@ -17,18 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const NETWORK_FUNCTION_FINALIZER_LABEL = "networkfunction.desire6g.eu/finalizer"
-const NF_BINDING_SPEC_HASH_LABEL = "cache.desire6g.eu/networkFunctionBindingSpecHash"
+const NETWORK_FUNCTION_FINALIZER_LABEL = "networkfunction.loom.io/finalizer"
+const NF_BINDING_SPEC_HASH_LABEL = "cache.loom.io/networkFunctionBindingSpecHash"
 
 type Foo = v1.DeploymentStrategy
 

@@ -3,72 +3,72 @@
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
 cliVersion: 4.7.1
-domain: desire6g.eu
+domain: loom.io
 layout:
 - go.kubebuilder.io/v4
 multigroup: true
-projectName: builder
-repo: builder
+projectName: loom-operator
+repo: loom
 resources:
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: desire6g.eu
-  group: cache
+  domain: loom.io
+  group: core
   kind: Application
-  path: builder/api/cache/v1alpha1
+  path: loom/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: desire6g.eu
-  group: cache
+  domain: loom.io
+  group: core
   kind: NetworkFunction
-  path: builder/api/cache/v1alpha1
+  path: loom/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: desire6g.eu
-  group: cache
+  domain: loom.io
+  group: core
   kind: ServiceChain
-  path: builder/api/cache/v1alpha1
+  path: loom/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   controller: true
-  domain: desire6g.eu
+  domain: loom.io
   group: core
   kind: P4Target
-  path: builder/api/core/v1alpha1
+  path: loom/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: desire6g.eu
+  domain: loom.io
   group: scheduling
   kind: NetworkFunctionReplicaSet
-  path: builder/api/scheduling/v1alpha1
+  path: loom/api/scheduling/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: desire6g.eu
+  domain: loom.io
   group: scheduling
   kind: NetworkFunctionBinding
-  path: builder/api/scheduling/v1alpha1
+  path: loom/api/scheduling/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   controller: true
-  domain: desire6g.eu
+  domain: loom.io
   group: infra
   kind: P4TargetDeployment
-  path: builder/api/infra/v1alpha1
+  path: loom/api/infra/v1alpha1
   version: v1alpha1
 version: "3"

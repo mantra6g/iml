@@ -1,8 +1,8 @@
-apiVersion: scheduling.desire6g.eu/v1alpha1
+apiVersion: scheduling.loom.io/v1alpha1
 kind: NetworkFunctionReplicaSet
 metadata:
   labels:
-    app.kubernetes.io/name: builder
+    app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
   name: networkfunctionreplicaset-sample
 spec:

@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const SERVICE_CHAIN_FINALIZER_LABEL = "servicechain.desire6g.eu/finalizer"
+const SERVICE_CHAIN_FINALIZER_LABEL = "servicechain.loom.io/finalizer"
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.

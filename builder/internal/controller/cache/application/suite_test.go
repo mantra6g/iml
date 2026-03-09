@@ -24,7 +24,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,10 +31,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	corev1alpha1 "builder/api/core/v1alpha1"
-	infrav1alpha1 "builder/api/infra/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	corev1alpha1 "loom/api/core/v1alpha1"
+	infrav1alpha1 "loom/api/infra/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

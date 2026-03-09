@@ -30,8 +30,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	corev1alpha1 "builder/api/core/v1alpha1"
-	infrav1alpha1 "builder/api/infra/v1alpha1"
+	corev1alpha1 "loom/api/core/v1alpha1"
+	infrav1alpha1 "loom/api/infra/v1alpha1"
 )
 
 var _ = Describe("P4TargetDeployment Controller", func() {

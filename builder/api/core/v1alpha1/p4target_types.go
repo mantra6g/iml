@@ -24,11 +24,11 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const TARGET_LABEL = "core.desire6g.eu/target"
-const P4TARGET_FINALIZER_LABEL = "p4target.desire6g.eu/finalizer"
+const TARGET_LABEL = "core.loom.io/target"
+const P4TARGET_FINALIZER_LABEL = "p4target.loom.io/finalizer"
 
-const P4TargetArchitectureLabel = "p4target.desire6g.eu/arch"
-const P4TargetNameLabel = "p4target.desire6g.eu/name"
+const P4TargetArchitectureLabel = "p4target.loom.io/arch"
+const P4TargetNameLabel = "p4target.loom.io/name"
 
 type TaintEffect string
 
@@ -72,9 +72,9 @@ type P4TargetSpec struct {
 // Taints that can be applied to P4Targets to indicate their state or
 // conditions that may affect scheduling or operation of network functions on them.
 const (
-	TaintP4TargetUnreachable   = "p4target.desire6g.eu/unreachable"
-	TaintP4TargetNotReady      = "p4target.desire6g.eu/not-ready"
-	TaintP4TargetUnschedulable = "p4target.desire6g.eu/unschedulable"
+	TaintP4TargetUnreachable   = "p4target.loom.io/unreachable"
+	TaintP4TargetNotReady      = "p4target.loom.io/not-ready"
+	TaintP4TargetUnschedulable = "p4target.loom.io/unschedulable"
 )
 
 type P4TargetConditionType string

@@ -1,8 +1,8 @@
-apiVersion: infra.desire6g.eu/v1alpha1
+apiVersion: infra.loom.io/v1alpha1
 kind: P4TargetDeployment
 metadata:
   labels:
-    app.kubernetes.io/name: builder
+    app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
   name: p4targetdeployment-sample
 spec:

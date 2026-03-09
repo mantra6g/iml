@@ -1,14 +1,15 @@
 package networkfunction
 
 import (
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	nfutil "builder/internal/controller/cache/networkfunction/util"
 	"context"
 	"fmt"
 	"sort"
-
+	
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	nfutil "loom/internal/controller/cache/networkfunction/util"
 )
 
 func (r *NetworkFunctionReconciler) applyRollingUpdate(ctx context.Context,

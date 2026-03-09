@@ -17,23 +17,22 @@ limitations under the License.
 package bmv2target
 
 import (
-	p4targetutil "builder/internal/controller/core/p4target/util"
 	"context"
 	"fmt"
-
+	
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	corev1alpha1 "builder/api/core/v1alpha1"
-	infrav1alpha1 "builder/api/infra/v1alpha1"
-	bmv2utils "builder/internal/controller/infra/bmv2target/util"
-
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	
+	p4targetutil "loom/internal/controller/core/p4target/util"
+	corev1alpha1 "loom/api/core/v1alpha1"
+	infrav1alpha1 "loom/api/infra/v1alpha1"
+	bmv2utils "loom/internal/controller/infra/bmv2target/util"
 )
 
 // P4TargetDeploymentReconciler reconciles a P4TargetDeployment object
@@ -42,10 +41,10 @@ type P4TargetDeploymentReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=infra.desire6g.eu,resources=p4targetdeployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=infra.desire6g.eu,resources=p4targetdeployments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=infra.desire6g.eu,resources=p4targetdeployments/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infra.loom.io,resources=p4targetdeployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infra.loom.io,resources=p4targetdeployments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=infra.loom.io,resources=p4targetdeployments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 

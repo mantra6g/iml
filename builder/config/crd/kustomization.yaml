@@ -2,13 +2,13 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/cache.desire6g.eu_applications.yaml
-- bases/cache.desire6g.eu_networkfunctions.yaml
-- bases/cache.desire6g.eu_servicechains.yaml
-- bases/core.desire6g.eu_p4targets.yaml
-- bases/scheduling.desire6g.eu_networkfunctionreplicasets.yaml
-- bases/scheduling.desire6g.eu_networkfunctionbindings.yaml
-- bases/infra.desire6g.eu_p4targetdeployments.yaml
+- bases/cache.loom.io_applications.yaml
+- bases/cache.loom.io_networkfunctions.yaml
+- bases/cache.loom.io_servicechains.yaml
+- bases/core.loom.io_p4targets.yaml
+- bases/scheduling.loom.io_networkfunctionreplicasets.yaml
+- bases/scheduling.loom.io_networkfunctionbindings.yaml
+- bases/infra.loom.io_p4targetdeployments.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

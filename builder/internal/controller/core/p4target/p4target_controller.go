@@ -19,10 +19,7 @@ package p4target
 import (
 	"context"
 	"time"
-
-	corev1alpha1 "builder/api/core/v1alpha1"
-	p4targetutil "builder/internal/controller/core/p4target/util"
-
+	
 	v1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	
+	corev1alpha1 "loom/api/core/v1alpha1"
+	p4targetutil "loom/internal/controller/core/p4target/util"
 )
 
 const P4TargetLeaseNamespace = "p4target-leases"
@@ -41,10 +41,10 @@ type P4TargetReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings,verbs=get;list;watch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

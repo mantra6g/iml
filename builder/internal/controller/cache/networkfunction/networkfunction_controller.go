@@ -27,10 +27,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	nfutil "builder/internal/controller/cache/networkfunction/util"
-	stringutils "builder/pkg/util/string"
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	nfutil "loom/internal/controller/cache/networkfunction/util"
+	stringutils "loom/pkg/util/string"
 )
 
 // NetworkFunctionReconciler reconciles a NetworkFunction object
@@ -39,10 +39,10 @@ type NetworkFunctionReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=cache.desire6g.eu,resources=networkfunctions/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cache.loom.io,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cache.loom.io,resources=networkfunctions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cache.loom.io,resources=networkfunctions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
 
 // RBAC permissions for Deployments
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete

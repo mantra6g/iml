@@ -17,20 +17,19 @@ limitations under the License.
 package networkfunction
 
 import (
-	"builder/pkg/util/ptr"
 	"context"
-
+	
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	corev1alpha1 "builder/api/core/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+	
+	"loom/pkg/util/ptr"
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	corev1alpha1 "loom/api/core/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 const (

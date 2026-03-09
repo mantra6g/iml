@@ -17,22 +17,15 @@ limitations under the License.
 package main
 
 import (
-	"builder/internal/controller/cache/application"
-	"builder/internal/controller/cache/networkfunction"
-	cachecontroller "builder/internal/controller/cache/servicechain"
-	corecontroller "builder/internal/controller/core/p4target"
-	infracontroller "builder/internal/controller/infra/bmv2target"
-	schedulingcontroller "builder/internal/controller/scheduling/nf_binding"
-	"builder/internal/controller/scheduling/nf_replicaset"
 	"crypto/tls"
 	"flag"
 	"os"
 	"path/filepath"
-
+	
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
+	
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -43,12 +36,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	
+	"loom/internal/controller/cache/application"
+	"loom/internal/controller/cache/networkfunction"
+	cachecontroller "loom/internal/controller/cache/servicechain"
+	corecontroller "loom/internal/controller/core/p4target"
+	infracontroller "loom/internal/controller/infra/bmv2target"
+	schedulingcontroller "loom/internal/controller/scheduling/nf_binding"
+	"loom/internal/controller/scheduling/nf_replicaset"
 
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	corev1alpha1 "builder/api/core/v1alpha1"
-	infrav1alpha1 "builder/api/infra/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/pkg/southapi"
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	corev1alpha1 "loom/api/core/v1alpha1"
+	infrav1alpha1 "loom/api/infra/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	"loom/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -197,7 +198,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "e4350540.desire6g.eu",
+		LeaderElectionID:       "e4350540.loom.io",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

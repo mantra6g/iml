@@ -20,11 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const TGT_DEP_FINALIZER_LABEL = "bmv2target.desire6g.eu/finalizer"
+const TGT_DEP_FINALIZER_LABEL = "bmv2target.loom.io/finalizer"
 
-const BMV2_POD_NAMESPACE = "desire6g-system"
-const BMV2_TARGET_DEPLOYMENT_LABEL = "infra.desire6g.eu/targetDeployment"
-const BMV2_TARGET_REPLICA_INDEX_LABEL = "infra.desire6g.eu/targetReplicaIndex"
+const BMV2_POD_NAMESPACE = "loom-system"
+const BMV2_TARGET_DEPLOYMENT_LABEL = "infra.loom.io/targetDeployment"
+const BMV2_TARGET_REPLICA_INDEX_LABEL = "infra.loom.io/targetReplicaIndex"
 const BMV2_DATAPLANE_CONTAINER_NAME = "data-plane"
 const BMV2_DATAPLANE_CONTAINER_IMAGE = "tomasagata/p4target-dp-bmv2:latest"
 const BMV2_CONTROLPLANE_CONTAINER_NAME = "control-plane"

@@ -24,11 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	cachev1alpha1 "builder/api/cache/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
+	cachev1alpha1 "loom/api/cache/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 var _ = Describe("ServiceChain Controller", func() {

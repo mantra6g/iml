@@ -21,10 +21,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const BINDING_FINALIZER_LABEL = "scheduling.desire6g.eu/networkFunctionBinding-finalizer"
+const BINDING_FINALIZER_LABEL = "scheduling.loom.io/networkFunctionBinding-finalizer"
 
-const TARGET_ASSIGNMENT_LABEL = "scheduling.desire6g.eu/assignedTarget"
-const CONTROL_PLANE_POD_LABEL = "scheduling.desire6g.eu/controlPlane"
+const TARGET_ASSIGNMENT_LABEL = "scheduling.loom.io/assignedTarget"
+const CONTROL_PLANE_POD_LABEL = "scheduling.loom.io/controlPlane"
 
 const CONTROL_PLANE_POD_BINDING_NAME_ENV_VAR_KEY = "NF_BINDING_NAME"
 const CONTROL_PLANE_POD_BINDING_NAMESPACE_ENV_VAR_KEY = "NF_BINDING_NAMESPACE"

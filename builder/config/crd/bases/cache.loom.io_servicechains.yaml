@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: servicechains.cache.desire6g.eu
+  name: servicechains.cache.loom.io
 spec:
-  group: cache.desire6g.eu
+  group: cache.loom.io
   names:
     kind: ServiceChain
     listKind: ServiceChainList

@@ -17,20 +17,20 @@ limitations under the License.
 package nf_replicaset
 
 import (
-	"builder/pkg/util/ptr"
 	"context"
 	"time"
-
+	
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/internal/controller/scheduling/nf_replicaset/util"
-	rsutil "builder/internal/controller/scheduling/nf_replicaset/util"
+	
+	"loom/pkg/util/ptr"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	"loom/internal/controller/scheduling/nf_replicaset/util"
+	rsutil "loom/internal/controller/scheduling/nf_replicaset/util"
 )
 
 const (
@@ -46,10 +46,10 @@ type NetworkFunctionReplicaSetReconciler struct {
 	expectations *util.UIDTrackingControllerExpectations
 }
 
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionreplicasets/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

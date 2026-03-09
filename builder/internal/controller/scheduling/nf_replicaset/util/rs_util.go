@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	"builder/pkg/util/ptr"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	"loom/pkg/util/ptr"
 
 	"k8s.io/apimachinery/pkg/api/validation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

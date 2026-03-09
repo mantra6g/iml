@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"time"
 
-	corev1alpha1 "builder/api/core/v1alpha1"
-	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	p4targetutil "builder/internal/controller/core/p4target/util"
-	bindingutils "builder/internal/controller/scheduling/nf_binding/util"
-	stringutils "builder/pkg/util/string"
+	corev1alpha1 "loom/api/core/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	p4targetutil "loom/internal/controller/core/p4target/util"
+	bindingutils "loom/internal/controller/scheduling/nf_binding/util"
+	stringutils "loom/pkg/util/string"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,10 +45,10 @@ type NetworkFunctionBindingReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=scheduling.desire6g.eu,resources=networkfunctionbindings/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core.desire6g.eu,resources=p4targets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
