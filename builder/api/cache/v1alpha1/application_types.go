@@ -23,7 +23,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const APPLICATION_FINALIZER_LABEL = "core.desire6g.eu/application-finalizer"
+const APPLICATION_FINALIZER_LABEL = "application.desire6g.eu/finalizer"
 
 // ApplicationSpec defines the desired state of Application
 type ApplicationSpec struct {

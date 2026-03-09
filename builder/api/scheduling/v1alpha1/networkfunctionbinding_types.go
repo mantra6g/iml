@@ -17,27 +17,64 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1alpha1 "builder/api/core/v1alpha1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const BINDING_FINALIZER_LABEL = "scheduling.desire6g.eu/networkFunctionBinding-finalizer"
 
 const TARGET_ASSIGNMENT_LABEL = "scheduling.desire6g.eu/assignedTarget"
+const CONTROL_PLANE_POD_LABEL = "scheduling.desire6g.eu/controlPlane"
+
+const CONTROL_PLANE_POD_BINDING_NAME_ENV_VAR_KEY = "NF_BINDING_NAME"
+const CONTROL_PLANE_POD_BINDING_NAMESPACE_ENV_VAR_KEY = "NF_BINDING_NAMESPACE"
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type NetworkFunctionBindingTemplate struct {
-	// Selector is used to select P4 targets based on their supported architectures
+type ControlPlaneSpec struct {
+	// Image is the container image for the control plane pod of the network function.
 	// +required
-	Selector corev1alpha1.P4TargetSelector `json:"selector,omitempty"`
+	Image string `json:"image,omitempty"`
 
-	// P4File is the actual P4 program file for the network function.
-	// It can be the actual p4program encoded in base64 or
-	// a s3://, http:// or https:// URL pointing to the P4 file location.
-	// +required
-	P4File string `json:"p4File,omitempty"`
+	// ImagePullPolicy defines the image pull policy for the control plane pod.
+	// +optional
+	// +kubebuilder:default=IfNotPresent
+	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Resources defines the resource requests and limits for the control plane pod.
+	// +optional
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// NodeName specifies the name of the node where the control plane pod should be scheduled.
+	// If specified, the scheduler will attempt to schedule the pod on the specified node.
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
+
+	// NodeSelector defines the node selector for the control plane pod.
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Tolerations defines the tolerations for the control plane pod.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// Affinity defines the affinity rules for the control plane pod.
+	// +optional
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+
+	// ExtraEnv defines extra environment variables for the control plane pod.
+	// +optional
+	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Args defines the command-line arguments for the control plane pod.
+	// +optional
+	Args []string `json:"args,omitempty"`
+}
+
+type NetworkFunctionBindingTemplate struct {
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              NetworkFunctionBindingSpec `json:"spec,omitempty"`
 }
 
 // NetworkFunctionBindingSpec defines the desired state of NetworkFunctionBinding
@@ -47,9 +84,20 @@ type NetworkFunctionBindingSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// Selector is used to select P4 targets based on their supported architectures
+	// TargetName is an optional field that can be used to specify the name of the P4Target
+	// where this NetworkFunction instance should be scheduled.
+	// If not specified, the scheduler will automatically select a suitable P4Target based on the TargetSelector.
+	// +optional
+	TargetName string `json:"targetName,omitempty"`
+
+	// ControlPlanePod defines the template for the control plane pod
+	// of the network function.
+	// +optional
+	ControlPlane *ControlPlaneSpec `json:"controlPlane"`
+
+	// TargetSelector is used to select P4 targets based on their supported architectures
 	// +required
-	Selector corev1alpha1.P4TargetSelector `json:"selector,omitempty"`
+	TargetSelector map[string]string `json:"targetselector,omitempty"`
 
 	// P4File is the actual P4 program file for the network function.
 	// It can be the actual p4program encoded in base64 or
@@ -58,21 +106,57 @@ type NetworkFunctionBindingSpec struct {
 	P4File string `json:"p4File,omitempty"`
 }
 
+type BindingPhase string
+
+const (
+	BindingPending BindingPhase = "Pending"
+	BindingRunning BindingPhase = "Running"
+	BindingFailed  BindingPhase = "Failed"
+)
+
+// BindingConditionType is a valid value for BindingCondition.Type
+type BindingConditionType string
+
+// These are built-in conditions of binding. An application may use a custom condition not listed here.
+const (
+	// BindingInitialized means that all init containers in the binding have started successfully.
+	BindingInitialized BindingConditionType = "Initialized"
+	// BindingReady means the binding is able to service requests and should be added to the
+	// load balancing pools of all matching services.
+	BindingReady BindingConditionType = "Ready"
+	// BindingScheduled represents status of the scheduling process for this binding.
+	BindingScheduled BindingConditionType = "Scheduled"
+	// DisruptionTarget indicates the binding is about to be terminated due to a
+	// disruption (such as preemption, eviction API or garbage-collection).
+	DisruptionTarget BindingConditionType = "DisruptionTarget"
+	// BindingReadyToStart programmable target is successfully configured and
+	// the binding is ready to run.
+	BindingReadyToStart BindingConditionType = "BindingReadyToStart"
+)
+
+type BindingCondition struct {
+	Type               BindingConditionType   `json:"type"`
+	Status             metav1.ConditionStatus `json:"status"`
+	LastProbeTime      metav1.Time            `json:"lastProbeTime,omitempty"`
+	LastTransitionTime metav1.Time            `json:"lastTransitionTime,omitempty"`
+	Reason             string                 `json:"reason,omitempty"`
+	Message            string                 `json:"message,omitempty"`
+}
+
 // NetworkFunctionBindingStatus defines the observed state of NetworkFunctionBinding.
 type NetworkFunctionBindingStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// ObservedGeneration is the most recent generation observed for this NetworkFunctionBinding
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Phase indicates the current phase of the NetworkFunctionBinding
-	Phase string `json:"phase,omitempty"`
+	Phase BindingPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the
 	// NetworkFunctionBinding's current state.
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// AssignedTarget is the name of the P4Target where this NetworkFunction instance
-	// will be running on.
-	AssignedTarget string `json:"assignedTarget,omitempty"`
+	Conditions []BindingCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

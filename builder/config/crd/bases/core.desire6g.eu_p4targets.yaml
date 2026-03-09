@@ -46,82 +46,80 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
-              targetClass:
-                description: TargetClass is the target class of the P4 target
-                enum:
-                - bmv2
-                type: string
+              taints:
+                description: |-
+                  Taints represents the taints applied to the P4 target, which can affect
+                  scheduling and operation of network functions on it.
+                items:
+                  properties:
+                    effect:
+                      type: string
+                    key:
+                      type: string
+                    timeAdded:
+                      format: date-time
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - effect
+                  - key
+                  type: object
+                type: array
+              unschedulable:
+                description: Unschedulable indicates whether the P4 target is unschedulable
+                  for new network functions.
+                type: boolean
             required:
-            - targetClass
+            - taints
             type: object
           status:
             description: status defines the observed state of P4Target
             properties:
+              allocatable:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: Allocatable represents the resources of the P4 target
+                  that are available for allocation
+                type: object
+              capacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: Capacity represents the total resources of the P4 target
+                type: object
               conditions:
                 items:
-                  description: Condition contains details for one aspect of the current
-                    state of this API Resource.
+                  description: |-
+                    P4TargetCondition represents the state of a specific aspect of the P4 target,
+                    such as its readiness or health status.
                   properties:
+                    lastHeartbeatTime:
+                      format: date-time
+                      type: string
                     lastTransitionTime:
-                      description: |-
-                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: |-
-                        message is a human readable message indicating details about the transition.
-                        This may be an empty string.
-                      maxLength: 32768
                       type: string
-                    observedGeneration:
-                      description: |-
-                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                        with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
                     reason:
-                      description: |-
-                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                        Producers of specific condition types may define expected values and meanings for this field,
-                        and whether the values are considered a guaranteed API.
-                        The value should be a CamelCase string.
-                        This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
                       type: string
                     status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
                       type: string
                     type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
                   required:
-                  - lastTransitionTime
-                  - message
-                  - reason
                   - status
                   - type
                   type: object
                 type: array
-              lastHeartbeatTime:
-                description: LastHeartbeatTime is the last time the P4 target sent
-                  a heartbeat
-                format: date-time
-                type: string
-              ready:
-                description: Ready indicates if the underlying P4 target is ready
-                  to accept network functions
-                type: boolean
             type: object
         required:
         - spec

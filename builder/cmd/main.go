@@ -17,6 +17,13 @@ limitations under the License.
 package main
 
 import (
+	"builder/internal/controller/cache/application"
+	"builder/internal/controller/cache/networkfunction"
+	cachecontroller "builder/internal/controller/cache/servicechain"
+	corecontroller "builder/internal/controller/core/p4target"
+	infracontroller "builder/internal/controller/infra/bmv2target"
+	schedulingcontroller "builder/internal/controller/scheduling/nf_binding"
+	"builder/internal/controller/scheduling/nf_replicaset"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -41,15 +48,10 @@ import (
 	corev1alpha1 "builder/api/core/v1alpha1"
 	infrav1alpha1 "builder/api/infra/v1alpha1"
 	schedulingv1alpha1 "builder/api/scheduling/v1alpha1"
-	cachecontroller "builder/internal/controller/cache"
-	corecontroller "builder/internal/controller/core"
-	infracontroller "builder/internal/controller/infra"
-	schedulingcontroller "builder/internal/controller/scheduling"
 	"builder/pkg/appchains"
 	"builder/pkg/cache"
 	"builder/pkg/events"
 	"builder/pkg/mqtt"
-	"builder/pkg/readiness"
 	"builder/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
@@ -243,7 +245,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&cachecontroller.ApplicationReconciler{
+	if err := (&application.ApplicationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Bus:    eventbus,
@@ -251,7 +253,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
 	}
-	if err := (&cachecontroller.NetworkFunctionReconciler{
+	if err := (&networkfunction.NetworkFunctionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Bus:    eventbus,
@@ -267,29 +269,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)
 	}
-
-	podBasedChecker := &readiness.PodBasedTargetChecker{
-		Client: mgr.GetClient(),
-	}
-	// externalChecker := &readiness.ExternalTargetChecker{}
-	checkers := corecontroller.CheckerRegistry{
-		corev1alpha1.TARGET_CLASS_BMV2: podBasedChecker,
-		// corev1alpha1.TARGET_CLASS_EBPF: podBasedChecker,
-		// corev1alpha1.TARGET_CLASS_XDP: podBasedChecker,
-		// corev1alpha1.TARGET_CLASS_DPDK: podBasedChecker,
-		// corev1alpha1.TARGET_CLASS_TOFINO: externalChecker,
-		// corev1alpha1.TARGET_CLASS_FPGA: externalChecker,
-	}
-
 	if err := (&corecontroller.P4TargetReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Checkers: checkers,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 		os.Exit(1)
 	}
-	if err := (&schedulingcontroller.NetworkFunctionReplicaSetReconciler{
+	if err := (&nf_replicaset.NetworkFunctionReplicaSetReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {

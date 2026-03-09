@@ -17,11 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1alpha1 "builder/api/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const TGT_DEP_FINALIZER_LABEL = "infra.desire6g.eu/targetDeployment-finalizer"
+const TGT_DEP_FINALIZER_LABEL = "bmv2target.desire6g.eu/finalizer"
 
 const BMV2_POD_NAMESPACE = "desire6g-system"
 const BMV2_TARGET_DEPLOYMENT_LABEL = "infra.desire6g.eu/targetDeployment"
@@ -42,16 +41,21 @@ type P4TargetDeploymentSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+}
 
-	// Replicas defines the number of instances of the P4 Target that will be deployed
-	// +optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
-	Replicas *int32 `json:"replicas,omitempty"`
+type BMv2TargetConditionType string
 
-	// Template defines the template for creating P4 Targets
-	// +required
-	Template corev1alpha1.P4TargetTemplate `json:"template,omitempty"`
+const (
+	BMv2TargetConditionReady BMv2TargetConditionType = "Ready"
+)
+
+// BMv2TargetCondition describes the state of a BMv2 target at a certain point.
+type BMv2TargetCondition struct {
+	Type               BMv2TargetConditionType `json:"type,omitempty"`
+	Status             metav1.ConditionStatus  `json:"status,omitempty"`
+	LastTransitionTime metav1.Time             `json:"lastUpdateTime,omitempty"`
+	Reason             string                  `json:"reason,omitempty"`
+	Message            string                  `json:"message,omitempty"`
 }
 
 // P4TargetDeploymentStatus defines the observed state of P4TargetDeployment.
@@ -59,13 +63,9 @@ type P4TargetDeploymentStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Phase string `json:"phase,omitempty"`
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	ObservedReplicas int32 `json:"observedReplicas,omitempty"`
-
-	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	Conditions []BMv2TargetCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

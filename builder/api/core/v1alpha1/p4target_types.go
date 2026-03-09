@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -24,41 +25,33 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const TARGET_LABEL = "core.desire6g.eu/target"
-const P4TARGET_FINALIZER_LABEL = "core.desire6g.eu/p4Target-finalizer"
+const P4TARGET_FINALIZER_LABEL = "p4target.desire6g.eu/finalizer"
 
-type TargetClass string
+const P4TargetArchitectureLabel = "p4target.desire6g.eu/arch"
+const P4TargetNameLabel = "p4target.desire6g.eu/name"
 
-const (
-	TARGET_CLASS_BMV2 TargetClass = "bmv2"
-	// TARGET_CLASS_TOFINO TargetClass = "tofino"
-	// TARGET_CLASS_XDP    TargetClass = "xdp"
-	// TARGET_CLASS_DPDK   TargetClass = "dpdk"
-	// TARGET_CLASS_EBPF   TargetClass = "ebpf"
-	// TARGET_CLASS_FPGA   TargetClass = "fpga"
-)
+type TaintEffect string
 
 const (
-	P4_TARGET_PHASE_PENDING  = "Pending"
-	P4_TARGET_PHASE_READY    = "Ready"
-	P4_TARGET_PHASE_OCCUPIED = "Occupied"
-	P4_TARGET_PHASE_UNKNOWN  = "Unknown"
+	// TaintEffectNoSchedule does not allow new bindings to schedule onto the target
+	// unless they tolerate the taint, but allow all bindings submitted to Kubelet
+	// without going through the scheduler to start, and allow all already-running
+	// bindings to continue running. Enforced by the scheduler.
+	TaintEffectNoSchedule TaintEffect = "NoSchedule"
+	// TaintEffectPreferNoSchedule is like TaintEffectNoSchedule, but the scheduler
+	// tries not to schedule new bindings onto the node, rather than prohibiting new
+	// bindings from scheduling onto the node entirely. Enforced by the scheduler.
+	TaintEffectPreferNoSchedule TaintEffect = "PreferNoSchedule"
+	// TaintEffectNoExecute evicts any already-running bindings that do not tolerate
+	// the taint. Currently enforced by NodeController.
+	TaintEffectNoExecute TaintEffect = "NoExecute"
 )
 
-// P4TargetSelector is used to select P4 targets based on their supported architectures
-type P4TargetSelector struct {
-	// Supported target architectures for the network function
-	// +required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:Items=enum=bmv2
-	SupportedTargets []TargetClass `json:"supportedTargets,omitempty"`
-}
-
-// P4TargetTemplate defines the template for creating P4 targets
-type P4TargetTemplate struct {
-	// TargetClass is the target class of the P4 target
-	// +required
-	// +kubebuilder:validation:Enum=bmv2
-	TargetClass TargetClass `json:"targetClass,omitempty"`
+type Taint struct {
+	Key       string      `json:"key"`
+	Value     string      `json:"value,omitempty"`
+	Effect    TaintEffect `json:"effect"`
+	TimeAdded metav1.Time `json:"timeAdded,omitempty"`
 }
 
 // P4TargetSpec defines the desired state of P4Target
@@ -68,10 +61,37 @@ type P4TargetSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// TargetClass is the target class of the P4 target
-	// +required
-	// +kubebuilder:validation:Enum=bmv2
-	TargetClass TargetClass `json:"targetClass,omitempty"`
+	// Taints represents the taints applied to the P4 target, which can affect
+	// scheduling and operation of network functions on it.
+	Taints []Taint `json:"taints"`
+
+	// Unschedulable indicates whether the P4 target is unschedulable for new network functions.
+	Unschedulable bool `json:"unschedulable,omitempty"`
+}
+
+// Taints that can be applied to P4Targets to indicate their state or
+// conditions that may affect scheduling or operation of network functions on them.
+const (
+	TaintP4TargetUnreachable   = "p4target.desire6g.eu/unreachable"
+	TaintP4TargetNotReady      = "p4target.desire6g.eu/not-ready"
+	TaintP4TargetUnschedulable = "p4target.desire6g.eu/unschedulable"
+)
+
+type P4TargetConditionType string
+
+const (
+	P4_TARGET_CONDITION_READY P4TargetConditionType = "Ready"
+)
+
+// P4TargetCondition represents the state of a specific aspect of the P4 target,
+// such as its readiness or health status.
+type P4TargetCondition struct {
+	Type               P4TargetConditionType  `json:"type"`
+	Status             metav1.ConditionStatus `json:"status"`
+	LastHeartbeatTime  metav1.Time            `json:"lastHeartbeatTime,omitempty"`
+	LastTransitionTime metav1.Time            `json:"lastTransitionTime,omitempty"`
+	Reason             string                 `json:"reason,omitempty"`
+	Message            string                 `json:"message,omitempty"`
 }
 
 // P4TargetStatus defines the observed state of P4Target.
@@ -79,13 +99,13 @@ type P4TargetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// Capacity represents the total resources of the P4 target
+	Capacity corev1.ResourceList `json:"capacity,omitempty"`
 
-	// Ready indicates if the underlying P4 target is ready to accept network functions
-	Ready bool `json:"ready,omitempty"`
+	// Allocatable represents the resources of the P4 target that are available for allocation
+	Allocatable corev1.ResourceList `json:"allocatable,omitempty"`
 
-	// LastHeartbeatTime is the last time the P4 target sent a heartbeat
-	LastHeartbeatTime metav1.Time `json:"lastHeartbeatTime,omitempty"`
+	Conditions []P4TargetCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

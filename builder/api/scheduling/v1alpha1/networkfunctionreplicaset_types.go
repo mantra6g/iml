@@ -22,6 +22,33 @@ import (
 
 const REPLICA_SET_FINALIZER_LABEL = "scheduling.desire6g.eu/networkFunctionReplicaSet-finalizer"
 
+type ReplicaSetConditionType string
+
+// These are valid conditions of a replica set.
+const (
+	// ReplicaSetReplicaFailure is added in a replica set when one of its bindings fails to be created
+	// due to insufficient quota, limit ranges, target selectors, etc. or deleted
+	// due to the target driver being down or finalizers are failing.
+	ReplicaSetReplicaFailure ReplicaSetConditionType = "ReplicaFailure"
+)
+
+// ReplicaSetCondition describes the state of a replica set at a certain point.
+type ReplicaSetCondition struct {
+	// Type of replica set condition.
+	Type ReplicaSetConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=ReplicaSetConditionType"`
+	// Status of the condition, one of True, False, Unknown.
+	Status metav1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
+	// The last time the condition transitioned from one status to another.
+	// +optional
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
+	// The reason for the condition's last transition.
+	// +optional
+	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
+	// A human readable message indicating details about the transition.
+	// +optional
+	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
+}
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -37,9 +64,21 @@ type NetworkFunctionReplicaSetSpec struct {
 	// +kubebuilder:default:=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// Selector is a label query over network function instances that should
+	// match the replica count. It must match the labels of the NetworkFunctionBindingTemplate.
+	// +required
+	Selector *metav1.LabelSelector `json:"selector"`
+
 	// Template describes the NetworkFunction that will be created
 	// +required
 	Template NetworkFunctionBindingTemplate `json:"template,omitempty"`
+
+	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunctionBinding
+	// should be ready without any of its container crashing, for it to be considered available. Defaults
+	// to 0 (the NetworkFunctionBinding will be considered available as soon as it is ready).
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinReadySeconds int32 `json:"minReadySeconds,omitempty"`
 }
 
 // NetworkFunctionReplicaSetStatus defines the observed state of NetworkFunctionReplicaSet.
@@ -47,21 +86,25 @@ type NetworkFunctionReplicaSetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Phase indicates the current phase of the NetworkFunctionReplicaSet
-	Phase string `json:"phase,omitempty"`
+	// Replicas is the total number of non-terminated replicas that are currently running and ready.
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// FullyLabeledReplicas is the number of replicas that are fully labeled and ready.
+	FullyLabeledReplicas int32 `json:"fullyLabeledReplicas,omitempty"`
+
+	// ReadyReplicas is the number of ready NetworkFunctionBinding replicas
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// AvailableReplicas is the number of available NetworkFunctionBinding replicas
+	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
+
+	// ObservedGeneration is the most recent generation observed for this NetworkFunctionReplicaSet.
+	// It corresponds to the generation of the most recently observed NetworkFunctionReplicaSet's desired state.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions represent the latest available observations of the
 	// NetworkFunctionReplicaSet's current state.
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// LastDeploymentTime is the last time the NetworkFunctionReplicaSet was deployed
-	LastDeploymentTime metav1.Time `json:"lastDeploymentTime,omitempty"`
-
-	// CurrentReplicas is the current number of replicas of the NetworkFunctionBinding
-	CurrentReplicas int32 `json:"currentReplicas,omitempty"`
-
-	// ReadyReplicas is the number of ready replicas of the NetworkFunctionBinding
-	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	Conditions []ReplicaSetCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

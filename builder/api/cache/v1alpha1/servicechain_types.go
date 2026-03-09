@@ -19,46 +19,22 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const SERVICE_CHAIN_FINALIZER_LABEL = "scheduling.desire6g.eu/serviceChain-finalizer"
+const SERVICE_CHAIN_FINALIZER_LABEL = "servicechain.desire6g.eu/finalizer"
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// TODO: support label selectors for applications instead of creating an Application resource
+
 type ApplicationReference struct {
-	// Name of the Application
-	// +required
-	Name string `json:"name"`
-
-	// Namespace of the Application
-	// +required
+	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 }
 
-func (app ApplicationReference) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: app.Namespace,
-		Name:      app.Name,
-	}
-}
-
-type NetworkFunctionReference struct {
-	// Name of the NetworkFunction
-	// +required
-	Name string `json:"name"`
-
-	// Namespace of the NetworkFunction
-	// +required
-	Namespace string `json:"namespace"`
-}
-
-func (nf NetworkFunctionReference) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: nf.Namespace,
-		Name:      nf.Name,
-	}
+func (ref *ApplicationReference) ToNamespacedName() types.NamespacedName {
+	return types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
 }
 
 // ServiceChainSpec defines the desired state of ServiceChain
@@ -68,17 +44,17 @@ type ServiceChainSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// Specifies the source application
+	// From specifies the source application.
 	// +required
 	From *ApplicationReference `json:"from"`
 
-	// Specifies the destination application
+	// To specifies the destination application.
 	// +required
 	To *ApplicationReference `json:"to"`
 
 	// Specifies the intermediate functions between the source and destination applications
 	// +optional
-	Functions []NetworkFunctionReference `json:"functions,omitempty"`
+	Functions []metav1.LabelSelector `json:"functions,omitempty"`
 }
 
 // ServiceChainStatus defines the observed state of ServiceChain.
@@ -91,9 +67,6 @@ type ServiceChainStatus struct {
 
 	// UID of the destinatination application.
 	DestinationAppUID types.UID `json:"dst_app_uid"`
-
-	// UID of the intermediate functions.
-	Functions []string `json:"functions"`
 }
 
 // +kubebuilder:object:root=true
