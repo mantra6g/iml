@@ -34,8 +34,8 @@ import (
 	infrav1alpha1 "loom/api/infra/v1alpha1"
 )
 
-var _ = Describe("P4TargetDeployment Controller", func() {
-	Context("When creating a P4TargetDeployment", func() {
+var _ = Describe("BMv2Target Controller", func() {
+	Context("When creating a BMv2Target", func() {
 		const resourceName = "test-resource"
 
 		ctx := context.Background()
@@ -45,37 +45,37 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		}
 
 		AfterEach(func() {
-			// Cleanup the specific resource instance P4TargetDeployment
-			resource := &infrav1alpha1.P4TargetDeployment{}
+			// Cleanup the specific resource instance BMv2Target
+			resource := &infrav1alpha1.BMv2Target{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if errors.IsNotFound(err) {
 				return
 			}
 
-			By("Cleaning up the specific resource instance P4TargetDeployment")
+			By("Cleaning up the specific resource instance BMv2Target")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 
 		It("should successfully create a resource with all required fields", func() {
-			By("Creating the custom resource for the Kind P4TargetDeployment")
-			resource := &infrav1alpha1.P4TargetDeployment{
+			By("Creating the custom resource for the Kind BMv2Target")
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 		})
 
 		It("should fail to create a resource when class is unknown", func() {
-			By("Creating the custom resource for the Kind P4TargetDeployment with unknown class")
-			resource := &infrav1alpha1.P4TargetDeployment{
+			By("Creating the custom resource for the Kind BMv2Target with unknown class")
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			err := k8sClient.Create(ctx, resource)
 			Expect(err).To(HaveOccurred())
@@ -83,13 +83,13 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		It("should succeed to create a resource when replicas are non-nil", func() {
-			By("Creating the custom resource for the Kind P4TargetDeployment with unknown class")
-			resource := &infrav1alpha1.P4TargetDeployment{
+			By("Creating the custom resource for the Kind BMv2Target with unknown class")
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			err := k8sClient.Create(ctx, resource)
 			Expect(err).ToNot(HaveOccurred())
@@ -127,14 +127,14 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &infrav1alpha1.P4TargetDeployment{}
+			resource := &infrav1alpha1.BMv2Target{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if err != nil && errors.IsNotFound(err) {
 				return
 			}
 			Expect(err).ToNot(HaveOccurred())
 
-			By("Cleanup the specific resource instance P4TargetDeployment")
+			By("Cleanup the specific resource instance BMv2Target")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
 			By("Cleaning up the replicas Deployments and P4Targets")
@@ -152,18 +152,18 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		It("should successfully reconcile the resource", func() {
-			By("creating the custom resource for the Kind P4TargetDeployment")
-			resource := &infrav1alpha1.P4TargetDeployment{
+			By("creating the custom resource for the Kind BMv2Target")
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &P4TargetDeploymentReconciler{
+			controllerReconciler := &BMv2TargetReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -176,7 +176,7 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 
 		It("should handle reconciliation when the resource is not found", func() {
 			By("Reconciling a non-existing resource")
-			controllerReconciler := &P4TargetDeploymentReconciler{
+			controllerReconciler := &BMv2TargetReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -191,19 +191,19 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		It("should create as many appsv1.Deployments and P4Targets as replicas specified", func() {
-			By("creating the custom resource for the Kind P4TargetDeployment")
+			By("creating the custom resource for the Kind BMv2Target")
 			replicas := int32(3)
-			resource := &infrav1alpha1.P4TargetDeployment{
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &P4TargetDeploymentReconciler{
+			controllerReconciler := &BMv2TargetReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -233,18 +233,18 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		It("should default to 1 replica when replicas is nil", func() {
-			By("creating the custom resource for the Kind P4TargetDeployment with nil replicas")
-			resource := &infrav1alpha1.P4TargetDeployment{
+			By("creating the custom resource for the Kind BMv2Target with nil replicas")
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &P4TargetDeploymentReconciler{
+			controllerReconciler := &BMv2TargetReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -274,18 +274,18 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 		})
 
 		It("should successfully set ownership of P4Target to itself and appsv1.Deployment to P4Target", func() {
-			By("creating the custom resource for the Kind P4TargetDeployment")
-			resource := &infrav1alpha1.P4TargetDeployment{
+			By("creating the custom resource for the Kind BMv2Target")
+			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: infrav1alpha1.P4TargetDeploymentSpec{},
+				Spec: infrav1alpha1.BMv2TargetSpec{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &P4TargetDeploymentReconciler{
+			controllerReconciler := &BMv2TargetReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -295,8 +295,8 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying that the P4TargetDeployment resource exists")
-			retrievedResource := &infrav1alpha1.P4TargetDeployment{}
+			By("Verifying that the BMv2Target resource exists")
+			retrievedResource := &infrav1alpha1.BMv2Target{}
 			err = k8sClient.Get(ctx, typeNamespacedName, retrievedResource)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -319,11 +319,11 @@ var _ = Describe("P4TargetDeployment Controller", func() {
 			Expect(deploymentList.Items).To(HaveLen(1))
 			deployment := &deploymentList.Items[0]
 
-			By("Verifying that the P4Target's owner reference is set to the P4TargetDeployment")
+			By("Verifying that the P4Target's owner reference is set to the BMv2Target")
 			controllerBool := true
 			blockOwnerDeletionBool := true
 			p4TargetOwnerReference := metav1.OwnerReference{
-				Kind:               "P4TargetDeployment",
+				Kind:               "BMv2Target",
 				APIVersion:         infrav1alpha1.GroupVersion.String(),
 				UID:                retrievedResource.UID,
 				Name:               retrievedResource.Name,

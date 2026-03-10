@@ -22,9 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the builder itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- infra_p4targetdeployment_admin_role.yaml
-- infra_p4targetdeployment_editor_role.yaml
-- infra_p4targetdeployment_viewer_role.yaml
+- infra_bmv2target_admin_role.yaml
+- infra_bmv2target_editor_role.yaml
+- infra_bmv2target_viewer_role.yaml
 - scheduling_networkfunctionbinding_admin_role.yaml
 - scheduling_networkfunctionbinding_editor_role.yaml
 - scheduling_networkfunctionbinding_viewer_role.yaml

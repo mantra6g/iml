@@ -8,7 +8,7 @@ resources:
 - bases/core.loom.io_p4targets.yaml
 - bases/scheduling.loom.io_networkfunctionreplicasets.yaml
 - bases/scheduling.loom.io_networkfunctionbindings.yaml
-- bases/infra.loom.io_p4targetdeployments.yaml
+- bases/infra.loom.io_bmv2targets.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

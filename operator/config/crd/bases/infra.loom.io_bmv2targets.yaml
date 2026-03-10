@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: p4targetdeployments.infra.loom.io
+  name: bmv2targets.infra.loom.io
 spec:
   group: infra.loom.io
   names:
-    kind: P4TargetDeployment
-    listKind: P4TargetDeploymentList
-    plural: p4targetdeployments
-    singular: p4targetdeployment
+    kind: BMv2Target
+    listKind: BMv2TargetList
+    plural: bmv2targets
+    singular: bmv2target
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -21,8 +21,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: P4TargetDeployment is the Schema for the p4targetdeployments
-          API
+        description: BMv2Target is the Schema for the bmv2targets API
         properties:
           apiVersion:
             description: |-
@@ -42,10 +41,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of P4TargetDeployment
+            description: spec defines the desired state of BMv2Target
             type: object
           status:
-            description: status defines the observed state of P4TargetDeployment
+            description: status defines the observed state of BMv2Target
             properties:
               conditions:
                 items:

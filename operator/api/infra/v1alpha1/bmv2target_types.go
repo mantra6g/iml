@@ -35,8 +35,8 @@ const BMV2_CONTROLPLANE_READY_PROBE_PATH = "/healthz"
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// P4TargetDeploymentSpec defines the desired state of P4TargetDeployment
-type P4TargetDeploymentSpec struct {
+// BMv2TargetSpec defines the desired state of BMv2Target
+type BMv2TargetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
@@ -58,8 +58,8 @@ type BMv2TargetCondition struct {
 	Message            string                  `json:"message,omitempty"`
 }
 
-// P4TargetDeploymentStatus defines the observed state of P4TargetDeployment.
-type P4TargetDeploymentStatus struct {
+// BMv2TargetStatus defines the observed state of BMv2Target.
+type BMv2TargetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -73,32 +73,32 @@ type P4TargetDeploymentStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"
 
-// P4TargetDeployment is the Schema for the p4targetdeployments API
-type P4TargetDeployment struct {
+// BMv2Target is the Schema for the bmv2targets API
+type BMv2Target struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of P4TargetDeployment
+	// spec defines the desired state of BMv2Target
 	// +required
-	Spec P4TargetDeploymentSpec `json:"spec"`
+	Spec BMv2TargetSpec `json:"spec"`
 
-	// status defines the observed state of P4TargetDeployment
+	// status defines the observed state of BMv2Target
 	// +optional
-	Status P4TargetDeploymentStatus `json:"status,omitempty,omitzero"`
+	Status BMv2TargetStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// P4TargetDeploymentList contains a list of P4TargetDeployment
-type P4TargetDeploymentList struct {
+// BMv2TargetList contains a list of BMv2Target
+type BMv2TargetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []P4TargetDeployment `json:"items"`
+	Items           []BMv2Target `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&P4TargetDeployment{}, &P4TargetDeploymentList{})
+	SchemeBuilder.Register(&BMv2Target{}, &BMv2TargetList{})
 }

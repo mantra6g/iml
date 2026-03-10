@@ -262,11 +262,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionBinding")
 		os.Exit(1)
 	}
-	if err := (&infracontroller.P4TargetDeploymentReconciler{
+	if err := (&infracontroller.BMv2TargetReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "P4TargetDeployment")
+		setupLog.Error(err, "unable to create controller", "controller", "BMv2Target")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

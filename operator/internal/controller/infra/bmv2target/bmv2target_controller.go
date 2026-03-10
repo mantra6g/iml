@@ -35,15 +35,15 @@ import (
 	bmv2utils "loom/internal/controller/infra/bmv2target/util"
 )
 
-// P4TargetDeploymentReconciler reconciles a P4TargetDeployment object
-type P4TargetDeploymentReconciler struct {
+// BMv2TargetReconciler reconciles a BMv2Target object
+type BMv2TargetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=infra.loom.io,resources=p4targetdeployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=infra.loom.io,resources=p4targetdeployments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=infra.loom.io,resources=p4targetdeployments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=infra.loom.io,resources=bmv2targets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infra.loom.io,resources=bmv2targets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=infra.loom.io,resources=bmv2targets/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
@@ -53,17 +53,17 @@ type P4TargetDeploymentReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
-func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
-	bmv2Target := &infrav1alpha1.P4TargetDeployment{}
+	bmv2Target := &infrav1alpha1.BMv2Target{}
 	err := r.Get(ctx, req.NamespacedName, bmv2Target)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("P4TargetDeployment resource not found. Ignoring since object must be deleted.")
+			logger.Info("BMv2Target resource not found. Ignoring since object must be deleted.")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "unable to fetch P4TargetDeployment")
+		logger.Error(err, "unable to fetch BMv2Target")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -89,17 +89,17 @@ func (r *P4TargetDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *P4TargetDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *BMv2TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&infrav1alpha1.P4TargetDeployment{}).
+		For(&infrav1alpha1.BMv2Target{}).
 		Owns(&corev1alpha1.P4Target{}).
 		Owns(&appsv1.Deployment{}).
-		Named("infra-p4targetdeployment").
+		Named("infra-bmv2target").
 		Complete(r)
 }
 
-func (r *P4TargetDeploymentReconciler) ensureP4Target(
-	ctx context.Context, bmv2tgt *infrav1alpha1.P4TargetDeployment) (*corev1alpha1.P4Target, error) {
+func (r *BMv2TargetReconciler) ensureP4Target(
+	ctx context.Context, bmv2tgt *infrav1alpha1.BMv2Target) (*corev1alpha1.P4Target, error) {
 	p4target := &corev1alpha1.P4Target{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: bmv2tgt.Name,
@@ -111,13 +111,13 @@ func (r *P4TargetDeploymentReconciler) ensureP4Target(
 		p4target.Annotations = bmv2utils.EnsureP4TargetAnnotations(bmv2tgt, p4target.Annotations)
 		p4target.Finalizers = bmv2utils.EnsureP4TargetFinalizers(bmv2tgt, p4target.Finalizers)
 		p4target.Spec = *bmv2utils.EnsureP4TargetSpec(bmv2tgt, &p4target.Spec)
-		return controllerutil.SetControllerReference(bmv2tgt, p4target, r.Scheme) // P4TargetDeployment owns P4Target
+		return controllerutil.SetControllerReference(bmv2tgt, p4target, r.Scheme) // BMv2Target owns P4Target
 	})
 	return p4target, err
 }
 
-func (r *P4TargetDeploymentReconciler) ensureDeployment(ctx context.Context,
-	targetDeployment *infrav1alpha1.P4TargetDeployment) (*appsv1.Deployment, error) {
+func (r *BMv2TargetReconciler) ensureDeployment(ctx context.Context,
+	targetDeployment *infrav1alpha1.BMv2Target) (*appsv1.Deployment, error) {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      targetDeployment.Name,
@@ -130,13 +130,13 @@ func (r *P4TargetDeploymentReconciler) ensureDeployment(ctx context.Context,
 		dep.Annotations = bmv2utils.EnsureBMv2DeploymentAnnotations(targetDeployment, dep.Annotations)
 		dep.Finalizers = bmv2utils.EnsureBMv2DeploymentFinalizers(targetDeployment, dep.Finalizers)
 		dep.Spec = *bmv2utils.EnsureBMv2DeploymentSpec(targetDeployment, &dep.Spec)
-		return controllerutil.SetControllerReference(targetDeployment, dep, r.Scheme) // P4TargetDeployment owns Deployment
+		return controllerutil.SetControllerReference(targetDeployment, dep, r.Scheme) // BMv2Target owns Deployment
 	})
 	return dep, err
 }
 
-func (r *P4TargetDeploymentReconciler) updateStatus(
-	ctx context.Context, bmv2Target *infrav1alpha1.P4TargetDeployment,
+func (r *BMv2TargetReconciler) updateStatus(
+	ctx context.Context, bmv2Target *infrav1alpha1.BMv2Target,
 	p4target *corev1alpha1.P4Target, dep *appsv1.Deployment) error {
 	newStatus := calculateStatus(bmv2Target, p4target, dep)
 
@@ -146,9 +146,9 @@ func (r *P4TargetDeploymentReconciler) updateStatus(
 	return r.Status().Patch(ctx, bmv2Target, client.MergeFrom(original))
 }
 
-func calculateStatus(bmv2Target *infrav1alpha1.P4TargetDeployment,
-	p4target *corev1alpha1.P4Target, dep *appsv1.Deployment) *infrav1alpha1.P4TargetDeploymentStatus {
-	status := &infrav1alpha1.P4TargetDeploymentStatus{
+func calculateStatus(bmv2Target *infrav1alpha1.BMv2Target,
+	p4target *corev1alpha1.P4Target, dep *appsv1.Deployment) *infrav1alpha1.BMv2TargetStatus {
+	status := &infrav1alpha1.BMv2TargetStatus{
 		ObservedGeneration: bmv2Target.Generation,
 		Conditions:         make([]infrav1alpha1.BMv2TargetCondition, 0, len(bmv2Target.Status.Conditions)),
 	}
@@ -158,20 +158,20 @@ func calculateStatus(bmv2Target *infrav1alpha1.P4TargetDeployment,
 	}
 	if dep == nil {
 		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
-			"DeploymentNotFound", "The Deployment for this P4TargetDeployment was not found.")
+			"DeploymentNotFound", "The Deployment for this BMv2Target was not found.")
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
 	}
 	if p4target == nil {
 		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
-			"P4TargetNotFound", "The P4Target for this P4TargetDeployment was not found.")
+			"P4TargetNotFound", "The P4Target for this BMv2Target was not found.")
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
 	}
 	if dep.Status.AvailableReplicas < *dep.Spec.Replicas {
 		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
 			"DeploymentNotReady",
-			fmt.Sprintf("The Deployment for this P4TargetDeployment is not ready. Available replicas: %d/%d.",
+			fmt.Sprintf("The Deployment for this BMv2Target is not ready. Available replicas: %d/%d.",
 				dep.Status.AvailableReplicas, *dep.Spec.Replicas))
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
@@ -180,14 +180,14 @@ func calculateStatus(bmv2Target *infrav1alpha1.P4TargetDeployment,
 	if p4targetReadyCondition == nil || p4targetReadyCondition.Status != metav1.ConditionTrue {
 		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
 			"P4TargetNotReady",
-			fmt.Sprintf("The P4Target for this P4TargetDeployment is not ready. P4Target condition: %v.",
+			fmt.Sprintf("The P4Target for this BMv2Target is not ready. P4Target condition: %v.",
 				p4targetReadyCondition))
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
 	}
 	// If we reach this point, it means the Deployment is ready and the P4Target is ready
 	newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionTrue,
-		"Ready", "The P4TargetDeployment is ready.")
+		"Ready", "The BMv2Target is ready.")
 	status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 	return status
 }

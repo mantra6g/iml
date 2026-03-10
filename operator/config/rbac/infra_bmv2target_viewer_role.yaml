@@ -1,9 +1,9 @@
 # This rule is not used by the project builder itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants full permissions ('*') over infra.loom.io.
-# This role is intended for users authorized to modify roles and bindings within the cluster,
-# enabling them to delegate specific permissions to other users or groups as needed.
+# Grants read-only access to infra.loom.io resources.
+# This role is intended for users who need visibility into these resources
+# without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -11,17 +11,19 @@ metadata:
   labels:
     app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
-  name: infra-p4targetdeployment-admin-role
+  name: infra-bmv2target-viewer-role
 rules:
 - apiGroups:
   - infra.loom.io
   resources:
-  - p4targetdeployments
+  - bmv2targets
   verbs:
-  - '*'
+  - get
+  - list
+  - watch
 - apiGroups:
   - infra.loom.io
   resources:
-  - p4targetdeployments/status
+  - bmv2targets/status
   verbs:
   - get
