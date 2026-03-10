@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nf_replicaset
+package networkfunctionreplicaset
 
 import (
 	"context"
@@ -28,8 +28,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	"loom/internal/controller/scheduling/nf_replicaset/util"
-	rsutil "loom/internal/controller/scheduling/nf_replicaset/util"
+	"loom/internal/controller/scheduling/networkfunctionreplicaset/util"
+	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 	"loom/pkg/util/ptr"
 )
 
@@ -49,7 +49,7 @@ type NetworkFunctionReplicaSetReconciler struct {
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -72,42 +72,42 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 	logger.Info("Reconciling NetworkFunctionReplicaSet",
 		"name", rs.Name, "namespace", rs.Namespace)
 
-	// Check if all bindings that are expected to be created or deleted were fulfilled
+	// Check if all nfs that are expected to be created or deleted were fulfilled
 	rsNeedsSync := r.expectations.SatisfiedExpectations(logger, req.NamespacedName.String())
 
-	// Lists all active bindings that match the selector of the ReplicaSet.
-	// It will also list bindings that haven't been claimed by the ReplicaSet yet, but match the selector
+	// Lists all active nfs that match the selector of the ReplicaSet.
+	// It will also list nfs that haven't been claimed by the ReplicaSet yet, but match the selector
 	// and are expected to be claimed by the ReplicaSet.
-	allActiveBindings, err := r.listActiveBindings(ctx, rs)
+	allActiveNFs, err := r.listActiveNFs(ctx, rs)
 	if err != nil {
-		logger.Error(err, "unable to list NetworkFunctionBindings for NetworkFunctionReplicaSet",
+		logger.Error(err, "unable to list NetworkFunctions for NetworkFunctionReplicaSet",
 			"nfReplicaSet", rs)
 		return ctrl.Result{}, err
 	}
 
-	// filter bindings to those owned by this ReplicaSet
-	// TODO: we should be able to adopt bindings that match the selector but aren't owned by any ReplicaSet,
-	//   and orphan bindings that don't match the selector but are owned by this ReplicaSet.
+	// filter nfs to those owned by this ReplicaSet
+	// TODO: we should be able to adopt nfs that match the selector but aren't owned by any ReplicaSet,
+	//   and orphan nfs that don't match the selector but are owned by this ReplicaSet.
 	//   However, it would also require more complex logic to handle adoption and orphaning,
 	//   and we should be careful to avoid edge cases where we accidentally adopt or orphan
-	//   bindings.
-	ownedActiveBindings, err := r.filterOwnedPods(ctx, rs, allActiveBindings)
+	//   nfs.
+	ownedActiveNFs, err := r.filterOwnedPods(ctx, rs, allActiveNFs)
 	if err != nil {
-		logger.Error(err, "unable to claim NetworkFunctionBindings for NetworkFunctionReplicaSet",
+		logger.Error(err, "unable to claim NetworkFunctions for NetworkFunctionReplicaSet",
 			"nfReplicaSet", rs)
 		return ctrl.Result{}, err
 	}
 
 	var manageReplicasErr error
 	if rsNeedsSync && rs.DeletionTimestamp == nil {
-		manageReplicasErr = r.manageReplicas(ctx, ownedActiveBindings, rs)
+		manageReplicasErr = r.manageReplicas(ctx, ownedActiveNFs, rs)
 	}
 	rs = rs.DeepCopy()
 	// Use the same time for calculating status and timeUntilNextRequeue.
 	now := time.Now()
-	newStatus := calculateStatus(rs, ownedActiveBindings, manageReplicasErr, now)
+	newStatus := calculateStatus(rs, ownedActiveNFs, manageReplicasErr, now)
 
-	// Always updates status as bindings come up or die.
+	// Always updates status as nfs come up or die.
 	updatedRS, err := r.updateReplicaSetStatus(ctx, rs, newStatus)
 	if err != nil {
 		// Multiple things could lead to this update failing. Requeuing the replica set ensures
@@ -117,7 +117,7 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 	if manageReplicasErr != nil {
 		return ctrl.Result{}, manageReplicasErr
 	}
-	timeUntilNextRequeue := calculateTimeUntilNextRequeue(updatedRS, ownedActiveBindings, now)
+	timeUntilNextRequeue := calculateTimeUntilNextRequeue(updatedRS, ownedActiveNFs, now)
 	if timeUntilNextRequeue != nil {
 		return ctrl.Result{RequeueAfter: *timeUntilNextRequeue}, nil
 	}
@@ -127,7 +127,7 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 
 func calculateTimeUntilNextRequeue(
 	updatedRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	activeBindings []*schedulingv1alpha1.NetworkFunctionBinding,
+	activeNFs []*schedulingv1alpha1.NetworkFunction,
 	now time.Time) *time.Duration {
 	// Plan the next availability check as a last line of defense against queue preemption (we have one queue key for checking availability of all the pods)
 	// or early sync (see https://github.com/kubernetes/kubernetes/issues/39785#issuecomment-279959133 for more info).
@@ -137,7 +137,7 @@ func calculateTimeUntilNextRequeue(
 		// Safeguard fallback to the .spec.minReadySeconds to ensure that we always end up with .status.availableReplicas updated.
 		timeUntilNextRequeue = ptr.To(time.Duration(updatedRS.Spec.MinReadySeconds) * time.Second)
 		// Use the same point in time (now) for calculating status and nextSyncDuration to get matching availability for the pods.
-		if nextCheck := rsutil.FindMinNextBindingAvailabilityCheck(activeBindings, updatedRS.Spec.MinReadySeconds, now); nextCheck != nil {
+		if nextCheck := rsutil.FindMinNextNFAvailabilityCheck(activeNFs, updatedRS.Spec.MinReadySeconds, now); nextCheck != nil {
 			timeUntilNextRequeue = nextCheck
 		}
 	}
@@ -148,12 +148,12 @@ func calculateTimeUntilNextRequeue(
 func (r *NetworkFunctionReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.expectations = util.NewUIDTrackingControllerExpectations(util.NewControllerExpectations())
 
-	// Index the bindings by its controller UID, so that we can easily list the bindings for a given ReplicaSet.
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &schedulingv1alpha1.NetworkFunctionBinding{},
+	// Index the nfs by its controller UID, so that we can easily list the nfs for a given ReplicaSet.
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &schedulingv1alpha1.NetworkFunction{},
 		controllerUIDIndex,
 		func(obj client.Object) []string {
-			binding := obj.(*schedulingv1alpha1.NetworkFunctionBinding)
-			controllerRef := metav1.GetControllerOf(binding)
+			nf := obj.(*schedulingv1alpha1.NetworkFunction)
+			controllerRef := metav1.GetControllerOf(nf)
 			if controllerRef == nil {
 				return []string{}
 			}
@@ -165,7 +165,7 @@ func (r *NetworkFunctionReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&schedulingv1alpha1.NetworkFunctionReplicaSet{}).
-		Owns(&schedulingv1alpha1.NetworkFunctionBinding{}).
+		Owns(&schedulingv1alpha1.NetworkFunction{}).
 		Named("scheduling-networkfunctionreplicaset").
 		Complete(r)
 }

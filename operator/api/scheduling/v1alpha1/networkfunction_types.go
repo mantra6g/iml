@@ -21,13 +21,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const BINDING_FINALIZER_LABEL = "scheduling.loom.io/networkFunctionBinding-finalizer"
+const NetworkFunctionFinalizer = "networkfunction.loom.io/finalizer"
 
 const TARGET_ASSIGNMENT_LABEL = "scheduling.loom.io/assignedTarget"
 const CONTROL_PLANE_POD_LABEL = "scheduling.loom.io/controlPlane"
 
-const CONTROL_PLANE_POD_BINDING_NAME_ENV_VAR_KEY = "NF_BINDING_NAME"
-const CONTROL_PLANE_POD_BINDING_NAMESPACE_ENV_VAR_KEY = "NF_BINDING_NAMESPACE"
+const CONTROL_PLANE_POD_NF_NAME_ENV_VAR_KEY = "NF_NAME"
+const CONTROL_PLANE_POD_NF_NAMESPACE_ENV_VAR_KEY = "NF_NAMESPACE"
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -72,13 +72,13 @@ type ControlPlaneSpec struct {
 	Args []string `json:"args,omitempty"`
 }
 
-type NetworkFunctionBindingTemplate struct {
+type NetworkFunctionTemplate struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              NetworkFunctionBindingSpec `json:"spec,omitempty"`
+	Spec              NetworkFunctionSpec `json:"spec,omitempty"`
 }
 
-// NetworkFunctionBindingSpec defines the desired state of NetworkFunctionBinding
-type NetworkFunctionBindingSpec struct {
+// NetworkFunctionSpec defines the desired state of NetworkFunction
+type NetworkFunctionSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
@@ -106,88 +106,88 @@ type NetworkFunctionBindingSpec struct {
 	P4File string `json:"p4File,omitempty"`
 }
 
-type BindingPhase string
+type NetworkFunctionPhase string
 
 const (
-	BindingPending BindingPhase = "Pending"
-	BindingRunning BindingPhase = "Running"
-	BindingFailed  BindingPhase = "Failed"
+	NetworkFunctionPending NetworkFunctionPhase = "Pending"
+	NetworkFunctionRunning NetworkFunctionPhase = "Running"
+	NetworkFunctionFailed  NetworkFunctionPhase = "Failed"
 )
 
-// BindingConditionType is a valid value for BindingCondition.Type
-type BindingConditionType string
+// NetworkFunctionConditionType is a valid value for NetworkFunctionCondition.Type
+type NetworkFunctionConditionType string
 
-// These are built-in conditions of binding. An application may use a custom condition not listed here.
+// These are built-in conditions of a nf. An application may use a custom condition not listed here.
 const (
-	// BindingInitialized means that all init containers in the binding have started successfully.
-	BindingInitialized BindingConditionType = "Initialized"
-	// BindingReady means the binding is able to service requests and should be added to the
+	// NetworkFunctionInitialized means that the p4 programs have been installed and are running.
+	NetworkFunctionInitialized NetworkFunctionConditionType = "Initialized"
+	// NetworkFunctionReady means the nf is able to service requests and should be added to the
 	// load balancing pools of all matching services.
-	BindingReady BindingConditionType = "Ready"
-	// BindingScheduled represents status of the scheduling process for this binding.
-	BindingScheduled BindingConditionType = "Scheduled"
-	// DisruptionTarget indicates the binding is about to be terminated due to a
+	NetworkFunctionReady NetworkFunctionConditionType = "Ready"
+	// NetworkFunctionScheduled represents status of the scheduling process for this nf.
+	NetworkFunctionScheduled NetworkFunctionConditionType = "Scheduled"
+	// DisruptionTarget indicates the nf is about to be terminated due to a
 	// disruption (such as preemption, eviction API or garbage-collection).
-	DisruptionTarget BindingConditionType = "DisruptionTarget"
-	// BindingReadyToStart programmable target is successfully configured and
-	// the binding is ready to run.
-	BindingReadyToStart BindingConditionType = "BindingReadyToStart"
+	DisruptionTarget NetworkFunctionConditionType = "DisruptionTarget"
+	// NetworkFunctionReadyToStart programmable target is successfully configured and
+	// the nf is ready to run.
+	NetworkFunctionReadyToStart NetworkFunctionConditionType = "ReadyToStart"
 )
 
-type BindingCondition struct {
-	Type               BindingConditionType   `json:"type"`
-	Status             metav1.ConditionStatus `json:"status"`
-	LastProbeTime      metav1.Time            `json:"lastProbeTime,omitempty"`
-	LastTransitionTime metav1.Time            `json:"lastTransitionTime,omitempty"`
-	Reason             string                 `json:"reason,omitempty"`
-	Message            string                 `json:"message,omitempty"`
+type NetworkFunctionCondition struct {
+	Type               NetworkFunctionConditionType `json:"type"`
+	Status             metav1.ConditionStatus       `json:"status"`
+	LastProbeTime      metav1.Time                  `json:"lastProbeTime,omitempty"`
+	LastTransitionTime metav1.Time                  `json:"lastTransitionTime,omitempty"`
+	Reason             string                       `json:"reason,omitempty"`
+	Message            string                       `json:"message,omitempty"`
 }
 
-// NetworkFunctionBindingStatus defines the observed state of NetworkFunctionBinding.
-type NetworkFunctionBindingStatus struct {
+// NetworkFunctionStatus defines the observed state of NetworkFunction.
+type NetworkFunctionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ObservedGeneration is the most recent generation observed for this NetworkFunctionBinding
+	// ObservedGeneration is the most recent generation observed for this NetworkFunction
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Phase indicates the current phase of the NetworkFunctionBinding
-	Phase BindingPhase `json:"phase,omitempty"`
+	// Phase indicates the current phase of the NetworkFunction
+	Phase NetworkFunctionPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the
-	// NetworkFunctionBinding's current state.
-	Conditions []BindingCondition `json:"conditions,omitempty"`
+	// NetworkFunction's current state.
+	Conditions []NetworkFunctionCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// NetworkFunctionBinding is the Schema for the networkfunctionbindings API
-type NetworkFunctionBinding struct {
+// NetworkFunction is the Schema for the networkfunctions API
+type NetworkFunction struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of NetworkFunctionBinding
+	// spec defines the desired state of NetworkFunction
 	// +required
-	Spec NetworkFunctionBindingSpec `json:"spec"`
+	Spec NetworkFunctionSpec `json:"spec"`
 
-	// status defines the observed state of NetworkFunctionBinding
+	// status defines the observed state of NetworkFunction
 	// +optional
-	Status NetworkFunctionBindingStatus `json:"status,omitempty,omitzero"`
+	Status NetworkFunctionStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// NetworkFunctionBindingList contains a list of NetworkFunctionBinding
-type NetworkFunctionBindingList struct {
+// NetworkFunctionList contains a list of NetworkFunction
+type NetworkFunctionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []NetworkFunctionBinding `json:"items"`
+	Items           []NetworkFunction `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&NetworkFunctionBinding{}, &NetworkFunctionBindingList{})
+	SchemeBuilder.Register(&NetworkFunction{}, &NetworkFunctionList{})
 }

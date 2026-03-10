@@ -33,16 +33,16 @@ const P4TargetNameLabel = "p4target.loom.io/name"
 type TaintEffect string
 
 const (
-	// TaintEffectNoSchedule does not allow new bindings to schedule onto the target
-	// unless they tolerate the taint, but allow all bindings submitted to Kubelet
+	// TaintEffectNoSchedule does not allow new nfs to schedule onto the target
+	// unless they tolerate the taint, but allow all nfs submitted to Kubelet
 	// without going through the scheduler to start, and allow all already-running
-	// bindings to continue running. Enforced by the scheduler.
+	// nfs to continue running. Enforced by the scheduler.
 	TaintEffectNoSchedule TaintEffect = "NoSchedule"
 	// TaintEffectPreferNoSchedule is like TaintEffectNoSchedule, but the scheduler
-	// tries not to schedule new bindings onto the node, rather than prohibiting new
-	// bindings from scheduling onto the node entirely. Enforced by the scheduler.
+	// tries not to schedule new nfs onto the node, rather than prohibiting new
+	// nfs from scheduling onto the node entirely. Enforced by the scheduler.
 	TaintEffectPreferNoSchedule TaintEffect = "PreferNoSchedule"
-	// TaintEffectNoExecute evicts any already-running bindings that do not tolerate
+	// TaintEffectNoExecute evicts any already-running nfs that do not tolerate
 	// the taint. Currently enforced by NodeController.
 	TaintEffectNoExecute TaintEffect = "NoExecute"
 )

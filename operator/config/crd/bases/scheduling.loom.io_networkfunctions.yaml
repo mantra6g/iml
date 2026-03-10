@@ -4,21 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctionbindings.scheduling.loom.io
+  name: networkfunctions.scheduling.loom.io
 spec:
   group: scheduling.loom.io
   names:
-    kind: NetworkFunctionBinding
-    listKind: NetworkFunctionBindingList
-    plural: networkfunctionbindings
-    singular: networkfunctionbinding
+    kind: NetworkFunction
+    listKind: NetworkFunctionList
+    plural: networkfunctions
+    singular: networkfunction
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkFunctionBinding is the Schema for the networkfunctionbindings
-          API
+        description: NetworkFunction is the Schema for the networkfunctions API
         properties:
           apiVersion:
             description: |-
@@ -38,7 +37,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of NetworkFunctionBinding
+            description: spec defines the desired state of NetworkFunction
             properties:
               controlPlane:
                 description: |-
@@ -1238,12 +1237,12 @@ spec:
             - targetselector
             type: object
           status:
-            description: status defines the observed state of NetworkFunctionBinding
+            description: status defines the observed state of NetworkFunction
             properties:
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the
-                  NetworkFunctionBinding's current state.
+                  NetworkFunction's current state.
                 items:
                   properties:
                     lastProbeTime:
@@ -1259,7 +1258,8 @@ spec:
                     status:
                       type: string
                     type:
-                      description: BindingConditionType is a valid value for BindingCondition.Type
+                      description: NetworkFunctionConditionType is a valid value for
+                        NetworkFunctionCondition.Type
                       type: string
                   required:
                   - status
@@ -1268,11 +1268,11 @@ spec:
                 type: array
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
-                  for this NetworkFunctionBinding
+                  for this NetworkFunction
                 format: int64
                 type: integer
               phase:
-                description: Phase indicates the current phase of the NetworkFunctionBinding
+                description: Phase indicates the current phase of the NetworkFunction
                 type: string
             type: object
         required:

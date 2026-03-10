@@ -1,4 +1,4 @@
-package nf_replicaset
+package networkfunctionreplicaset
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	rsutil "loom/internal/controller/scheduling/nf_replicaset/util"
+	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 	// in a single reconciliation loop.
 	BurstReplicas = 500
 
-	// SlowStartInitialBatchSize is the size of the initial batch when batching pod creates.
+	// SlowStartInitialBatchSize is the size of the initial batch when batching nf creates.
 	// The size of each successive batch is twice the size of
 	// the previous batch.  For example, for a value of 1, batch sizes would be
 	// 1, 2, 4, 8, ...  and for a value of 10, batch sizes would be
@@ -35,7 +35,7 @@ const (
 	// the value lower will result in more API call round trip periods for
 	// large batches.
 	//
-	// Given a number of pods to start "N":
+	// Given a number of nfs to start "N":
 	// The number of doomed calls per sync once quota is exceeded is given by:
 	//      min(N,SlowStartInitialBatchSize)
 	// The number of batches is given by:
@@ -48,56 +48,56 @@ const (
 // which is necessary when managing expectations for deletions.
 var controllerUIDIndex = "controller-uid-index"
 
-// Reasons for binding events
+// Reasons for nf events
 const (
-	// FailedCreateBindingReason is added in an event and in a replica set condition
+	// FailedCreateNFReason is added in an event and in a replica set condition
 	// when a pod for a replica set is failed to be created.
-	FailedCreateBindingReason = "FailedCreate"
-	// SuccessfulCreateBindingReason is added in an event when a pod for a replica set
+	FailedCreateNFReason = "FailedCreate"
+	// SuccessfulCreateNFReason is added in an event when a pod for a replica set
 	// is successfully created.
-	SuccessfulCreateBindingReason = "SuccessfulCreate"
-	// FailedDeleteBindingReason is added in an event and in a replica set condition
+	SuccessfulCreateNFReason = "SuccessfulCreate"
+	// FailedDeleteNFReason is added in an event and in a replica set condition
 	// when a pod for a replica set is failed to be deleted.
-	FailedDeleteBindingReason = "FailedDelete"
-	// SuccessfulDeleteBindingReason is added in an event when a pod for a replica set
+	FailedDeleteNFReason = "FailedDelete"
+	// SuccessfulDeleteNFReason is added in an event when a pod for a replica set
 	// is successfully deleted.
-	SuccessfulDeleteBindingReason = "SuccessfulDelete"
+	SuccessfulDeleteNFReason = "SuccessfulDelete"
 )
 
-func (r *NetworkFunctionReplicaSetReconciler) listActiveBindings(ctx context.Context,
+func (r *NetworkFunctionReplicaSetReconciler) listActiveNFs(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-) ([]*schedulingv1alpha1.NetworkFunctionBinding, error) {
+) ([]*schedulingv1alpha1.NetworkFunction, error) {
 	// Convert the NetworkFunctionReplicaSet's label selector to a selector that can be used to list
-	// NetworkFunctionBindings
-	bindingSelector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+	// NetworkFunctions
+	nfSelector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
 	if err != nil {
 		return nil, fmt.Errorf("nf replicaset %s/%s has invalid label selector: %v",
 			rs.Namespace, rs.Name, err)
 	}
 
-	var bindingList schedulingv1alpha1.NetworkFunctionBindingList
-	if err = r.List(ctx, &bindingList,
-		client.MatchingLabelsSelector{Selector: bindingSelector}); err != nil {
+	var nfList schedulingv1alpha1.NetworkFunctionList
+	if err = r.List(ctx, &nfList,
+		client.MatchingLabelsSelector{Selector: nfSelector}); err != nil {
 		return nil, err
 	}
 
-	allBindings := make([]*schedulingv1alpha1.NetworkFunctionBinding, 0, len(bindingList.Items))
-	for i := range bindingList.Items {
-		allBindings = append(allBindings, &bindingList.Items[i])
+	allNFs := make([]*schedulingv1alpha1.NetworkFunction, 0, len(nfList.Items))
+	for i := range nfList.Items {
+		allNFs = append(allNFs, &nfList.Items[i])
 	}
 
-	return rsutil.FilterActiveBindings(allBindings), nil
+	return rsutil.FilterActiveNFs(allNFs), nil
 }
 
 // manageReplicas checks and updates replicas for the given ReplicaSet.
-// Does NOT modify <activeBindings>.
-// It will requeue the replica set in case of an error while creating/deleting bindings.
+// Does NOT modify <activeNFs>.
+// It will requeue the replica set in case of an error while creating/deleting nfs.
 func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 	ctx context.Context,
-	activeBindings []*schedulingv1alpha1.NetworkFunctionBinding,
+	activeNFs []*schedulingv1alpha1.NetworkFunction,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) error {
-	diff := len(activeBindings) - int(*(rs.Spec.Replicas))
+	diff := len(activeNFs) - int(*(rs.Spec.Replicas))
 	rsKey, err := rsutil.KeyFunc(rs)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for nf replicaset %#v: %v", rs, err))
@@ -126,7 +126,7 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 		// after one of its pods fails.  Conveniently, this also prevents the
 		// event spam that those failures would generate.
 		successfulCreations, err := slowStartBatch(diff, SlowStartInitialBatchSize, func() error {
-			err := r.CreateBindings(ctx, rs)
+			err := r.CreateNFs(ctx, rs)
 			if err != nil {
 				if apierrors.HasStatusCause(err, v1.NamespaceTerminatingCause) {
 					// if the namespace is being terminated, we don't have to do
@@ -156,37 +156,37 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 		logger.V(2).Info("Too many replicas",
 			"replicaSet", rs, "need", *(rs.Spec.Replicas), "deleting", diff)
 
-		relatedPods, err := r.getIndirectlyRelatedBindings(ctx, rs)
+		relatedPods, err := r.getIndirectlyRelatedNFs(ctx, rs)
 		utilruntime.HandleError(err)
 
 		// Choose which Pods to delete, preferring those in earlier phases of startup.
-		bindingsToDelete := rsutil.GetBindingsToDelete(activeBindings, relatedPods, diff)
+		nfsToDelete := rsutil.GetNFsToDelete(activeNFs, relatedPods, diff)
 
 		// Snapshot the UIDs (ns/name) of the pods we're expecting to see
 		// deleted, so we know to record their expectations exactly once either
 		// when we see it as an update of the deletion timestamp, or as a delete.
-		// Note that if the labels on a b/rs change in a way that the b gets
+		// Note that if the labels on a nf/rs change in a way that the nf gets
 		// orphaned, the rs will only wake up after the expectations have
 		// expired even if other pods are deleted.
-		r.expectations.ExpectDeletions(logger, rsKey, rsutil.GetBindingKeys(bindingsToDelete))
+		r.expectations.ExpectDeletions(logger, rsKey, rsutil.GetNFKeys(nfsToDelete))
 
 		errCh := make(chan error, diff)
 		var wg sync.WaitGroup
 		wg.Add(diff)
-		for _, b := range bindingsToDelete {
-			go func(targetBinding *schedulingv1alpha1.NetworkFunctionBinding) {
+		for _, nf := range nfsToDelete {
+			go func(targetNF *schedulingv1alpha1.NetworkFunction) {
 				defer wg.Done()
-				if err := r.DeleteBinding(ctx, rs.Namespace, targetBinding.Name); err != nil {
+				if err := r.DeleteNF(ctx, rs.Namespace, targetNF.Name); err != nil {
 					// Decrement the expected number of deletes because the informer won't observe this deletion
-					bindingKey := rsutil.BindingKey(targetBinding)
-					r.expectations.DeletionObserved(logger, rsKey, bindingKey)
+					nfKey := rsutil.NFKey(targetNF)
+					r.expectations.DeletionObserved(logger, rsKey, nfKey)
 					if !apierrors.IsNotFound(err) {
-						logger.V(2).Info("Failed to delete binding, decremented expectations",
-							"b", bindingKey, "replicaSet", rs)
+						logger.V(2).Info("Failed to delete nf, decremented expectations",
+							"nf", nfKey, "replicaSet", rs)
 						errCh <- err
 					}
 				}
-			}(b)
+			}(nf)
 		}
 		wg.Wait()
 
@@ -241,37 +241,37 @@ func slowStartBatch(count int, initialBatchSize int, fn func() error) (int, erro
 	return successes, nil
 }
 
-func (r *NetworkFunctionReplicaSetReconciler) CreateBindings(ctx context.Context,
+func (r *NetworkFunctionReplicaSetReconciler) CreateNFs(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) error {
-	return r.CreateBindingWithGenerateName(ctx, rs, "")
+	return r.CreateNFWithGenerateName(ctx, rs, "")
 }
 
-func (r *NetworkFunctionReplicaSetReconciler) CreateBindingWithGenerateName(ctx context.Context,
+func (r *NetworkFunctionReplicaSetReconciler) CreateNFWithGenerateName(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, generateName string,
 ) error {
-	binding, err := r.GetBindingFromRS(rs)
+	nf, err := r.GetNetworkFunctionFromRS(rs)
 	if err != nil {
 		return err
 	}
 	if len(generateName) > 0 {
-		binding.ObjectMeta.GenerateName = generateName
+		nf.ObjectMeta.GenerateName = generateName
 	}
-	return r.createBindings(ctx, binding)
+	return r.createNFs(ctx, nf)
 }
-func (r *NetworkFunctionReplicaSetReconciler) GetBindingFromRS(
+func (r *NetworkFunctionReplicaSetReconciler) GetNetworkFunctionFromRS(
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-) (*schedulingv1alpha1.NetworkFunctionBinding, error) {
-	desiredLabels := rsutil.GetBindingLabelSet(&rs.Spec.Template)
-	desiredFinalizers := rsutil.GetBindingFinalizers(&rs.Spec.Template)
-	desiredAnnotations := rsutil.GetBindingAnnotationSet(&rs.Spec.Template)
+) (*schedulingv1alpha1.NetworkFunction, error) {
+	desiredLabels := rsutil.GetNFLabelSet(&rs.Spec.Template)
+	desiredFinalizers := rsutil.GetNFFinalizers(&rs.Spec.Template)
+	desiredAnnotations := rsutil.GetNFAnnotationSet(&rs.Spec.Template)
 	accessor, err := meta.Accessor(rs)
 	if err != nil {
 		return nil, fmt.Errorf("nf replicaset does not have ObjectMeta, %v", err)
 	}
-	prefix := rsutil.GetBindingPrefix(accessor.GetName())
+	prefix := rsutil.GetNFPrefix(accessor.GetName())
 
-	binding := &schedulingv1alpha1.NetworkFunctionBinding{
+	nf := &schedulingv1alpha1.NetworkFunction{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:       desiredLabels,
 			Annotations:  desiredAnnotations,
@@ -279,59 +279,59 @@ func (r *NetworkFunctionReplicaSetReconciler) GetBindingFromRS(
 			Finalizers:   desiredFinalizers,
 		},
 	}
-	err = controllerutil.SetOwnerReference(rs, binding, r.Scheme)
+	err = controllerutil.SetOwnerReference(rs, nf, r.Scheme)
 	if err != nil {
-		// skip the deep copy of the spec since we won't be creating the binding if we can't set the owner reference
-		return nil, fmt.Errorf("failed to set owner reference on binding: %v", err)
+		// skip the deep copy of the spec since we won't be creating the nf if we can't set the owner reference
+		return nil, fmt.Errorf("failed to set owner reference on nf: %v", err)
 	}
-	binding.Spec = *rs.Spec.Template.Spec.DeepCopy()
-	return binding, nil
+	nf.Spec = *rs.Spec.Template.Spec.DeepCopy()
+	return nf, nil
 }
 
-func (r *NetworkFunctionReplicaSetReconciler) createBindings(ctx context.Context,
-	pod *schedulingv1alpha1.NetworkFunctionBinding) error {
-	if len(labels.Set(pod.Labels)) == 0 {
-		return fmt.Errorf("unable to create binding, no labels")
+func (r *NetworkFunctionReplicaSetReconciler) createNFs(ctx context.Context,
+	nf *schedulingv1alpha1.NetworkFunction) error {
+	if len(labels.Set(nf.Labels)) == 0 {
+		return fmt.Errorf("unable to create nf, no labels")
 	}
-	err := r.Create(ctx, pod)
+	err := r.Create(ctx, nf)
 	if err != nil {
 		return err
 	}
 	logger := logf.FromContext(ctx)
-	logger.V(4).Info("Controller created binding",
-		"binding", pod)
+	logger.V(4).Info("Controller created nf",
+		"nf", nf)
 	return nil
 }
 
-func (r *NetworkFunctionReplicaSetReconciler) DeleteBinding(ctx context.Context, namespace string, podID string) error {
+func (r *NetworkFunctionReplicaSetReconciler) DeleteNF(ctx context.Context, namespace string, podID string) error {
 	logger := klog.FromContext(ctx)
-	logger.V(2).Info("Deleting binding",
-		"binding.Name", podID, "binding.Namespace", namespace)
-	binding := &schedulingv1alpha1.NetworkFunctionBinding{ObjectMeta: metav1.ObjectMeta{
+	logger.V(2).Info("Deleting nf",
+		"nf.Name", podID, "nf.Namespace", namespace)
+	nf := &schedulingv1alpha1.NetworkFunction{ObjectMeta: metav1.ObjectMeta{
 		Name:      podID,
 		Namespace: namespace,
 	}}
-	if err := r.Delete(ctx, binding); err != nil {
+	if err := r.Delete(ctx, nf); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.V(4).Info("NF Binding has already been deleted.",
-				"binding.Name", podID, "binding.Namespace", namespace)
+			logger.V(4).Info("NF has already been deleted.",
+				"nf.Name", podID, "nf.Namespace", namespace)
 			return err
 		}
-		//r.Recorder.Eventf(object, v1.EventTypeWarning, FailedDeleteBindingReason, "Error deleting: %v", err)
+		//r.Recorder.Eventf(object, v1.EventTypeWarning, FailedDeleteNFReason, "Error deleting: %v", err)
 		return fmt.Errorf("unable to delete pods: %v", err)
 	}
-	//r.Recorder.Eventf(object, v1.EventTypeNormal, SuccessfulDeleteBindingReason, "Deleted pod: %v", podID)
+	//r.Recorder.Eventf(object, v1.EventTypeNormal, SuccessfulDeleteNFReason, "Deleted pod: %v", podID)
 
 	return nil
 }
 
 // getIndirectlyRelatedPods returns all pods that are owned by any ReplicaSet
 // that is owned by the given ReplicaSet's owner.
-func (r *NetworkFunctionReplicaSetReconciler) getIndirectlyRelatedBindings(
+func (r *NetworkFunctionReplicaSetReconciler) getIndirectlyRelatedNFs(
 	ctx context.Context, rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-) ([]*schedulingv1alpha1.NetworkFunctionBinding, error) {
+) ([]*schedulingv1alpha1.NetworkFunction, error) {
 	logger := logf.FromContext(ctx)
-	var relatedBindings []*schedulingv1alpha1.NetworkFunctionBinding
+	var relatedNFs []*schedulingv1alpha1.NetworkFunction
 	seen := make(map[types.UID]*schedulingv1alpha1.NetworkFunctionReplicaSet)
 	for _, relatedRS := range r.getReplicaSetsWithSameController(ctx, rs) {
 		selector, err := metav1.LabelSelectorAsSelector(relatedRS.Spec.Selector)
@@ -339,24 +339,24 @@ func (r *NetworkFunctionReplicaSetReconciler) getIndirectlyRelatedBindings(
 			// This object has an invalid selector, it does not match any pods
 			continue
 		}
-		bindingList := &schedulingv1alpha1.NetworkFunctionBindingList{}
-		err = r.List(ctx, bindingList, client.MatchingLabelsSelector{Selector: selector})
+		nfList := &schedulingv1alpha1.NetworkFunctionList{}
+		err = r.List(ctx, nfList, client.MatchingLabelsSelector{Selector: selector})
 		if err != nil {
 			return nil, err
 		}
-		for _, b := range bindingList.Items {
+		for _, b := range nfList.Items {
 			if otherRS, found := seen[b.UID]; found {
-				logger.V(5).Info("Binding is owned by both",
-					"binding", b, "replicaSets", klog.KObjSlice([]klog.KMetadata{otherRS, relatedRS}))
+				logger.V(5).Info("Network function is owned by both",
+					"nf", b, "replicaSets", klog.KObjSlice([]klog.KMetadata{otherRS, relatedRS}))
 				continue
 			}
 			seen[b.UID] = relatedRS
-			relatedBindings = append(relatedBindings, &b)
+			relatedNFs = append(relatedNFs, &b)
 		}
 	}
-	logger.V(4).Info("Found related bindings",
-		"replicaSet", rs, "bindings", relatedBindings)
-	return relatedBindings, nil
+	logger.V(4).Info("Found related nfs",
+		"replicaSet", rs, "nfs", relatedNFs)
+	return relatedNFs, nil
 }
 
 // getReplicaSetsWithSameController returns a list of ReplicaSets with the same
@@ -385,14 +385,14 @@ func (r *NetworkFunctionReplicaSetReconciler) getReplicaSetsWithSameController(c
 }
 
 func (r *NetworkFunctionReplicaSetReconciler) filterOwnedPods(ctx context.Context,
-	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, allActiveBindings []*schedulingv1alpha1.NetworkFunctionBinding,
-) ([]*schedulingv1alpha1.NetworkFunctionBinding, error) {
-	ownedBindings := make([]*schedulingv1alpha1.NetworkFunctionBinding, 0, len(allActiveBindings))
-	for i := range allActiveBindings {
-		b := allActiveBindings[i]
+	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, allActiveNFs []*schedulingv1alpha1.NetworkFunction,
+) ([]*schedulingv1alpha1.NetworkFunction, error) {
+	ownedNFs := make([]*schedulingv1alpha1.NetworkFunction, 0, len(allActiveNFs))
+	for i := range allActiveNFs {
+		b := allActiveNFs[i]
 		if metav1.IsControlledBy(b, rs) {
-			ownedBindings = append(ownedBindings, b)
+			ownedNFs = append(ownedNFs, b)
 		}
 	}
-	return ownedBindings, nil
+	return ownedNFs, nil
 }

@@ -44,7 +44,7 @@ type P4TargetReconciler struct {
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

@@ -228,18 +228,18 @@ func ComputeSpecHash(nfDeployment *corev1alpha1.NetworkFunctionDeployment) strin
 }
 
 // EqualIgnoreHash returns true if two given podTemplateSpec are equal, ignoring the diff in value of
-// Labels[NF_BINDING_SPEC_HASH_LABEL]
-// We ignore NF_BINDING_SPEC_HASH_LABEL because:
+// Labels[NFSpecHashLabel]
+// We ignore NFSpecHashLabel because:
 //  1. The hash result would be different upon podTemplateSpec API changes
 //     (e.g. the addition of a new field will cause the hash code to change)
 //  2. The deployment template won't have hash labels
-func EqualIgnoreHash(t1 *schedulingv1alpha1.NetworkFunctionBindingTemplate,
-	t2 *schedulingv1alpha1.NetworkFunctionBindingTemplate) bool {
+func EqualIgnoreHash(t1 *schedulingv1alpha1.NetworkFunctionTemplate,
+	t2 *schedulingv1alpha1.NetworkFunctionTemplate) bool {
 	t1Copy := t1.DeepCopy()
 	t2Copy := t2.DeepCopy()
 	// Remove hash labels from template.Labels before comparing
-	delete(t1Copy.Labels, corev1alpha1.NF_BINDING_SPEC_HASH_LABEL)
-	delete(t2Copy.Labels, corev1alpha1.NF_BINDING_SPEC_HASH_LABEL)
+	delete(t1Copy.Labels, corev1alpha1.NFSpecHashLabel)
+	delete(t2Copy.Labels, corev1alpha1.NFSpecHashLabel)
 	return apiequality.Semantic.DeepEqual(t1Copy, t2Copy)
 }
 

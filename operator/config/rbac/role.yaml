@@ -100,8 +100,8 @@ rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
-  - networkfunctionbindings
   - networkfunctionreplicasets
+  - networkfunctions
   verbs:
   - create
   - delete
@@ -113,15 +113,15 @@ rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
-  - networkfunctionbindings/finalizers
   - networkfunctionreplicasets/finalizers
+  - networkfunctions/finalizers
   verbs:
   - update
 - apiGroups:
   - scheduling.loom.io
   resources:
-  - networkfunctionbindings/status
   - networkfunctionreplicasets/status
+  - networkfunctions/status
   verbs:
   - get
   - patch

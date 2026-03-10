@@ -11,17 +11,17 @@ metadata:
   labels:
     app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
-  name: scheduling-networkfunctionbinding-admin-role
+  name: scheduling-networkfunction-admin-role
 rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
-  - networkfunctionbindings
+  - networkfunctions
   verbs:
   - '*'
 - apiGroups:
   - scheduling.loom.io
   resources:
-  - networkfunctionbindings/status
+  - networkfunctions/status
   verbs:
   - get

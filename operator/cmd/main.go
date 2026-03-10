@@ -39,11 +39,11 @@ import (
 
 	"loom/internal/controller/core/application"
 	"loom/internal/controller/core/networkfunctiondeployment"
-	corecontroller "loom/internal/controller/core/p4target"
+	"loom/internal/controller/core/p4target"
 	"loom/internal/controller/core/servicechain"
-	infracontroller "loom/internal/controller/infra/bmv2target"
-	schedulingcontroller "loom/internal/controller/scheduling/nf_binding"
-	"loom/internal/controller/scheduling/nf_replicaset"
+	"loom/internal/controller/infra/bmv2target"
+	"loom/internal/controller/scheduling/networkfunction"
+	"loom/internal/controller/scheduling/networkfunctionreplicaset"
 
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
@@ -241,28 +241,28 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)
 	}
-	if err := (&corecontroller.P4TargetReconciler{
+	if err := (&p4target.P4TargetReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 		os.Exit(1)
 	}
-	if err := (&nf_replicaset.NetworkFunctionReplicaSetReconciler{
+	if err := (&networkfunctionreplicaset.NetworkFunctionReplicaSetReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionReplicaSet")
 		os.Exit(1)
 	}
-	if err := (&schedulingcontroller.NetworkFunctionBindingReconciler{
+	if err := (&networkfunction.NetworkFunctionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionBinding")
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)
 	}
-	if err := (&infracontroller.BMv2TargetReconciler{
+	if err := (&bmv2target.BMv2TargetReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {

@@ -42,9 +42,9 @@ spec:
             properties:
               minReadySeconds:
                 description: |-
-                  MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunctionBinding
+                  MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunction
                   should be ready without any of its container crashing, for it to be considered available. Defaults
-                  to 0 (the NetworkFunctionBinding will be considered available as soon as it is ready).
+                  to 0 (the NetworkFunction will be considered available as soon as it is ready).
                 format: int32
                 minimum: 0
                 type: integer
@@ -56,7 +56,7 @@ spec:
               selector:
                 description: |-
                   Selector is a label query over network function instances that should
-                  match the replica count. It must match the labels of the NetworkFunctionBindingTemplate.
+                  match the replica count. It must match the labels of the NetworkFunctionTemplate.
                 properties:
                   matchExpressions:
                     description: matchExpressions is a list of label selector requirements.
@@ -107,8 +107,8 @@ spec:
                   metadata:
                     type: object
                   spec:
-                    description: NetworkFunctionBindingSpec defines the desired state
-                      of NetworkFunctionBinding
+                    description: NetworkFunctionSpec defines the desired state of
+                      NetworkFunction
                     properties:
                       controlPlane:
                         description: |-
@@ -1327,7 +1327,7 @@ spec:
             description: status defines the observed state of NetworkFunctionReplicaSet
             properties:
               availableReplicas:
-                description: AvailableReplicas is the number of available NetworkFunctionBinding
+                description: AvailableReplicas is the number of available NetworkFunction
                   replicas
                 format: int32
                 type: integer
@@ -1374,7 +1374,7 @@ spec:
                 format: int64
                 type: integer
               readyReplicas:
-                description: ReadyReplicas is the number of ready NetworkFunctionBinding
+                description: ReadyReplicas is the number of ready NetworkFunction
                   replicas
                 format: int32
                 type: integer

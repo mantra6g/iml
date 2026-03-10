@@ -13,13 +13,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func IsBindingReady(b *schedulingv1alpha1.NetworkFunctionBinding) bool {
-	cond := GetBindingCondition(b, schedulingv1alpha1.BindingReady)
+func IsNFReady(nf *schedulingv1alpha1.NetworkFunction) bool {
+	cond := GetNFCondition(nf, schedulingv1alpha1.NetworkFunctionReady)
 	return cond != nil && cond.Status == metav1.ConditionTrue
 }
 
-func IsBindingAvailable(b *schedulingv1alpha1.NetworkFunctionBinding, minReadySeconds int32, now time.Time) bool {
-	readyCondition := GetBindingCondition(b, schedulingv1alpha1.BindingReady)
+func IsNFAvailable(nf *schedulingv1alpha1.NetworkFunction, minReadySeconds int32, now time.Time) bool {
+	readyCondition := GetNFCondition(nf, schedulingv1alpha1.NetworkFunctionReady)
 	if readyCondition == nil || readyCondition.Status != metav1.ConditionTrue {
 		return false
 	}
@@ -31,9 +31,9 @@ func IsBindingAvailable(b *schedulingv1alpha1.NetworkFunctionBinding, minReadySe
 	return true
 }
 
-func GetBindingCondition(b *schedulingv1alpha1.NetworkFunctionBinding,
-	conditionType schedulingv1alpha1.BindingConditionType) *schedulingv1alpha1.BindingCondition {
-	for _, cond := range b.Status.Conditions {
+func GetNFCondition(nf *schedulingv1alpha1.NetworkFunction,
+	conditionType schedulingv1alpha1.NetworkFunctionConditionType) *schedulingv1alpha1.NetworkFunctionCondition {
+	for _, cond := range nf.Status.Conditions {
 		if cond.Type == conditionType {
 			return &cond
 		}
@@ -41,7 +41,7 @@ func GetBindingCondition(b *schedulingv1alpha1.NetworkFunctionBinding,
 	return nil
 }
 
-func GetBindingLabelSet(template *schedulingv1alpha1.NetworkFunctionBindingTemplate) labels.Set {
+func GetNFLabelSet(template *schedulingv1alpha1.NetworkFunctionTemplate) labels.Set {
 	desiredLabels := make(labels.Set)
 	for k, v := range template.Labels {
 		desiredLabels[k] = v
@@ -49,13 +49,13 @@ func GetBindingLabelSet(template *schedulingv1alpha1.NetworkFunctionBindingTempl
 	return desiredLabels
 }
 
-func GetBindingFinalizers(template *schedulingv1alpha1.NetworkFunctionBindingTemplate) []string {
+func GetNFFinalizers(template *schedulingv1alpha1.NetworkFunctionTemplate) []string {
 	desiredFinalizers := make([]string, len(template.Finalizers))
 	copy(desiredFinalizers, template.Finalizers)
 	return desiredFinalizers
 }
 
-func GetBindingAnnotationSet(template *schedulingv1alpha1.NetworkFunctionBindingTemplate) labels.Set {
+func GetNFAnnotationSet(template *schedulingv1alpha1.NetworkFunctionTemplate) labels.Set {
 	desiredAnnotations := make(labels.Set)
 	for k, v := range template.Annotations {
 		desiredAnnotations[k] = v
@@ -63,7 +63,7 @@ func GetBindingAnnotationSet(template *schedulingv1alpha1.NetworkFunctionBinding
 	return desiredAnnotations
 }
 
-func GetBindingPrefix(rsName string) string {
+func GetNFPrefix(rsName string) string {
 	// use the dash (if the name isn't too long) to make the pod name a bit prettier
 	prefix := fmt.Sprintf("%s-", rsName)
 	if len(validation.NameIsDNSSubdomain(prefix, true)) != 0 {
@@ -72,58 +72,58 @@ func GetBindingPrefix(rsName string) string {
 	return prefix
 }
 
-func GetBindingsToDelete(filteredBdgs, relatedBdgs []*schedulingv1alpha1.NetworkFunctionBinding, diff int,
-) []*schedulingv1alpha1.NetworkFunctionBinding {
+func GetNFsToDelete(filteredNFs, relatedNFs []*schedulingv1alpha1.NetworkFunction, diff int,
+) []*schedulingv1alpha1.NetworkFunction {
 	// No need to sort pods if we are about to delete all of them.
-	// diff will always be <= len(filteredBdgs), so not need to handle > case.
-	if diff < len(filteredBdgs) {
-		podsWithRanks := GetBindingsRankedByRelatedBindingsOnSameTarget(filteredBdgs, relatedBdgs)
+	// diff will always be <= len(filteredNFs), so not need to handle > case.
+	if diff < len(filteredNFs) {
+		podsWithRanks := GetNFsRankedByRelatedNFsOnSameTarget(filteredNFs, relatedNFs)
 		sort.Sort(podsWithRanks)
 	}
-	return filteredBdgs[:diff]
+	return filteredNFs[:diff]
 }
 
-// GetBindingsRankedByRelatedBindingsOnSameTarget returns an ActiveBindingsWithRanks value
-// that wraps bindingsToRank and assigns each binding a rank equal to the number of
-// active binding in relatedBindings that are colocated on the same node with the pod.
-// relatedBindings generally should be a superset of bindingsToRank.
-func GetBindingsRankedByRelatedBindingsOnSameTarget(
-	bindingsToRank, relatedBindings []*schedulingv1alpha1.NetworkFunctionBinding,
-) ActiveBindingsWithRanks {
-	bindingsOnTarget := make(map[string]int)
-	for _, b := range relatedBindings {
-		if IsBindingActive(b) {
-			bindingsOnTarget[b.Spec.TargetName]++
+// GetNFsRankedByRelatedNFsOnSameTarget returns an ActiveNFsWithRanks value
+// that wraps nfsToRank and assigns each nf a rank equal to the number of
+// active nf in relatedNFs that are colocated on the same node with the pod.
+// relatedNFs generally should be a superset of nfsToRank.
+func GetNFsRankedByRelatedNFsOnSameTarget(
+	nfsToRank, relatedNFs []*schedulingv1alpha1.NetworkFunction,
+) ActiveNFsWithRanks {
+	nfsOnTarget := make(map[string]int)
+	for _, nf := range relatedNFs {
+		if IsNFActive(nf) {
+			nfsOnTarget[nf.Spec.TargetName]++
 		}
 	}
-	ranks := make([]int, len(bindingsToRank))
-	for i, b := range bindingsToRank {
-		ranks[i] = bindingsOnTarget[b.Spec.TargetName]
+	ranks := make([]int, len(nfsToRank))
+	for i, b := range nfsToRank {
+		ranks[i] = nfsOnTarget[b.Spec.TargetName]
 	}
-	return ActiveBindingsWithRanks{Bindings: bindingsToRank, Rank: ranks, Now: metav1.Now()}
+	return ActiveNFsWithRanks{NFs: nfsToRank, Rank: ranks, Now: metav1.Now()}
 }
 
-func GetBindingKeys(pods []*schedulingv1alpha1.NetworkFunctionBinding) []string {
+func GetNFKeys(pods []*schedulingv1alpha1.NetworkFunction) []string {
 	podKeys := make([]string, 0, len(pods))
 	for _, pod := range pods {
-		podKeys = append(podKeys, BindingKey(pod))
+		podKeys = append(podKeys, NFKey(pod))
 	}
 	return podKeys
 }
 
-func IsBindingActive(b *schedulingv1alpha1.NetworkFunctionBinding) bool {
-	return schedulingv1alpha1.BindingFailed != b.Status.Phase &&
+func IsNFActive(b *schedulingv1alpha1.NetworkFunction) bool {
+	return schedulingv1alpha1.NetworkFunctionFailed != b.Status.Phase &&
 		b.DeletionTimestamp == nil
 }
 
-// FilterActiveBindings returns bindings that have not terminated.
-func FilterActiveBindings(
-	bindings []*schedulingv1alpha1.NetworkFunctionBinding,
-) []*schedulingv1alpha1.NetworkFunctionBinding {
-	var result []*schedulingv1alpha1.NetworkFunctionBinding
-	for _, b := range bindings {
-		if IsBindingActive(b) {
-			result = append(result, b)
+// FilterActiveNFs returns nfs that have not terminated.
+func FilterActiveNFs(
+	nfs []*schedulingv1alpha1.NetworkFunction,
+) []*schedulingv1alpha1.NetworkFunction {
+	var result []*schedulingv1alpha1.NetworkFunction
+	for _, nf := range nfs {
+		if IsNFActive(nf) {
+			result = append(result, nf)
 		}
 	}
 	return result
@@ -202,20 +202,20 @@ func EqualConditions(c1, c2 *schedulingv1alpha1.ReplicaSetCondition) bool {
 }
 
 func CountReplicas(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	activeBindings []*schedulingv1alpha1.NetworkFunctionBinding,
+	activeNFs []*schedulingv1alpha1.NetworkFunction,
 	now time.Time,
 ) (fullyLabeledReplicasCount, readyReplicasCount, availableReplicasCount int) {
 	fullyLabeledReplicasCount = 0
 	readyReplicasCount = 0
 	availableReplicasCount = 0
 	templateLabel := labels.Set(rs.Spec.Template.Labels).AsSelectorPreValidated()
-	for _, b := range activeBindings {
+	for _, b := range activeNFs {
 		if templateLabel.Matches(labels.Set(b.Labels)) {
 			fullyLabeledReplicasCount++
 		}
-		if IsBindingReady(b) {
+		if IsNFReady(b) {
 			readyReplicasCount++
-			if IsBindingAvailable(b, rs.Spec.MinReadySeconds, now) {
+			if IsNFAvailable(b, rs.Spec.MinReadySeconds, now) {
 				availableReplicasCount++
 			}
 		}
@@ -223,55 +223,55 @@ func CountReplicas(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
 	return fullyLabeledReplicasCount, readyReplicasCount, availableReplicasCount
 }
 
-// FindMinNextBindingAvailabilityCheck finds a duration when the next availability check should occur.
+// FindMinNextNFAvailabilityCheck finds a duration when the next availability check should occur.
 // We should check for the availability at the same time as the status evaluation/update occurs (e.g. .status.availableReplicas) by
 // passing lastOwnerStatusEvaluation. This ensures that we will not skip any pods that might become available
 // (findMinNextPodAvailabilitySimpleCheck would return nil in the future time), since the owner status evaluation.
 // clock is then used to calculate the precise time for the next availability check.
-func FindMinNextBindingAvailabilityCheck(bindings []*schedulingv1alpha1.NetworkFunctionBinding,
+func FindMinNextNFAvailabilityCheck(nfs []*schedulingv1alpha1.NetworkFunction,
 	minReadySeconds int32, lastOwnerStatusEvaluation time.Time,
 ) *time.Duration {
-	nextCheckAccordingToOwnerStatusEvaluation, checkPod := findMinNextBindingAvailabilitySimpleCheck(bindings,
+	nextCheckAccordingToOwnerStatusEvaluation, checkPod := findMinNextNFAvailabilitySimpleCheck(nfs,
 		minReadySeconds, lastOwnerStatusEvaluation)
 	if nextCheckAccordingToOwnerStatusEvaluation == nil || checkPod == nil {
 		return nil
 	}
 	// There must be a nextCheck. We try to calculate a more precise value for the next availability check.
-	// Check the earliest binding to avoid being preempted by a later binding.
-	if updatedNextCheck := nextBindingAvailabilityCheck(checkPod, minReadySeconds, time.Now()); updatedNextCheck != nil {
+	// Check the earliest nf to avoid being preempted by a later nf.
+	if updatedNextCheck := nextNFAvailabilityCheck(checkPod, minReadySeconds, time.Now()); updatedNextCheck != nil {
 		// There is a delay since the last Now() call (lastOwnerStatusEvaluation). Use the updatedNextCheck.
 		return updatedNextCheck
 	}
-	// Fall back to 0 (immediate check) in case the last nextBindingAvailabilityCheck call (with a refreshed Now)
+	// Fall back to 0 (immediate check) in case the last nextNFAvailabilityCheck call (with a refreshed Now)
 	// returns nil, as we might be past the check.
 	return ptr.To(time.Duration(0))
 }
 
-// findMinNextBindingAvailabilitySimpleCheck finds a duration when the next availability check should occur.
-// It also returns the first binding affected by the future availability recalculation (there might be more
-// bindings if they became ready at the same time; this helps to implement FindMinNextBindingAvailabilityCheck).
-func findMinNextBindingAvailabilitySimpleCheck(bindings []*schedulingv1alpha1.NetworkFunctionBinding,
-	minReadySeconds int32, now time.Time) (*time.Duration, *schedulingv1alpha1.NetworkFunctionBinding) {
+// findMinNextNFAvailabilitySimpleCheck finds a duration when the next availability check should occur.
+// It also returns the first nf affected by the future availability recalculation (there might be more
+// nfs if they became ready at the same time; this helps to implement FindMinNextNFAvailabilityCheck).
+func findMinNextNFAvailabilitySimpleCheck(nfs []*schedulingv1alpha1.NetworkFunction,
+	minReadySeconds int32, now time.Time) (*time.Duration, *schedulingv1alpha1.NetworkFunction) {
 	var minAvailabilityCheck *time.Duration
-	var checkBinding *schedulingv1alpha1.NetworkFunctionBinding
-	for _, p := range bindings {
-		nextCheck := nextBindingAvailabilityCheck(p, minReadySeconds, now)
+	var checkNF *schedulingv1alpha1.NetworkFunction
+	for _, p := range nfs {
+		nextCheck := nextNFAvailabilityCheck(p, minReadySeconds, now)
 		if nextCheck != nil && (minAvailabilityCheck == nil || *nextCheck < *minAvailabilityCheck) {
 			minAvailabilityCheck = nextCheck
-			checkBinding = p
+			checkNF = p
 		}
 	}
-	return minAvailabilityCheck, checkBinding
+	return minAvailabilityCheck, checkNF
 }
 
-// nextBindingAvailabilityCheck implements similar logic to IsBindingAvailable
-func nextBindingAvailabilityCheck(binding *schedulingv1alpha1.NetworkFunctionBinding, minReadySeconds int32,
+// nextNFAvailabilityCheck implements similar logic to IsNFAvailable
+func nextNFAvailabilityCheck(nf *schedulingv1alpha1.NetworkFunction, minReadySeconds int32,
 	now time.Time) *time.Duration {
-	if !IsBindingReady(binding) || minReadySeconds <= 0 {
+	if !IsNFReady(nf) || minReadySeconds <= 0 {
 		return nil
 	}
 
-	c := GetBindingReadyCondition(&binding.Status)
+	c := GetNFReadyCondition(&nf.Status)
 	if c == nil {
 		return nil
 	}
@@ -286,10 +286,10 @@ func nextBindingAvailabilityCheck(binding *schedulingv1alpha1.NetworkFunctionBin
 	return nil
 }
 
-func GetBindingReadyCondition(status *schedulingv1alpha1.NetworkFunctionBindingStatus,
-) *schedulingv1alpha1.BindingCondition {
+func GetNFReadyCondition(status *schedulingv1alpha1.NetworkFunctionStatus,
+) *schedulingv1alpha1.NetworkFunctionCondition {
 	for _, cond := range status.Conditions {
-		if cond.Type == schedulingv1alpha1.BindingReady {
+		if cond.Type == schedulingv1alpha1.NetworkFunctionReady {
 			return &cond
 		}
 	}

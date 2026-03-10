@@ -28,7 +28,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const NFDeploymentFinalizer = "networkfunctiondeployment.loom.io/finalizer"
-const NF_BINDING_SPEC_HASH_LABEL = "core.loom.io/networkFunctionBindingSpecHash"
+const NFSpecHashLabel = "networkfunction.loom.io/specHash"
 
 type Foo = v1.DeploymentStrategy
 
@@ -89,17 +89,17 @@ type NetworkFunctionDeploymentSpec struct {
 	Strategy *DeploymentStrategy `json:"strategy,omitempty"`
 
 	// Selector is a label query over network function instances that should
-	// match the replica count. It must match the labels of the NetworkFunctionBindingTemplate.
+	// match the replica count. It must match the labels of the NetworkFunctionTemplate.
 	// +required
 	Selector *metav1.LabelSelector `json:"selector"`
 
 	// Template describes the NetworkFunctionDeployment that will be created
 	// +required
-	Template schedulingv1alpha1.NetworkFunctionBindingTemplate `json:"template,omitempty"`
+	Template schedulingv1alpha1.NetworkFunctionTemplate `json:"template,omitempty"`
 
-	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunctionBinding
+	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunction
 	// should be ready without any of its container crashing, for it to be considered available. Defaults
-	// to 0 (the NetworkFunctionBinding will be considered available as soon as it is ready).
+	// to 0 (the NetworkFunction will be considered available as soon as it is ready).
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty"`
@@ -157,7 +157,7 @@ type NetworkFunctionDeploymentStatus struct {
 
 	// CollisionCount is the count of hash collisions for the NetworkFunctionDeployment. The number is incremented by the
 	// controller when it detects a hash collision between NetworkFunctionReplicaSets with different spec templates.
-	// The controller uses this field to generate a unique name for the NetworkFunctionBinding
+	// The controller uses this field to generate a unique name for the NetworkFunction
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
 
 	// Conditions represent the latest available observations of the

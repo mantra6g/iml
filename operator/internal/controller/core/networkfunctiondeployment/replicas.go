@@ -29,7 +29,7 @@ func (r *NetworkFunctionDeploymentReconciler) sortAndSplitReplicaSets(ctx contex
 	sort.Sort(deploymentutil.ReplicaSetsByCreationTimestamp(replicaSets))
 	// Get the new replicaSet (if it exists)
 	for _, rs := range replicaSets {
-		if rs != nil && rs.Labels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] == currentSpecHash {
+		if rs != nil && rs.Labels[corev1alpha1.NFSpecHashLabel] == currentSpecHash {
 			current = rs
 			break
 		}
@@ -70,7 +70,7 @@ func (r *NetworkFunctionDeploymentReconciler) listReplicaSets(ctx context.Contex
 	//availableReplicas := int32(0)        // Number of replicas that are currently ready across all ReplicaSets
 	//unavailableReplicas := int32(0)      // Number of replicas that are currently not ready across all ReplicaSets
 	//for _, replicaSet := range replicaSetList.Items {
-	//  specHash := replicaSet.Labels[cachev1alpha1.NF_BINDING_SPEC_HASH_LABEL]
+	//  specHash := replicaSet.Labels[cachev1alpha1.NFSpecHashLabel]
 	//  totalReplicas += replicaSet.Status.CurrentReplicas
 	//  availableReplicas += replicaSet.Status.ReadyReplicas
 	//  unavailableReplicas += replicaSet.Status.CurrentReplicas - replicaSet.Status.ReadyReplicas
@@ -124,9 +124,9 @@ func (r *NetworkFunctionDeploymentReconciler) ensureUpdatedReplicaSet(ctx contex
 			Template: *nfDeployment.Spec.Template.DeepCopy(),
 		},
 	}
-	newRS.ObjectMeta.Labels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] = updatedSpecHash
-	newRS.Spec.Selector.MatchLabels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] = updatedSpecHash
-	newRS.Spec.Template.Labels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] = updatedSpecHash
+	newRS.ObjectMeta.Labels[corev1alpha1.NFSpecHashLabel] = updatedSpecHash
+	newRS.Spec.Selector.MatchLabels[corev1alpha1.NFSpecHashLabel] = updatedSpecHash
+	newRS.Spec.Template.Labels[corev1alpha1.NFSpecHashLabel] = updatedSpecHash
 
 	// Calculate the number of replicas for the new ReplicaSet.
 	// This is based on the desired number of replicas in the NetworkFunctionDeployment spec,

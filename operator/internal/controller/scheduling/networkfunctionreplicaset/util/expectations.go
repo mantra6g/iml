@@ -1,6 +1,6 @@
 // Great deal of code in this file is adapted from pkg/controller/controller_utils.go and
 // pkg/controller/replicaset/replicaset_controller.go in Kubernetes, which are licensed under Apache 2.0 License,
-// with some modifications to fit the needs of nf_replicaset controller. The original license is as follows:
+// with some modifications to fit the needs of networkfunctionreplicaset controller. The original license is as follows:
 /*
 Copyright 2016 The Kubernetes Authors.
 
@@ -65,12 +65,12 @@ const (
 // KeyFunc to parse out the key from a ReplicaSet
 var KeyFunc = cache.DeletionHandlingMetaNamespaceKeyFunc
 
-// BindingKey returns a key unique to the given bindign within a cluster.
+// NFKey returns a key unique to the given nf within a cluster.
 // It's used so we consistently use the same key scheme in this module.
 // It does exactly what cache.MetaNamespaceKeyFunc would have done
 // except there's not possibility for error since we know the exact type.
-func BindingKey(binding *schedulingv1alpha1.NetworkFunctionBinding) string {
-	return fmt.Sprintf("%v/%v", binding.Namespace, binding.Name)
+func NFKey(nf *schedulingv1alpha1.NetworkFunction) string {
+	return fmt.Sprintf("%v/%v", nf.Namespace, nf.Name)
 }
 
 // ExpKeyFunc to parse out the key from a ControlleeExpectation

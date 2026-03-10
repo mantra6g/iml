@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nf_binding
+package networkfunction
 
 import (
 	"context"
@@ -34,7 +34,7 @@ const (
 	TargetArchitectureBMv2 = "bmv2"
 )
 
-var _ = Describe("NetworkFunctionBinding Controller", func() {
+var _ = Describe("NetworkFunction Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -48,7 +48,7 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 		BeforeEach(func() {})
 
 		AfterEach(func() {
-			resource := &schedulingv1alpha1.NetworkFunctionBinding{}
+			resource := &schedulingv1alpha1.NetworkFunction{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if errors.IsNotFound(err) {
 				// Resource already deleted
@@ -56,9 +56,9 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 			}
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance NetworkFunctionBinding")
+			By("Cleanup the specific resource instance NetworkFunction")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			controllerReconciler := &NetworkFunctionBindingReconciler{
+			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -68,13 +68,13 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 		})
 
 		It("should successfully reconcile the resource", func() {
-			By("Creating a new NetworkFunctionBinding resource")
-			resource := &schedulingv1alpha1.NetworkFunctionBinding{
+			By("Creating a new NetworkFunction resource")
+			resource := &schedulingv1alpha1.NetworkFunction{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
 					TargetSelector: map[string]string{},
 					P4File:         "https://example.com/p4file.p4",
 				},
@@ -82,7 +82,7 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &NetworkFunctionBindingReconciler{
+			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -94,13 +94,13 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 		})
 
 		It("should add finalizer on creation", func() {
-			By("Creating a new NetworkFunctionBinding resource")
-			resource := &schedulingv1alpha1.NetworkFunctionBinding{
+			By("Creating a new NetworkFunction resource")
+			resource := &schedulingv1alpha1.NetworkFunction{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
 					TargetSelector: map[string]string{},
 					P4File:         "https://example.com/p4file.p4",
 				},
@@ -108,7 +108,7 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource to add finalizer")
-			controllerReconciler := &NetworkFunctionBindingReconciler{
+			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -119,20 +119,20 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying finalizer is added")
-			updatedResource := &schedulingv1alpha1.NetworkFunctionBinding{}
+			updatedResource := &schedulingv1alpha1.NetworkFunction{}
 			err = k8sClient.Get(ctx, typeNamespacedName, updatedResource)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedResource.GetFinalizers()).To(ContainElement(schedulingv1alpha1.BINDING_FINALIZER_LABEL))
+			Expect(updatedResource.GetFinalizers()).To(ContainElement(schedulingv1alpha1.NetworkFunctionFinalizer))
 		})
 
 		It("should not return an error when reconciling a deleted resource", func() {
-			By("Creating a new NetworkFunctionBinding resource")
-			resource := &schedulingv1alpha1.NetworkFunctionBinding{
+			By("Creating a new NetworkFunction resource")
+			resource := &schedulingv1alpha1.NetworkFunction{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: "default",
 				},
-				Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
 					TargetSelector: map[string]string{},
 					P4File:         "https://example.com/p4file.p4",
 				},
@@ -140,7 +140,7 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource to ensure it exists")
-			controllerReconciler := &NetworkFunctionBindingReconciler{
+			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -151,7 +151,7 @@ var _ = Describe("NetworkFunctionBinding Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Deleting the created resource")
-			retrievedResource := &schedulingv1alpha1.NetworkFunctionBinding{}
+			retrievedResource := &schedulingv1alpha1.NetworkFunction{}
 			err = k8sClient.Get(ctx, typeNamespacedName, retrievedResource)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Delete(ctx, retrievedResource)).To(Succeed())

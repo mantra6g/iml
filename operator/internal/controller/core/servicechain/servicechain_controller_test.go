@@ -87,13 +87,13 @@ var _ = Describe("ServiceChain Controller", func() {
 							"app": "test-nf",
 						},
 					},
-					Template: schedulingv1alpha1.NetworkFunctionBindingTemplate{
+					Template: schedulingv1alpha1.NetworkFunctionTemplate{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app": "test-nf",
 							},
 						},
-						Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+						Spec: schedulingv1alpha1.NetworkFunctionSpec{
 							TargetSelector: map[string]string{},
 							P4File:         "https://example.com/p4file.p4",
 						},

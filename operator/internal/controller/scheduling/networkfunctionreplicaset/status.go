@@ -1,4 +1,4 @@
-package nf_replicaset
+package networkfunctionreplicaset
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	rsutil "loom/internal/controller/scheduling/nf_replicaset/util"
+	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 )
 
 const (
@@ -21,20 +21,20 @@ const (
 )
 
 func calculateStatus(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	activeBindings []*schedulingv1alpha1.NetworkFunctionBinding, manageReplicasErr error, now time.Time,
+	activeNFs []*schedulingv1alpha1.NetworkFunction, manageReplicasErr error, now time.Time,
 ) schedulingv1alpha1.NetworkFunctionReplicaSetStatus {
 	newStatus := rs.Status
-	// Count the number of bindings that have labels matching the labels of the pod
-	// template of the replica set, the matching bindings may have more
+	// Count the number of nfs that have labels matching the labels of the pod
+	// template of the replica set, the matching nfs may have more
 	// labels than are in the template. Because the label of podTemplateSpec is
 	// a superset of the selector of the replica set, so the possible
-	// matching bindings must be part of the activeBindings.
-	fullyLabeledReplicasCount, readyReplicasCount, availableReplicasCount := rsutil.CountReplicas(rs, activeBindings, now)
+	// matching nfs must be part of the activeNFs.
+	fullyLabeledReplicasCount, readyReplicasCount, availableReplicasCount := rsutil.CountReplicas(rs, activeNFs, now)
 
 	failureCond := rsutil.GetCondition(rs.Status, schedulingv1alpha1.ReplicaSetReplicaFailure)
 	if manageReplicasErr != nil && failureCond == nil {
 		var reason string
-		if diff := len(activeBindings) - int(*(rs.Spec.Replicas)); diff < 0 {
+		if diff := len(activeNFs) - int(*(rs.Spec.Replicas)); diff < 0 {
 			reason = "FailedCreate"
 		} else if diff > 0 {
 			reason = "FailedDelete"
@@ -46,7 +46,7 @@ func calculateStatus(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
 		rsutil.RemoveCondition(&newStatus, schedulingv1alpha1.ReplicaSetReplicaFailure)
 	}
 
-	newStatus.Replicas = int32(len(activeBindings))
+	newStatus.Replicas = int32(len(activeNFs))
 	newStatus.FullyLabeledReplicas = int32(fullyLabeledReplicasCount)
 	newStatus.ReadyReplicas = int32(readyReplicasCount)
 	newStatus.AvailableReplicas = int32(availableReplicasCount)

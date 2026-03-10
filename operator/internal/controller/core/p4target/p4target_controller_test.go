@@ -247,7 +247,7 @@ var _ = Describe("P4Target Controller", func() {
 			Expect(readyCondition.Status).To(Equal(corev1.ConditionFalse))
 		})
 
-		It("should be ready when the checker says the infra is ready and no bindings exist for that target", func() {
+		It("should be ready when the checker says the infra is ready and no nfs exist for that target", func() {
 			By("Creating the namespace for the infrastructure resources")
 			namespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -276,7 +276,7 @@ var _ = Describe("P4Target Controller", func() {
 			Expect(readyCondition.Status).To(Equal(corev1.ConditionTrue))
 		})
 
-		It("should be not ready when a binding already exists for that target", func() {
+		It("should be not ready when a nf already exists for that target", func() {
 			By("Creating the namespace for the infrastructure resources")
 			namespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -285,26 +285,26 @@ var _ = Describe("P4Target Controller", func() {
 			}
 			_ = k8sClient.Create(ctx, namespace)
 
-			By("Creating a binding for that target")
-			binding := &schedulingv1alpha1.NetworkFunctionBinding{
+			By("Creating a nf for that target")
+			nf := &schedulingv1alpha1.NetworkFunction{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "binding-for-" + resourceName,
+					Name:      "nf-for-" + resourceName,
 					Namespace: "default",
 					Labels: map[string]string{
 						schedulingv1alpha1.TARGET_ASSIGNMENT_LABEL: resourceName,
 					},
 				},
-				Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
 					TargetSelector: map[string]string{
 						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureBMv2,
 					},
 					P4File: "https://example.com/p4example.p4",
 				},
 			}
-			Expect(k8sClient.Create(ctx, binding)).To(Succeed())
+			Expect(k8sClient.Create(ctx, nf)).To(Succeed())
 			defer func() {
-				By("Cleaning up the created binding")
-				Expect(k8sClient.Delete(ctx, binding)).To(Succeed())
+				By("Cleaning up the created nf")
+				Expect(k8sClient.Delete(ctx, nf)).To(Succeed())
 			}()
 
 			By("Reconciling the created resource")

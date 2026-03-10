@@ -1,9 +1,9 @@
 apiVersion: scheduling.loom.io/v1alpha1
-kind: NetworkFunctionBinding
+kind: NetworkFunction
 metadata:
   labels:
     app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
-  name: networkfunctionbinding-sample
+  name: networkfunction-sample
 spec:
   # TODO(user): Add fields here

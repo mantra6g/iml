@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nf_replicaset
+package networkfunctionreplicaset
 
 import (
 	"context"
@@ -60,11 +60,11 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 						Selector: &metav1.LabelSelector{
 							MatchLabels: testLabels,
 						},
-						Template: schedulingv1alpha1.NetworkFunctionBindingTemplate{
+						Template: schedulingv1alpha1.NetworkFunctionTemplate{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: testLabels,
 							},
-							Spec: schedulingv1alpha1.NetworkFunctionBindingSpec{
+							Spec: schedulingv1alpha1.NetworkFunctionSpec{
 								TargetSelector: map[string]string{},
 								P4File:         "https://example.com/p4file.p4",
 							},

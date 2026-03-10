@@ -26,7 +26,7 @@ type ReplicaSetConditionType string
 
 // These are valid conditions of a replica set.
 const (
-	// ReplicaSetReplicaFailure is added in a replica set when one of its bindings fails to be created
+	// ReplicaSetReplicaFailure is added in a replica set when one of its nfs fails to be created
 	// due to insufficient quota, limit ranges, target selectors, etc. or deleted
 	// due to the target driver being down or finalizers are failing.
 	ReplicaSetReplicaFailure ReplicaSetConditionType = "ReplicaFailure"
@@ -65,17 +65,17 @@ type NetworkFunctionReplicaSetSpec struct {
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Selector is a label query over network function instances that should
-	// match the replica count. It must match the labels of the NetworkFunctionBindingTemplate.
+	// match the replica count. It must match the labels of the NetworkFunctionTemplate.
 	// +required
 	Selector *metav1.LabelSelector `json:"selector"`
 
 	// Template describes the NetworkFunction that will be created
 	// +required
-	Template NetworkFunctionBindingTemplate `json:"template,omitempty"`
+	Template NetworkFunctionTemplate `json:"template,omitempty"`
 
-	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunctionBinding
+	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunction
 	// should be ready without any of its container crashing, for it to be considered available. Defaults
-	// to 0 (the NetworkFunctionBinding will be considered available as soon as it is ready).
+	// to 0 (the NetworkFunction will be considered available as soon as it is ready).
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty"`
@@ -92,10 +92,10 @@ type NetworkFunctionReplicaSetStatus struct {
 	// FullyLabeledReplicas is the number of replicas that are fully labeled and ready.
 	FullyLabeledReplicas int32 `json:"fullyLabeledReplicas,omitempty"`
 
-	// ReadyReplicas is the number of ready NetworkFunctionBinding replicas
+	// ReadyReplicas is the number of ready NetworkFunction replicas
 	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
 
-	// AvailableReplicas is the number of available NetworkFunctionBinding replicas
+	// AvailableReplicas is the number of available NetworkFunction replicas
 	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
 
 	// ObservedGeneration is the most recent generation observed for this NetworkFunctionReplicaSet.
