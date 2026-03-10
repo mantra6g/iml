@@ -121,6 +121,6 @@ if __name__ == '__main__':
   print("P4Runtime shell initialized.")
 
   while True:
-    with urllib.request.urlopen(f"http://iml-p4-controller.desire6g-system.svc.cluster.local/api/v1/p4controller/assignments/{nf_id}") as url:
+    with urllib.request.urlopen(f"http://iml-p4-controller.loom-system.svc.cluster.local/api/v1/p4controller/assignments/{nf_id}") as url:
       process_assignments(url, existing_ipv6s)
     time.sleep(args.sleep)

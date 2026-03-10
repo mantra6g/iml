@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: iml-oakestra-service-account
-  namespace: desire6g-system
+  namespace: loom-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -11,7 +11,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: iml-oakestra-service-account
-    namespace: desire6g-system
+    namespace: loom-system
 roleRef:
   kind: ClusterRole
   name: iml-application-editor-role
@@ -24,7 +24,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: iml-oakestra-service-account
-    namespace: desire6g-system
+    namespace: loom-system
 roleRef:
   kind: ClusterRole
   name: iml-networkfunction-editor-role
@@ -37,7 +37,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: iml-oakestra-service-account
-    namespace: desire6g-system
+    namespace: loom-system
 roleRef:
   kind: ClusterRole
   name: iml-servicechain-editor-role
@@ -49,7 +49,7 @@ metadata:
   labels:
     control-plane: iml-oakestra
   name: iml-oakestra-agent-service
-  namespace: desire6g-system
+  namespace: loom-system
 spec:
   type: NodePort
   selector:
@@ -69,7 +69,7 @@ metadata:
     app.kubernetes.io/name: iml-oakestra-agent
     control-plane: iml-oakestra
   name: iml-oakestra-agent
-  namespace: desire6g-system
+  namespace: loom-system
 spec:
   replicas: 1
   selector:

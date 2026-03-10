@@ -7,8 +7,8 @@ import (
 	"net/http"
 )
 
-const P4_CONTROLLER_ADDR = "iml-p4-controller.desire6g-system.svc.cluster.local"
-const IML_ADDR  = "iml-updates-service.desire6g-system.svc.cluster.local"
+const P4_CONTROLLER_ADDR = "iml-p4-controller.loom-system.svc.cluster.local"
+const IML_ADDR  = "iml-updates-service.loom-system.svc.cluster.local"
 const API_PORT  = "1810"
 const MQTT_PORT = "1816" 
 const API_URL   = "http://" + IML_ADDR + ":" + API_PORT
