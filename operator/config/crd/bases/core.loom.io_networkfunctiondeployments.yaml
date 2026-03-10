@@ -4,20 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctions.core.loom.io
+  name: networkfunctiondeployments.core.loom.io
 spec:
   group: core.loom.io
   names:
-    kind: NetworkFunction
-    listKind: NetworkFunctionList
-    plural: networkfunctions
-    singular: networkfunction
+    kind: NetworkFunctionDeployment
+    listKind: NetworkFunctionDeploymentList
+    plural: networkfunctiondeployments
+    singular: networkfunctiondeployment
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkFunction is the Schema for the networkfunctions API
+        description: NetworkFunctionDeployment is the Schema for the networkfunctiondeployments
+          API
         properties:
           apiVersion:
             description: |-
@@ -37,7 +38,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of NetworkFunction
+            description: spec defines the desired state of NetworkFunctionDeployment
             properties:
               minReadySeconds:
                 description: |-
@@ -145,7 +146,8 @@ spec:
                 - type
                 type: object
               template:
-                description: Template describes the NetworkFunction that will be created
+                description: Template describes the NetworkFunctionDeployment that
+                  will be created
                 properties:
                   metadata:
                     type: object
@@ -1367,7 +1369,7 @@ spec:
             - template
             type: object
           status:
-            description: status defines the observed state of NetworkFunction
+            description: status defines the observed state of NetworkFunctionDeployment
             properties:
               availableReplicas:
                 description: |-
@@ -1378,7 +1380,7 @@ spec:
                 type: integer
               collisionCount:
                 description: |-
-                  CollisionCount is the count of hash collisions for the NetworkFunction. The number is incremented by the
+                  CollisionCount is the count of hash collisions for the NetworkFunctionDeployment. The number is incremented by the
                   controller when it detects a hash collision between NetworkFunctionReplicaSets with different spec templates.
                   The controller uses this field to generate a unique name for the NetworkFunctionBinding
                 format: int32
@@ -1386,7 +1388,7 @@ spec:
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the
-                  NetworkFunction's current state.
+                  NetworkFunctionDeployment's current state.
                 items:
                   properties:
                     lastTransitionTime:
@@ -1412,8 +1414,8 @@ spec:
                 type: array
               observedGeneration:
                 description: |-
-                  ObservedGeneration is the most recent generation observed for this NetworkFunction. It corresponds to the
-                  generation of the NetworkFunctionSpec that was last processed by the controller.
+                  ObservedGeneration is the most recent generation observed for this NetworkFunctionDeployment. It corresponds to the
+                  generation of the NetworkFunctionDeploymentSpec that was last processed by the controller.
                 format: int64
                 type: integer
               readyReplicas:

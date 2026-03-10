@@ -73,14 +73,14 @@ var _ = Describe("ServiceChain Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, app2)).To(Succeed())
 
-			By("creating the referenced NetworkFunction resource")
+			By("creating the referenced NetworkFunctionDeployment resource")
 			replicas := int32(1)
-			nf1 := &corev1alpha1.NetworkFunction{
+			nf1 := &corev1alpha1.NetworkFunctionDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nf-1",
 					Namespace: "default",
 				},
-				Spec: corev1alpha1.NetworkFunctionSpec{
+				Spec: corev1alpha1.NetworkFunctionDeploymentSpec{
 					Replicas: &replicas,
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{

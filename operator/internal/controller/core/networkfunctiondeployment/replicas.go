@@ -1,4 +1,4 @@
-package networkfunction
+package networkfunctiondeployment
 
 import (
 	"context"
@@ -15,18 +15,18 @@ import (
 
 	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	nfutil "loom/internal/controller/core/networkfunction/util"
+	deploymentutil "loom/internal/controller/core/networkfunctiondeployment/util"
 	"loom/pkg/util/ptr"
 )
 
-func (r *NetworkFunctionReconciler) sortAndSplitReplicaSets(ctx context.Context,
-	nf *corev1alpha1.NetworkFunction, replicaSets []*schedulingv1alpha1.NetworkFunctionReplicaSet) (
+func (r *NetworkFunctionDeploymentReconciler) sortAndSplitReplicaSets(ctx context.Context,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment, replicaSets []*schedulingv1alpha1.NetworkFunctionReplicaSet) (
 	current *schedulingv1alpha1.NetworkFunctionReplicaSet, old []*schedulingv1alpha1.NetworkFunctionReplicaSet) {
 	old = make([]*schedulingv1alpha1.NetworkFunctionReplicaSet, 0)
-	// Calculate the hash of the current nf spec
-	currentSpecHash := nfutil.ComputeSpecHash(nf)
+	// Calculate the hash of the current nfDeployment spec
+	currentSpecHash := deploymentutil.ComputeSpecHash(nfDeployment)
 	// Sort the replica sets by creation timestamp,
-	sort.Sort(nfutil.ReplicaSetsByCreationTimestamp(replicaSets))
+	sort.Sort(deploymentutil.ReplicaSetsByCreationTimestamp(replicaSets))
 	// Get the new replicaSet (if it exists)
 	for _, rs := range replicaSets {
 		if rs != nil && rs.Labels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] == currentSpecHash {
@@ -44,29 +44,29 @@ func (r *NetworkFunctionReconciler) sortAndSplitReplicaSets(ctx context.Context,
 	return current, old
 }
 
-func (r *NetworkFunctionReconciler) listReplicaSets(ctx context.Context, nf *corev1alpha1.NetworkFunction,
-) ([]*schedulingv1alpha1.NetworkFunctionReplicaSet, error) {
+func (r *NetworkFunctionDeploymentReconciler) listReplicaSets(ctx context.Context,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment) ([]*schedulingv1alpha1.NetworkFunctionReplicaSet, error) {
 	replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
-	nfReplicaSetSelector, err := metav1.LabelSelectorAsSelector(nf.Spec.Selector)
+	nfReplicaSetSelector, err := metav1.LabelSelectorAsSelector(nfDeployment.Spec.Selector)
 	if err != nil {
 		return nil, fmt.Errorf("network function %s/%s has invalid label selector: %v",
-			nf.Namespace, nf.Name, err)
+			nfDeployment.Namespace, nfDeployment.Name, err)
 	}
 	err = r.List(ctx, replicaSetList,
-		client.InNamespace(nf.Namespace),
+		client.InNamespace(nfDeployment.Namespace),
 		client.MatchingLabelsSelector{Selector: nfReplicaSetSelector})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list NetworkFunctionReplicaSets for NetworkFunction %s/%s: %v",
-			nf.Namespace, nf.Name, err)
+		return nil, fmt.Errorf("failed to list NetworkFunctionReplicaSets for NetworkFunctionDeployment %s/%s: %v",
+			nfDeployment.Namespace, nfDeployment.Name, err)
 	}
 	replicaList := make([]*schedulingv1alpha1.NetworkFunctionReplicaSet, 0, len(replicaSetList.Items))
 	for i := range replicaSetList.Items {
 		replicaList = append(replicaList, &replicaSetList.Items[i])
 	}
 	return replicaList, nil
-	//desiredReplicas := *nf.Spec.Replicas // Desired number of replicas from the NetworkFunction spec
-	//updatedReplicas := int32(0)          // Number of replicas that are up to date with the new NetworkFunction spec
-	//totalReplicas := int32(0)            // Total number of replicas across all ReplicaSets associated with this NF
+	//desiredReplicas := *nfDeployment.Spec.Replicas // Desired number of replicas from the NetworkFunctionDeployment spec
+	//updatedReplicas := int32(0)          // Number of replicas that are up to date with the new NetworkFunctionDeployment spec
+	//totalReplicas := int32(0)            // Total number of replicas across all ReplicaSets associated with this NF Deployment
 	//availableReplicas := int32(0)        // Number of replicas that are currently ready across all ReplicaSets
 	//unavailableReplicas := int32(0)      // Number of replicas that are currently not ready across all ReplicaSets
 	//for _, replicaSet := range replicaSetList.Items {
@@ -74,7 +74,7 @@ func (r *NetworkFunctionReconciler) listReplicaSets(ctx context.Context, nf *cor
 	//  totalReplicas += replicaSet.Status.CurrentReplicas
 	//  availableReplicas += replicaSet.Status.ReadyReplicas
 	//  unavailableReplicas += replicaSet.Status.CurrentReplicas - replicaSet.Status.ReadyReplicas
-	//  if specHash == updatedSpecHash { // Is the replica set up to date with the current NetworkFunction spec?
+	//  if specHash == updatedSpecHash { // Is the replica set up to date with the current NetworkFunctionDeployment spec?
 	//    updatedReplicas += replicaSet.Status.ReadyReplicas
 	//  }
 	//}
@@ -82,16 +82,16 @@ func (r *NetworkFunctionReconciler) listReplicaSets(ctx context.Context, nf *cor
 	//  availableReplicas, unavailableReplicas}, nil
 }
 
-func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context, nf *corev1alpha1.NetworkFunction,
-	existingNewRS *schedulingv1alpha1.NetworkFunctionReplicaSet, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
-) (updated bool, err error) {
+func (r *NetworkFunctionDeploymentReconciler) ensureUpdatedReplicaSet(ctx context.Context,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment, existingNewRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
+	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet) (updated bool, err error) {
 	logger := logf.FromContext(ctx)
 	// Get the max revision number
-	maxOldRevision := nfutil.MaxRevision(allRSs)
+	maxOldRevision := deploymentutil.MaxRevision(allRSs)
 	newRevision := strconv.FormatInt(maxOldRevision, 10)
 
 	if existingNewRS != nil {
-		annotationsUpdated := nfutil.SetNewReplicaSetAnnotations(ctx, nf, existingNewRS, newRevision, true)
+		annotationsUpdated := deploymentutil.SetNewReplicaSetAnnotations(ctx, nfDeployment, existingNewRS, newRevision, true)
 		if annotationsUpdated {
 			if err = r.Update(ctx, existingNewRS); err != nil {
 				return false, fmt.Errorf("failed to update NetworkFunctionReplicaSet %s/%s: %v",
@@ -101,9 +101,9 @@ func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context,
 		}
 
 		// Should use the revision in existingNewRS's annotation, since it set by before
-		needsUpdate := nfutil.SetNFRevision(nf, existingNewRS.Annotations[nfutil.RevisionAnnotation])
+		needsUpdate := deploymentutil.SetNFDeploymentRevision(nfDeployment, existingNewRS.Annotations[deploymentutil.RevisionAnnotation])
 		if needsUpdate {
-			if err = r.Status().Update(ctx, nf); err != nil {
+			if err = r.Status().Update(ctx, nfDeployment); err != nil {
 				return false, err
 			}
 		}
@@ -111,17 +111,17 @@ func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context,
 	}
 
 	// new ReplicaSet does not exist, create one.
-	updatedSpecHash := nfutil.ComputeSpecHash(nf)
+	updatedSpecHash := deploymentutil.ComputeSpecHash(nfDeployment)
 	newRS := &schedulingv1alpha1.NetworkFunctionReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nfutil.GenerateReplicaSetName(nf.Name, updatedSpecHash),
-			Namespace: nf.Namespace,
-			Labels:    nf.Labels,
+			Name:      deploymentutil.GenerateReplicaSetName(nfDeployment.Name, updatedSpecHash),
+			Namespace: nfDeployment.Namespace,
+			Labels:    nfDeployment.Labels,
 		},
 		Spec: schedulingv1alpha1.NetworkFunctionReplicaSetSpec{
 			Replicas: ptr.To[int32](0),
-			Selector: nf.Spec.Selector.DeepCopy(),
-			Template: *nf.Spec.Template.DeepCopy(),
+			Selector: nfDeployment.Spec.Selector.DeepCopy(),
+			Template: *nfDeployment.Spec.Template.DeepCopy(),
 		},
 	}
 	newRS.ObjectMeta.Labels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] = updatedSpecHash
@@ -129,24 +129,24 @@ func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context,
 	newRS.Spec.Template.Labels[corev1alpha1.NF_BINDING_SPEC_HASH_LABEL] = updatedSpecHash
 
 	// Calculate the number of replicas for the new ReplicaSet.
-	// This is based on the desired number of replicas in the NetworkFunction spec,
-	newReplicasCount, err := nfutil.NewRSNewReplicas(nf, allRSs, newRS)
+	// This is based on the desired number of replicas in the NetworkFunctionDeployment spec,
+	newReplicasCount, err := deploymentutil.NewRSNewReplicas(nfDeployment, allRSs, newRS)
 	if err != nil {
-		return false, fmt.Errorf("failed to calculate new replicas count for NetworkFunction %s/%s: %v",
-			nf.Namespace, nf.Name, err)
+		return false, fmt.Errorf("failed to calculate new replicas count for NetworkFunctionDeployment %s/%s: %v",
+			nfDeployment.Namespace, nfDeployment.Name, err)
 	}
 	newRS.Spec.Replicas = &newReplicasCount
 
 	// Set the ownerRef for the ReplicaSet, ensuring that the ReplicaSet
-	// will be deleted when the NetworkFunction CR is deleted.
-	err = controllerutil.SetControllerReference(nf, newRS, r.Scheme)
+	// will be deleted when the NetworkFunctionDeployment CR is deleted.
+	err = controllerutil.SetControllerReference(nfDeployment, newRS, r.Scheme)
 	if err != nil {
 		return false, fmt.Errorf("failed to set owner reference for NetworkFunctionReplicaSet %s/%s: %v",
 			newRS.Namespace, newRS.Name, err)
 	}
 
 	// Set annotations for the replicaset
-	nfutil.SetNewReplicaSetAnnotations(ctx, nf, newRS, newRevision, false)
+	deploymentutil.SetNewReplicaSetAnnotations(ctx, nfDeployment, newRS, newRevision, false)
 
 	// Create the new ReplicaSet. If it already exists, then we need to check for possible
 	// hash collisions. If there is any other error, we need to report it in the status of
@@ -172,25 +172,25 @@ func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context,
 		// the status of the Deployment and requeue to try the creation in the next sync.
 		controllerRef := metav1.GetControllerOf(preExistingRS)
 		if controllerRef != nil &&
-			controllerRef.UID == nf.UID &&
-			nfutil.EqualIgnoreHash(&nf.Spec.Template, &preExistingRS.Spec.Template) {
+			controllerRef.UID == nfDeployment.UID &&
+			deploymentutil.EqualIgnoreHash(&nfDeployment.Spec.Template, &preExistingRS.Spec.Template) {
 			err = nil
 			break
 		}
 
 		// Matching ReplicaSet is not equal - increment the collisionCount in the DeploymentStatus
 		// and requeue the Deployment.
-		if nf.Status.CollisionCount == nil {
-			nf.Status.CollisionCount = new(int32)
+		if nfDeployment.Status.CollisionCount == nil {
+			nfDeployment.Status.CollisionCount = new(int32)
 		}
-		preCollisionCount := *nf.Status.CollisionCount
-		*nf.Status.CollisionCount++
+		preCollisionCount := *nfDeployment.Status.CollisionCount
+		*nfDeployment.Status.CollisionCount++
 		// Update the collisionCount for the Deployment and let it requeue by returning the original
 		// error.
-		dErr := r.Status().Update(ctx, nf)
+		dErr := r.Status().Update(ctx, nfDeployment)
 		if dErr == nil {
 			logger.V(2).Info("Found a hash collision for network function - bumping collisionCount to resolve it",
-				"nf", nf, "oldCollisionCount", preCollisionCount, "newCollisionCount", *nf.Status.CollisionCount)
+				"nfDeployment", nfDeployment, "oldCollisionCount", preCollisionCount, "newCollisionCount", *nfDeployment.Status.CollisionCount)
 		}
 		return false, err
 	case errors.HasStatusCause(err, v1.NamespaceTerminatingCause):
@@ -200,12 +200,12 @@ func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context,
 		return false, err
 	}
 	//if !alreadyExists && newReplicasCount > 0 {
-	//	r.eventRecorder.Eventf(nf, v1.EventTypeNormal, "ScalingReplicaSet", "Scaled up replica set %s from 0 to %d", createdRS.Name, newReplicasCount)
+	//	r.eventRecorder.Eventf(nfDeployment, v1.EventTypeNormal, "ScalingReplicaSet", "Scaled up replica set %s from 0 to %d", createdRS.Name, newReplicasCount)
 	//}
 
-	needsUpdate := nfutil.SetNFRevision(nf, newRevision)
+	needsUpdate := deploymentutil.SetNFDeploymentRevision(nfDeployment, newRevision)
 	if needsUpdate {
-		err = r.Status().Update(ctx, nf)
+		err = r.Status().Update(ctx, nfDeployment)
 	}
 	return true, err
 }
@@ -214,14 +214,14 @@ func (r *NetworkFunctionReconciler) ensureUpdatedReplicaSet(ctx context.Context,
 // a new ReplicaSet has been created. It should only be called once the new ReplicaSet is up and running,
 // and the old ReplicaSets have been scaled down to zero. This function will delete all old ReplicaSets
 // and return any errors encountered during the deletion process.
-func (r *NetworkFunctionReconciler) cleanupOldReplicaSets(ctx context.Context,
-	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nf *corev1alpha1.NetworkFunction) error {
+func (r *NetworkFunctionDeploymentReconciler) cleanupOldReplicaSets(ctx context.Context,
+	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment) error {
 	logger := logf.FromContext(ctx)
-	cleanableRSes := nfutil.FilterAliveReplicaSets(oldRSs)
+	cleanableRSes := deploymentutil.FilterAliveReplicaSets(oldRSs)
 
-	sort.Sort(nfutil.ReplicaSetsByRevision(cleanableRSes))
+	sort.Sort(deploymentutil.ReplicaSetsByRevision(cleanableRSes))
 	logger.V(4).Info("Looking to cleanup old replica sets for deployment",
-		"NetworkFunction", nf)
+		"NetworkFunctionDeployment", nfDeployment)
 
 	for i := 0; i < len(cleanableRSes); i++ {
 		rs := cleanableRSes[i]
@@ -229,8 +229,8 @@ func (r *NetworkFunctionReconciler) cleanupOldReplicaSets(ctx context.Context,
 		if rs.Status.Replicas != 0 || *(rs.Spec.Replicas) != 0 || rs.Generation > rs.Status.ObservedGeneration || rs.DeletionTimestamp != nil {
 			continue
 		}
-		logger.V(4).Info("Trying to cleanup nf replica set for nf",
-			"NetworkFunctionReplicaSet", rs, "NetworkFunction", nf)
+		logger.V(4).Info("Trying to cleanup nf replica set for nf deployment",
+			"NetworkFunctionReplicaSet", rs, "NetworkFunctionDeployment", nfDeployment)
 		if err := r.Delete(ctx, rs); err != nil && !errors.IsNotFound(err) {
 			// Return error instead of aggregating and continuing DELETEs on the theory
 			// that we may be overloading the api server.
@@ -241,9 +241,9 @@ func (r *NetworkFunctionReconciler) cleanupOldReplicaSets(ctx context.Context,
 	return nil
 }
 
-func (r *NetworkFunctionReconciler) scaleReplicaSet(ctx context.Context,
+func (r *NetworkFunctionDeploymentReconciler) scaleReplicaSet(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, newScale int32,
-	nf *corev1alpha1.NetworkFunction, forceUpdate bool,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment, forceUpdate bool,
 ) (scaled bool, updatedRS *schedulingv1alpha1.NetworkFunctionReplicaSet, err error) {
 	// Don't scale, unless it's a forced update or the replicas actually differ
 	if !forceUpdate && *(rs.Spec.Replicas) == newScale {
@@ -251,14 +251,14 @@ func (r *NetworkFunctionReconciler) scaleReplicaSet(ctx context.Context,
 	}
 
 	sizeNeedsUpdate := *(rs.Spec.Replicas) != newScale
-	annotationsNeedUpdate := nfutil.ReplicasAnnotationsNeedUpdate(rs, *(nf.Spec.Replicas), *(nf.Spec.Replicas)+nfutil.MaxSurge(nf))
+	annotationsNeedUpdate := deploymentutil.ReplicasAnnotationsNeedUpdate(rs, *(nfDeployment.Spec.Replicas), *(nfDeployment.Spec.Replicas)+deploymentutil.MaxSurge(nfDeployment))
 
 	//scaled := false
 	if sizeNeedsUpdate || annotationsNeedUpdate {
 		//oldScale := *(rs.Spec.Replicas)
 		rsCopy := rs.DeepCopy()
 		*(rsCopy.Spec.Replicas) = newScale
-		nfutil.SetReplicasAnnotations(rsCopy, *(nf.Spec.Replicas), *(nf.Spec.Replicas)+nfutil.MaxSurge(nf))
+		deploymentutil.SetReplicasAnnotations(rsCopy, *(nfDeployment.Spec.Replicas), *(nfDeployment.Spec.Replicas)+deploymentutil.MaxSurge(nfDeployment))
 		err = r.Update(ctx, rsCopy)
 		//if err == nil && sizeNeedsUpdate {
 		//	var scalingOperation string
@@ -268,7 +268,7 @@ func (r *NetworkFunctionReconciler) scaleReplicaSet(ctx context.Context,
 		//		scalingOperation = "down"
 		//	}
 		//	scaled = true
-		//	r.eventRecorder.Eventf(nf, v1.EventTypeNormal, "ScalingReplicaSet", "Scaled %s replica set %s from %d to %d", scalingOperation, rs.Name, oldScale, newScale)
+		//	r.eventRecorder.Eventf(nfDeployment, v1.EventTypeNormal, "ScalingReplicaSet", "Scaled %s replica set %s from %d to %d", scalingOperation, rs.Name, oldScale, newScale)
 		//}
 	}
 	return scaled, rs, err

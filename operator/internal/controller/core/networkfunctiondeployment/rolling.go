@@ -1,4 +1,4 @@
-package networkfunction
+package networkfunctiondeployment
 
 import (
 	"context"
@@ -9,33 +9,33 @@ import (
 
 	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	nfutil "loom/internal/controller/core/networkfunction/util"
+	deploymentutil "loom/internal/controller/core/networkfunctiondeployment/util"
 )
 
-func (r *NetworkFunctionReconciler) applyRollingUpdate(ctx context.Context,
-	nf *corev1alpha1.NetworkFunction, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
+func (r *NetworkFunctionDeploymentReconciler) applyRollingUpdate(ctx context.Context,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) error {
-	scaledUp, err := r.reconcileNewReplicaSet(ctx, allRSs, currentRS, nf)
+	scaledUp, err := r.reconcileNewReplicaSet(ctx, allRSs, currentRS, nfDeployment)
 	if err != nil || scaledUp {
 		return err
 	}
-	scaledDown, err := r.reconcileOldReplicaSets(ctx, allRSs, oldRSs, currentRS, nf)
+	scaledDown, err := r.reconcileOldReplicaSets(ctx, allRSs, oldRSs, currentRS, nfDeployment)
 	if err != nil || scaledDown {
 		return err
 	}
 
-	if nfutil.NFDeploymentComplete(nf) {
-		return r.cleanupOldReplicaSets(ctx, oldRSs, nf)
+	if deploymentutil.NFDeploymentComplete(nfDeployment) {
+		return r.cleanupOldReplicaSets(ctx, oldRSs, nfDeployment)
 	}
 	return nil
 }
 
-func (r *NetworkFunctionReconciler) cleanupUnhealthyReplicas(ctx context.Context,
-	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nf *corev1alpha1.NetworkFunction, maxCleanupCount int32,
+func (r *NetworkFunctionDeploymentReconciler) cleanupUnhealthyReplicas(ctx context.Context,
+	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment, maxCleanupCount int32,
 ) (remainingOldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, cleanupCount int32, err error) {
 	logger := logf.FromContext(ctx)
-	sort.Sort(nfutil.ReplicaSetsByCreationTimestamp(oldRSs))
+	sort.Sort(deploymentutil.ReplicaSetsByCreationTimestamp(oldRSs))
 	// Safely scale down all old replica sets with unhealthy replicas. Replica set will sort the pods in the order
 	// such that not-ready < ready, unscheduled < scheduled, and pending < running. This ensures that unhealthy
 	// replicas will be deleted first and won't increase unavailability.
@@ -62,7 +62,7 @@ func (r *NetworkFunctionReconciler) cleanupUnhealthyReplicas(ctx context.Context
 				fmt.Errorf("when cleaning up unhealthy replicas, got invalid request to scale down %s/%s %d -> %d",
 					targetRS.Namespace, targetRS.Name, *(targetRS.Spec.Replicas), newReplicasCount)
 		}
-		_, updatedOldRS, err := r.scaleReplicaSet(ctx, targetRS, newReplicasCount, nf, false)
+		_, updatedOldRS, err := r.scaleReplicaSet(ctx, targetRS, newReplicasCount, nfDeployment, false)
 		if err != nil {
 			return nil, totalScaledDown, err
 		}
@@ -72,41 +72,41 @@ func (r *NetworkFunctionReconciler) cleanupUnhealthyReplicas(ctx context.Context
 	return oldRSs, totalScaledDown, nil
 }
 
-func (r *NetworkFunctionReconciler) reconcileNewReplicaSet(ctx context.Context,
+func (r *NetworkFunctionDeploymentReconciler) reconcileNewReplicaSet(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	nf *corev1alpha1.NetworkFunction,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment,
 ) (bool, error) {
-	if *(currentRS.Spec.Replicas) == *(nf.Spec.Replicas) {
+	if *(currentRS.Spec.Replicas) == *(nfDeployment.Spec.Replicas) {
 		// Scaling not required.
 		return false, nil
 	}
-	if *(currentRS.Spec.Replicas) > *(nf.Spec.Replicas) {
+	if *(currentRS.Spec.Replicas) > *(nfDeployment.Spec.Replicas) {
 		// Scale down.
-		scaled, _, err := r.scaleReplicaSet(ctx, currentRS, *(nf.Spec.Replicas), nf, false)
+		scaled, _, err := r.scaleReplicaSet(ctx, currentRS, *(nfDeployment.Spec.Replicas), nfDeployment, false)
 		return scaled, err
 	}
-	newReplicasCount, err := nfutil.NewRSNewReplicas(nf, allRSs, currentRS)
+	newReplicasCount, err := deploymentutil.NewRSNewReplicas(nfDeployment, allRSs, currentRS)
 	if err != nil {
 		return false, err
 	}
-	scaled, _, err := r.scaleReplicaSet(ctx, currentRS, newReplicasCount, nf, false)
+	scaled, _, err := r.scaleReplicaSet(ctx, currentRS, newReplicasCount, nfDeployment, false)
 	return scaled, err
 }
 
-func (r *NetworkFunctionReconciler) reconcileOldReplicaSets(ctx context.Context,
+func (r *NetworkFunctionDeploymentReconciler) reconcileOldReplicaSets(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
-	currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nf *corev1alpha1.NetworkFunction,
+	currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
 ) (bool, error) {
 	logger := logf.FromContext(ctx)
-	oldPodsCount := nfutil.GetReplicaCountForReplicaSets(oldRSs)
+	oldPodsCount := deploymentutil.GetReplicaCountForReplicaSets(oldRSs)
 	if oldPodsCount == 0 {
 		// Can't scale down further
 		return false, nil
 	}
-	allPodsCount := nfutil.GetReplicaCountForReplicaSets(allRSs)
+	allPodsCount := deploymentutil.GetReplicaCountForReplicaSets(allRSs)
 	logger.V(4).Info("New replica set",
 		"replicaSet", currentRS, "availableReplicas", currentRS.Status.AvailableReplicas)
-	maxUnavailable := nfutil.MaxUnavailable(nf)
+	maxUnavailable := deploymentutil.MaxUnavailable(nfDeployment)
 
 	// Check if we can scale down. We can scale down in the following 2 cases:
 	// * Some old replica sets have unhealthy replicas, we could safely scale down those unhealthy replicas since
@@ -139,7 +139,7 @@ func (r *NetworkFunctionReconciler) reconcileOldReplicaSets(ctx context.Context,
 	// * The new replica set created must start with 0 replicas because allPodsCount is already at 13.
 	// * However, newRSPodsUnavailable would also be 0, so the 2 old replica sets could be scaled down by 5 (13 - 8 - 0), which would then
 	// allow the new replica set to be scaled up by 5.
-	minAvailable := *(nf.Spec.Replicas) - maxUnavailable
+	minAvailable := *(nfDeployment.Spec.Replicas) - maxUnavailable
 	newRSUnavailablePodCount := *(currentRS.Spec.Replicas) - currentRS.Status.AvailableReplicas
 	maxScaledDown := allPodsCount - minAvailable - newRSUnavailablePodCount
 	if maxScaledDown <= 0 {
@@ -148,7 +148,7 @@ func (r *NetworkFunctionReconciler) reconcileOldReplicaSets(ctx context.Context,
 
 	// Clean up unhealthy replicas first, otherwise unhealthy replicas will block deployment
 	// and cause timeout. See https://github.com/kubernetes/kubernetes/issues/16737
-	oldRSs, cleanupCount, err := r.cleanupUnhealthyReplicas(ctx, oldRSs, nf, maxScaledDown)
+	oldRSs, cleanupCount, err := r.cleanupUnhealthyReplicas(ctx, oldRSs, nfDeployment, maxScaledDown)
 	if err != nil {
 		return false, nil
 	}
@@ -156,36 +156,36 @@ func (r *NetworkFunctionReconciler) reconcileOldReplicaSets(ctx context.Context,
 
 	// Scale down old replica sets, need check maxUnavailable to ensure we can scale down
 	allRSs = append(oldRSs, currentRS)
-	scaledDownCount, err := r.scaleDownOldReplicaSetsForRollingUpdate(ctx, allRSs, oldRSs, nf)
+	scaledDownCount, err := r.scaleDownOldReplicaSetsForRollingUpdate(ctx, allRSs, oldRSs, nfDeployment)
 	if err != nil {
 		return false, nil
 	}
 	logger.V(4).Info("Scaled down old RSes",
-		"NetworkFunction", nf, "count", scaledDownCount)
+		"NetworkFunctionDeployment", nfDeployment, "count", scaledDownCount)
 
 	totalScaledDown := cleanupCount + scaledDownCount
 	return totalScaledDown > 0, nil
 }
 
-func (r *NetworkFunctionReconciler) scaleDownOldReplicaSetsForRollingUpdate(ctx context.Context,
+func (r *NetworkFunctionDeploymentReconciler) scaleDownOldReplicaSetsForRollingUpdate(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
-	nf *corev1alpha1.NetworkFunction,
+	nfDeployment *corev1alpha1.NetworkFunctionDeployment,
 ) (scaledDownCount int32, err error) {
 	logger := logf.FromContext(ctx)
-	maxUnavailable := nfutil.MaxUnavailable(nf)
+	maxUnavailable := deploymentutil.MaxUnavailable(nfDeployment)
 
 	// Check if we can scale down.
-	minAvailable := *(nf.Spec.Replicas) - maxUnavailable
+	minAvailable := *(nfDeployment.Spec.Replicas) - maxUnavailable
 	// Find the number of available pods.
-	availableReplicaCount := nfutil.GetAvailableReplicaCountForReplicaSets(allRSs)
+	availableReplicaCount := deploymentutil.GetAvailableReplicaCountForReplicaSets(allRSs)
 	if availableReplicaCount <= minAvailable {
 		// Cannot scale down.
 		return 0, nil
 	}
 	logger.V(4).Info("Found available pods in deployment, scaling down old RSes",
-		"NetworkFunction", nf, "availableReplicas", availableReplicaCount)
+		"NetworkFunctionDeployment", nfDeployment, "availableReplicas", availableReplicaCount)
 
-	sort.Sort(nfutil.ReplicaSetsByCreationTimestamp(oldRSs))
+	sort.Sort(deploymentutil.ReplicaSetsByCreationTimestamp(oldRSs))
 
 	totalScaledDown := int32(0)
 	totalScaleDownCount := availableReplicaCount - minAvailable
@@ -206,7 +206,7 @@ func (r *NetworkFunctionReconciler) scaleDownOldReplicaSetsForRollingUpdate(ctx 
 				fmt.Errorf("when scaling down old RS, got invalid request to scale down %s/%s %d -> %d",
 					targetRS.Namespace, targetRS.Name, *(targetRS.Spec.Replicas), newReplicasCount)
 		}
-		_, _, err := r.scaleReplicaSet(ctx, targetRS, newReplicasCount, nf, false)
+		_, _, err := r.scaleReplicaSet(ctx, targetRS, newReplicasCount, nfDeployment, false)
 		if err != nil {
 			return totalScaledDown, err
 		}

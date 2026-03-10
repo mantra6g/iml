@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"loom/internal/controller/core/application"
-	"loom/internal/controller/core/networkfunction"
+	"loom/internal/controller/core/networkfunctiondeployment"
 	corecontroller "loom/internal/controller/core/p4target"
 	"loom/internal/controller/core/servicechain"
 	infracontroller "loom/internal/controller/infra/bmv2target"
@@ -227,11 +227,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
 	}
-	if err := (&networkfunction.NetworkFunctionReconciler{
+	if err := (&networkfunctiondeployment.NetworkFunctionDeploymentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionDeployment")
 		os.Exit(1)
 	}
 	if err := (&servicechain.ServiceChainReconciler{

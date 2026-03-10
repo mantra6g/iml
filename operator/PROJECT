@@ -25,7 +25,7 @@ resources:
   controller: true
   domain: loom.io
   group: core
-  kind: NetworkFunction
+  kind: NetworkFunctionDeployment
   path: loom/api/core/v1alpha1
   version: v1alpha1
 - api:

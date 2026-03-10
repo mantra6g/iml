@@ -27,7 +27,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const NETWORK_FUNCTION_FINALIZER_LABEL = "networkfunction.loom.io/finalizer"
+const NFDeploymentFinalizer = "networkfunctiondeployment.loom.io/finalizer"
 const NF_BINDING_SPEC_HASH_LABEL = "core.loom.io/networkFunctionBindingSpecHash"
 
 type Foo = v1.DeploymentStrategy
@@ -71,8 +71,8 @@ type DeploymentStrategy struct {
 	RollingUpdate *RollingUpdateDeployment `json:"rollingUpdate,omitempty"`
 }
 
-// NetworkFunctionSpec defines the desired state of NetworkFunction
-type NetworkFunctionSpec struct {
+// NetworkFunctionDeploymentSpec defines the desired state of NetworkFunctionDeployment
+type NetworkFunctionDeploymentSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
@@ -93,7 +93,7 @@ type NetworkFunctionSpec struct {
 	// +required
 	Selector *metav1.LabelSelector `json:"selector"`
 
-	// Template describes the NetworkFunction that will be created
+	// Template describes the NetworkFunctionDeployment that will be created
 	// +required
 	Template schedulingv1alpha1.NetworkFunctionBindingTemplate `json:"template,omitempty"`
 
@@ -105,37 +105,37 @@ type NetworkFunctionSpec struct {
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty"`
 }
 
-type NFConditionType string
+type NFDeploymentConditionType string
 
 const (
-	// NFAvailable condition type is intended to indicate whether the network function is currently
+	// NFDeploymentAvailable condition type is intended to indicate whether the network function is currently
 	// available and ready to serve traffic.
-	NFAvailable NFConditionType = "Available"
+	NFDeploymentAvailable NFDeploymentConditionType = "Available"
 	// NFProgressing condition type is intended to indicate whether the
 	// network function is in the process of being deployed or updated. It can be used to
 	// provide more granular information about the deployment status of the network function,
 	// such as whether it is currently being rolled out, if there are any issues during the rollout,
 	// or if it is waiting for certain conditions to be met before proceeding with the deployment.
 	// Currently UNIMPLEMENTED
-	NFProgressing NFConditionType = "Progressing"
+	NFDeploymentProgressing NFDeploymentConditionType = "Progressing"
 )
 
-type NFCondition struct {
-	Type               NFConditionType        `json:"type"`
-	Status             metav1.ConditionStatus `json:"status"`
-	LastUpdateTime     metav1.Time            `json:"lastUpdateTime"`
-	LastTransitionTime metav1.Time            `json:"lastTransitionTime"`
-	Reason             string                 `json:"reason,omitempty"`
-	Message            string                 `json:"message,omitempty"`
+type NFDeploymentCondition struct {
+	Type               NFDeploymentConditionType `json:"type"`
+	Status             metav1.ConditionStatus    `json:"status"`
+	LastUpdateTime     metav1.Time               `json:"lastUpdateTime"`
+	LastTransitionTime metav1.Time               `json:"lastTransitionTime"`
+	Reason             string                    `json:"reason,omitempty"`
+	Message            string                    `json:"message,omitempty"`
 }
 
-// NetworkFunctionStatus defines the observed state of NetworkFunction.
-type NetworkFunctionStatus struct {
+// NetworkFunctionDeploymentStatus defines the observed state of NetworkFunctionDeployment.
+type NetworkFunctionDeploymentStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ObservedGeneration is the most recent generation observed for this NetworkFunction. It corresponds to the
-	// generation of the NetworkFunctionSpec that was last processed by the controller.
+	// ObservedGeneration is the most recent generation observed for this NetworkFunctionDeployment. It corresponds to the
+	// generation of the NetworkFunctionDeploymentSpec that was last processed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Replicas is the total number of replicas observed by the controller.
@@ -155,45 +155,45 @@ type NetworkFunctionStatus struct {
 	// UnavailableReplicas is the number of unavailable replicas of the network function
 	UnavailableReplicas int32 `json:"unavailableReplicas,omitempty"`
 
-	// CollisionCount is the count of hash collisions for the NetworkFunction. The number is incremented by the
+	// CollisionCount is the count of hash collisions for the NetworkFunctionDeployment. The number is incremented by the
 	// controller when it detects a hash collision between NetworkFunctionReplicaSets with different spec templates.
 	// The controller uses this field to generate a unique name for the NetworkFunctionBinding
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
 
 	// Conditions represent the latest available observations of the
-	// NetworkFunction's current state.
-	Conditions []NFCondition `json:"conditions,omitempty"`
+	// NetworkFunctionDeployment's current state.
+	Conditions []NFDeploymentCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// NetworkFunction is the Schema for the networkfunctions API
-type NetworkFunction struct {
+// NetworkFunctionDeployment is the Schema for the networkfunctions API
+type NetworkFunctionDeployment struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of NetworkFunction
+	// spec defines the desired state of NetworkFunctionDeployment
 	// +required
-	Spec NetworkFunctionSpec `json:"spec"`
+	Spec NetworkFunctionDeploymentSpec `json:"spec"`
 
-	// status defines the observed state of NetworkFunction
+	// status defines the observed state of NetworkFunctionDeployment
 	// +optional
-	Status NetworkFunctionStatus `json:"status,omitempty,omitzero"`
+	Status NetworkFunctionDeploymentStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// NetworkFunctionList contains a list of NetworkFunction
-type NetworkFunctionList struct {
+// NetworkFunctionDeploymentList contains a list of NetworkFunctionDeployment
+type NetworkFunctionDeploymentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []NetworkFunction `json:"items"`
+	Items           []NetworkFunctionDeployment `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&NetworkFunction{}, &NetworkFunctionList{})
+	SchemeBuilder.Register(&NetworkFunctionDeployment{}, &NetworkFunctionDeploymentList{})
 }

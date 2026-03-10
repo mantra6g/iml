@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package networkfunction
+package networkfunctiondeployment
 
 import (
 	"context"
@@ -35,7 +35,7 @@ const (
 	TargetArchitectureBMv2 = "bmv2"
 )
 
-var _ = Describe("NetworkFunction Controller", func() {
+var _ = Describe("NetworkFunctionDeployment Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -52,23 +52,23 @@ var _ = Describe("NetworkFunction Controller", func() {
 		BeforeEach(func() {})
 
 		AfterEach(func() {
-			resource := &corev1alpha1.NetworkFunction{}
+			resource := &corev1alpha1.NetworkFunctionDeployment{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance NetworkFunction")
+			By("Cleanup the specific resource instance NetworkFunctionDeployment")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 
 		It("should successfully reconcile the resource", func() {
-			By("creating the custom resource for the Kind NetworkFunction")
+			By("creating the custom resource for the Kind NetworkFunctionDeployment")
 			replicas := int32(1)
-			resource := &corev1alpha1.NetworkFunction{
+			resource := &corev1alpha1.NetworkFunctionDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      typeNamespacedName.Name,
 					Namespace: typeNamespacedName.Namespace,
 				},
-				Spec: corev1alpha1.NetworkFunctionSpec{
+				Spec: corev1alpha1.NetworkFunctionDeploymentSpec{
 					Replicas: &replicas,
 					Selector: &metav1.LabelSelector{
 						MatchLabels: resourceLabels,
@@ -92,7 +92,7 @@ var _ = Describe("NetworkFunction Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &NetworkFunctionReconciler{
+			controllerReconciler := &NetworkFunctionDeploymentReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -109,18 +109,18 @@ var _ = Describe("NetworkFunction Controller", func() {
 			Expect(replicaSetList.Items[0].Spec.Template.Labels).To(Equal(resourceLabels))
 		})
 
-		It("Should create a new NetworkFunctionReplicaSet when the NetworkFunction is updated with a new P4 file",
+		It("Should create a new NetworkFunctionReplicaSet when the NetworkFunctionDeployment is updated with a new P4 file",
 			func() {
 				originalP4File := "https://example.com/p4file.p4"
 				newP4File := "https://example.com/newP4file.p4"
 
-				By("creating the custom resource for the Kind NetworkFunction")
-				original := &corev1alpha1.NetworkFunction{
+				By("creating the custom resource for the Kind NetworkFunctionDeployment")
+				original := &corev1alpha1.NetworkFunctionDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      typeNamespacedName.Name,
 						Namespace: typeNamespacedName.Namespace,
 					},
-					Spec: corev1alpha1.NetworkFunctionSpec{
+					Spec: corev1alpha1.NetworkFunctionDeploymentSpec{
 						Replicas: ptr.To[int32](1),
 						Selector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
@@ -148,7 +148,7 @@ var _ = Describe("NetworkFunction Controller", func() {
 				Expect(k8sClient.Create(ctx, original)).To(Succeed())
 
 				By("Reconciling the created resource")
-				controllerReconciler := &NetworkFunctionReconciler{
+				controllerReconciler := &NetworkFunctionDeploymentReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
 				}
@@ -164,8 +164,8 @@ var _ = Describe("NetworkFunction Controller", func() {
 				Expect(replicaSetList.Items).To(HaveLen(1))
 				Expect(replicaSetList.Items[0].Spec.Template.Spec.P4File).To(Equal(originalP4File))
 
-				By("Updating the NetworkFunction with a new P4 file")
-				updated := &corev1alpha1.NetworkFunction{}
+				By("Updating the NetworkFunctionDeployment with a new P4 file")
+				updated := &corev1alpha1.NetworkFunctionDeployment{}
 				Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
 				updated.Spec.Template.Spec.P4File = newP4File
 				Expect(k8sClient.Update(ctx, updated)).To(Succeed())

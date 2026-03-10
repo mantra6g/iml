@@ -27,7 +27,7 @@ subjects:
     namespace: loom-system
 roleRef:
   kind: ClusterRole
-  name: iml-networkfunction-editor-role
+  name: iml-networkfunctiondeployment-editor-role
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
