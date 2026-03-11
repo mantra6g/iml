@@ -7,13 +7,12 @@ import (
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymentutil "loom/internal/controller/core/networkfunctiondeployment/util"
+	deploymentutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
 )
 
 func (r *NetworkFunctionDeploymentReconciler) applyRollingUpdate(ctx context.Context,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) error {
 	scaledUp, err := r.reconcileNewReplicaSet(ctx, allRSs, currentRS, nfDeployment)
@@ -32,7 +31,7 @@ func (r *NetworkFunctionDeploymentReconciler) applyRollingUpdate(ctx context.Con
 }
 
 func (r *NetworkFunctionDeploymentReconciler) cleanupUnhealthyReplicas(ctx context.Context,
-	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment, maxCleanupCount int32,
+	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, maxCleanupCount int32,
 ) (remainingOldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, cleanupCount int32, err error) {
 	logger := logf.FromContext(ctx)
 	sort.Sort(deploymentutil.ReplicaSetsByCreationTimestamp(oldRSs))
@@ -74,7 +73,7 @@ func (r *NetworkFunctionDeploymentReconciler) cleanupUnhealthyReplicas(ctx conte
 
 func (r *NetworkFunctionDeploymentReconciler) reconcileNewReplicaSet(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (bool, error) {
 	if *(currentRS.Spec.Replicas) == *(nfDeployment.Spec.Replicas) {
 		// Scaling not required.
@@ -95,7 +94,7 @@ func (r *NetworkFunctionDeploymentReconciler) reconcileNewReplicaSet(ctx context
 
 func (r *NetworkFunctionDeploymentReconciler) reconcileOldReplicaSets(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
-	currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+	currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (bool, error) {
 	logger := logf.FromContext(ctx)
 	oldPodsCount := deploymentutil.GetReplicaCountForReplicaSets(oldRSs)
@@ -169,7 +168,7 @@ func (r *NetworkFunctionDeploymentReconciler) reconcileOldReplicaSets(ctx contex
 
 func (r *NetworkFunctionDeploymentReconciler) scaleDownOldReplicaSetsForRollingUpdate(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (scaledDownCount int32, err error) {
 	logger := logf.FromContext(ctx)
 	maxUnavailable := deploymentutil.MaxUnavailable(nfDeployment)

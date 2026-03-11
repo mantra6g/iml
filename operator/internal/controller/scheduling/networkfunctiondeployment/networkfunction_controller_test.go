@@ -52,7 +52,7 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 		BeforeEach(func() {})
 
 		AfterEach(func() {
-			resource := &corev1alpha1.NetworkFunctionDeployment{}
+			resource := &schedulingv1alpha1.NetworkFunctionDeployment{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -63,12 +63,12 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("creating the custom resource for the Kind NetworkFunctionDeployment")
 			replicas := int32(1)
-			resource := &corev1alpha1.NetworkFunctionDeployment{
+			resource := &schedulingv1alpha1.NetworkFunctionDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      typeNamespacedName.Name,
 					Namespace: typeNamespacedName.Namespace,
 				},
-				Spec: corev1alpha1.NetworkFunctionDeploymentSpec{
+				Spec: schedulingv1alpha1.NetworkFunctionDeploymentSpec{
 					Replicas: &replicas,
 					Selector: &metav1.LabelSelector{
 						MatchLabels: resourceLabels,
@@ -115,12 +115,12 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 				newP4File := "https://example.com/newP4file.p4"
 
 				By("creating the custom resource for the Kind NetworkFunctionDeployment")
-				original := &corev1alpha1.NetworkFunctionDeployment{
+				original := &schedulingv1alpha1.NetworkFunctionDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      typeNamespacedName.Name,
 						Namespace: typeNamespacedName.Namespace,
 					},
-					Spec: corev1alpha1.NetworkFunctionDeploymentSpec{
+					Spec: schedulingv1alpha1.NetworkFunctionDeploymentSpec{
 						Replicas: ptr.To[int32](1),
 						Selector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
@@ -165,7 +165,7 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 				Expect(replicaSetList.Items[0].Spec.Template.Spec.P4File).To(Equal(originalP4File))
 
 				By("Updating the NetworkFunctionDeployment with a new P4 file")
-				updated := &corev1alpha1.NetworkFunctionDeployment{}
+				updated := &schedulingv1alpha1.NetworkFunctionDeployment{}
 				Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
 				updated.Spec.Template.Spec.P4File = newP4File
 				Expect(k8sClient.Update(ctx, updated)).To(Succeed())

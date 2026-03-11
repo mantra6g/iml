@@ -27,9 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	nfutil "loom/internal/controller/core/networkfunctiondeployment/util"
+	nfutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
 	stringutils "loom/pkg/util/string"
 )
 
@@ -50,9 +49,9 @@ type NetworkFunctionDeploymentReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkFunctionDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1alpha1.NetworkFunctionDeployment{}).
+		For(&schedulingv1alpha1.NetworkFunctionDeployment{}).
 		Owns(&schedulingv1alpha1.NetworkFunctionReplicaSet{}).
-		Named("core-networkfunctiondeployment").
+		Named("scheduling-networkfunctiondeployment").
 		Complete(r)
 }
 
@@ -65,7 +64,7 @@ func (r *NetworkFunctionDeploymentReconciler) Reconcile(ctx context.Context, req
 	logger := logf.FromContext(ctx)
 
 	logger.Info("Reconciling NetworkFunctionDeployment", "request", req)
-	nfDeployment := &corev1alpha1.NetworkFunctionDeployment{}
+	nfDeployment := &schedulingv1alpha1.NetworkFunctionDeployment{}
 	if err := r.Get(ctx, req.NamespacedName, nfDeployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("NetworkFunctionDeployment resource not found. Ignoring since object must be deleted.")
@@ -78,9 +77,9 @@ func (r *NetworkFunctionDeploymentReconciler) Reconcile(ctx context.Context, req
 	// Check if being deleted
 	if !nfDeployment.DeletionTimestamp.IsZero() {
 		// Handle deletion
-		if stringutils.ContainsElement(nfDeployment.GetFinalizers(), corev1alpha1.NFDeploymentFinalizer) {
+		if stringutils.ContainsElement(nfDeployment.GetFinalizers(), schedulingv1alpha1.NFDeploymentFinalizer) {
 			// Remove finalizer
-			nfDeployment.SetFinalizers(stringutils.RemoveElement(nfDeployment.GetFinalizers(), corev1alpha1.NFDeploymentFinalizer))
+			nfDeployment.SetFinalizers(stringutils.RemoveElement(nfDeployment.GetFinalizers(), schedulingv1alpha1.NFDeploymentFinalizer))
 			if err := r.Update(ctx, nfDeployment); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -89,8 +88,8 @@ func (r *NetworkFunctionDeploymentReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Add finalizer if missing
-	if !stringutils.ContainsElement(nfDeployment.GetFinalizers(), corev1alpha1.NFDeploymentFinalizer) {
-		nfDeployment.SetFinalizers(append(nfDeployment.GetFinalizers(), corev1alpha1.NFDeploymentFinalizer))
+	if !stringutils.ContainsElement(nfDeployment.GetFinalizers(), schedulingv1alpha1.NFDeploymentFinalizer) {
+		nfDeployment.SetFinalizers(append(nfDeployment.GetFinalizers(), schedulingv1alpha1.NFDeploymentFinalizer))
 		if err := r.Update(ctx, nfDeployment); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -139,9 +138,9 @@ func (r *NetworkFunctionDeploymentReconciler) Reconcile(ctx context.Context, req
 	}
 
 	switch nfDeployment.Spec.Strategy.Type {
-	case corev1alpha1.DeploymentStrategyTypeRollingUpdate:
+	case schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate:
 		err = r.applyRollingUpdate(ctx, nfDeployment, allRSs, oldRSs, currentRS)
-	case corev1alpha1.DeploymentStrategyTypeRecreate:
+	case schedulingv1alpha1.DeploymentStrategyTypeRecreate:
 		err = r.applyRecreate(ctx, nfDeployment, allRSs, oldRSs, currentRS)
 	default:
 		err = fmt.Errorf("unknown deployment strategy type: %s", nfDeployment.Spec.Strategy.Type)

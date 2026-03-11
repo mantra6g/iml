@@ -24,9 +24,9 @@ resources:
     namespaced: true
   controller: true
   domain: loom.io
-  group: core
+  group: scheduling
   kind: NetworkFunctionDeployment
-  path: loom/api/core/v1alpha1
+  path: loom/api/scheduling/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1

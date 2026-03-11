@@ -75,12 +75,12 @@ var _ = Describe("ServiceChain Controller", func() {
 
 			By("creating the referenced NetworkFunctionDeployment resource")
 			replicas := int32(1)
-			nf1 := &corev1alpha1.NetworkFunctionDeployment{
+			nf1 := &schedulingv1alpha1.NetworkFunctionDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nf-1",
 					Namespace: "default",
 				},
-				Spec: corev1alpha1.NetworkFunctionDeploymentSpec{
+				Spec: schedulingv1alpha1.NetworkFunctionDeploymentSpec{
 					Replicas: &replicas,
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{

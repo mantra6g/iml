@@ -6,14 +6,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymentutil "loom/internal/controller/core/networkfunctiondeployment/util"
+	deploymentutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
 )
 
 func (r *NetworkFunctionDeploymentReconciler) updateNFDeploymentStatus(ctx context.Context,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, newRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment) error {
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) error {
 	newStatus := calculateStatus(allRSs, newRS, nfDeployment)
 
 	original := nfDeployment.DeepCopy()
@@ -24,8 +23,8 @@ func (r *NetworkFunctionDeploymentReconciler) updateNFDeploymentStatus(ctx conte
 }
 
 func calculateStatus(allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
-	newRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
-) corev1alpha1.NetworkFunctionDeploymentStatus {
+	newRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
+) schedulingv1alpha1.NetworkFunctionDeploymentStatus {
 	updatedReplicas := int32(0)
 	if newRS != nil {
 		updatedReplicas = deploymentutil.GetActualReplicaCountForReplicaSets([]*schedulingv1alpha1.NetworkFunctionReplicaSet{newRS})
@@ -39,7 +38,7 @@ func calculateStatus(allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 		unavailableReplicas = 0
 	}
 
-	status := corev1alpha1.NetworkFunctionDeploymentStatus{
+	status := schedulingv1alpha1.NetworkFunctionDeploymentStatus{
 		ObservedGeneration:  nfDeployment.Generation,
 		Replicas:            deploymentutil.GetActualReplicaCountForReplicaSets(allRSs),
 		UpdatedReplicas:     updatedReplicas,
@@ -53,12 +52,12 @@ func calculateStatus(allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 	}
 	if availableReplicas >= *(nfDeployment.Spec.Replicas)-deploymentutil.MaxUnavailable(nfDeployment) {
 		minAvailability := deploymentutil.NewNfDeploymentCondition(
-			corev1alpha1.NFDeploymentAvailable, metav1.ConditionTrue,
+			schedulingv1alpha1.NFDeploymentAvailable, metav1.ConditionTrue,
 			deploymentutil.MinimumReplicasAvailable, "Network Function has minimum availability.")
 		deploymentutil.SetNfDeploymentCondition(&status, *minAvailability)
 	} else {
 		noMinAvailability := deploymentutil.NewNfDeploymentCondition(
-			corev1alpha1.NFDeploymentAvailable, metav1.ConditionFalse,
+			schedulingv1alpha1.NFDeploymentAvailable, metav1.ConditionFalse,
 			deploymentutil.MinimumReplicasUnavailable, "Network Function does not have minimum availability.")
 		deploymentutil.SetNfDeploymentCondition(&status, *noMinAvailability)
 	}

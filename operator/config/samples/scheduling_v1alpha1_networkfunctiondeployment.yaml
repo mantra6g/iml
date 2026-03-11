@@ -1,4 +1,4 @@
-apiVersion: core.loom.io/v1alpha1
+apiVersion: scheduling.loom.io/v1alpha1
 kind: NetworkFunctionDeployment
 metadata:
   labels:

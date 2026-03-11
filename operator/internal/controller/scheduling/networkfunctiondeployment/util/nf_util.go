@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 	"loom/pkg/util/hash"
 )
@@ -94,12 +93,12 @@ func ResolveFenceposts(maxSurge, maxUnavailable *intstrutil.IntOrString, desired
 	return int32(surge), int32(unavailable), nil
 }
 
-func IsRollingUpdate(nfDeployment *corev1alpha1.NetworkFunctionDeployment) bool {
+func IsRollingUpdate(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) bool {
 	return nfDeployment.Spec.Strategy == nil ||
-		nfDeployment.Spec.Strategy.Type == corev1alpha1.DeploymentStrategyTypeRollingUpdate
+		nfDeployment.Spec.Strategy.Type == schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate
 }
 
-func MaxUnavailable(nfDeployment *corev1alpha1.NetworkFunctionDeployment) int32 {
+func MaxUnavailable(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) int32 {
 	if !IsRollingUpdate(nfDeployment) || *(nfDeployment.Spec.Replicas) == 0 {
 		return 0
 	}
@@ -108,14 +107,14 @@ func MaxUnavailable(nfDeployment *corev1alpha1.NetworkFunctionDeployment) int32 
 	return maxUnavailable
 }
 
-func MinAvailable(nfDeployment *corev1alpha1.NetworkFunctionDeployment) int32 {
+func MinAvailable(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) int32 {
 	if !IsRollingUpdate(nfDeployment) {
 		return 0
 	}
 	return *(nfDeployment.Spec.Replicas) - MaxUnavailable(nfDeployment)
 }
 
-func MaxSurge(nfDeployment *corev1alpha1.NetworkFunctionDeployment) int32 {
+func MaxSurge(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) int32 {
 	if !IsRollingUpdate(nfDeployment) {
 		return 0
 	}
@@ -150,9 +149,9 @@ func Revision(obj runtime.Object) (int64, error) {
 	return strconv.ParseInt(v, 10, 64)
 }
 
-func NewNfDeploymentCondition(condType corev1alpha1.NFDeploymentConditionType, status metav1.ConditionStatus,
-	reason, message string) *corev1alpha1.NFDeploymentCondition {
-	return &corev1alpha1.NFDeploymentCondition{
+func NewNfDeploymentCondition(condType schedulingv1alpha1.NFDeploymentConditionType, status metav1.ConditionStatus,
+	reason, message string) *schedulingv1alpha1.NFDeploymentCondition {
+	return &schedulingv1alpha1.NFDeploymentCondition{
 		Type:               condType,
 		Status:             status,
 		Reason:             reason,
@@ -161,8 +160,8 @@ func NewNfDeploymentCondition(condType corev1alpha1.NFDeploymentConditionType, s
 	}
 }
 
-func GetNfDeploymentCondition(status *corev1alpha1.NetworkFunctionDeploymentStatus,
-	condType corev1alpha1.NFDeploymentConditionType) *corev1alpha1.NFDeploymentCondition {
+func GetNfDeploymentCondition(status *schedulingv1alpha1.NetworkFunctionDeploymentStatus,
+	condType schedulingv1alpha1.NFDeploymentConditionType) *schedulingv1alpha1.NFDeploymentCondition {
 	for i := range status.Conditions {
 		cond := &status.Conditions[i]
 		if cond.Type == condType {
@@ -172,7 +171,7 @@ func GetNfDeploymentCondition(status *corev1alpha1.NetworkFunctionDeploymentStat
 	return nil
 }
 
-func SetNfDeploymentCondition(status *corev1alpha1.NetworkFunctionDeploymentStatus, condition corev1alpha1.NFDeploymentCondition) {
+func SetNfDeploymentCondition(status *schedulingv1alpha1.NetworkFunctionDeploymentStatus, condition schedulingv1alpha1.NFDeploymentCondition) {
 	currentCondition := GetNfDeploymentCondition(status, condition.Type)
 	if currentCondition != nil && currentCondition.Status == condition.Status &&
 		currentCondition.Reason == condition.Reason {
@@ -187,14 +186,14 @@ func SetNfDeploymentCondition(status *corev1alpha1.NetworkFunctionDeploymentStat
 	status.Conditions = append(newConditions, condition)
 }
 
-func RemoveNfDeploymentCondition(status *corev1alpha1.NetworkFunctionDeploymentStatus, condType corev1alpha1.NFDeploymentConditionType) {
+func RemoveNfDeploymentCondition(status *schedulingv1alpha1.NetworkFunctionDeploymentStatus, condType schedulingv1alpha1.NFDeploymentConditionType) {
 	status.Conditions = filterConditions(status.Conditions, condType)
 }
 
 func filterConditions(
-	conditions []corev1alpha1.NFDeploymentCondition, condType corev1alpha1.NFDeploymentConditionType,
-) []corev1alpha1.NFDeploymentCondition {
-	newConditions := make([]corev1alpha1.NFDeploymentCondition, 0)
+	conditions []schedulingv1alpha1.NFDeploymentCondition, condType schedulingv1alpha1.NFDeploymentConditionType,
+) []schedulingv1alpha1.NFDeploymentCondition {
+	newConditions := make([]schedulingv1alpha1.NFDeploymentCondition, 0)
 	for i := range conditions {
 		if conditions[i].Type != condType {
 			newConditions = append(newConditions, conditions[i])
@@ -213,7 +212,7 @@ func GenerateReplicaSetName(nfDeploymentName, currentSpecHash string) string {
 	return nfDeploymentName + "-" + currentSpecHash
 }
 
-func ComputeSpecHash(nfDeployment *corev1alpha1.NetworkFunctionDeployment) string {
+func ComputeSpecHash(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) string {
 	hasher := fnv.New32a()
 	hash.DeepHashObject(hasher, nfDeployment.Spec.Template)
 
@@ -238,8 +237,8 @@ func EqualIgnoreHash(t1 *schedulingv1alpha1.NetworkFunctionTemplate,
 	t1Copy := t1.DeepCopy()
 	t2Copy := t2.DeepCopy()
 	// Remove hash labels from template.Labels before comparing
-	delete(t1Copy.Labels, corev1alpha1.NFSpecHashLabel)
-	delete(t2Copy.Labels, corev1alpha1.NFSpecHashLabel)
+	delete(t1Copy.Labels, schedulingv1alpha1.NFSpecHashLabel)
+	delete(t2Copy.Labels, schedulingv1alpha1.NFSpecHashLabel)
 	return apiequality.Semantic.DeepEqual(t1Copy, t2Copy)
 }
 
@@ -278,7 +277,7 @@ func FilterReplicaSets(RSes []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 }
 
 func NeedsScaling(
-	ctx context.Context, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+	ctx context.Context, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 	newRS *schedulingv1alpha1.NetworkFunctionReplicaSet, oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) (upscaleNeeded bool, err error) {
 	allRSs := append(oldRSs, newRS)
@@ -294,7 +293,7 @@ func NeedsScaling(
 	return false, nil
 }
 
-func SetNewReplicaSetAnnotations(ctx context.Context, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+func SetNewReplicaSetAnnotations(ctx context.Context, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 	newRS *schedulingv1alpha1.NetworkFunctionReplicaSet, newRevision string, exists bool,
 ) (annotationsChanged bool) {
 	logger := logf.FromContext(ctx)
@@ -407,7 +406,7 @@ func skipCopyAnnotation(key string) bool {
 }
 
 // SetNFDeploymentRevision updates the revision for a deployment.
-func SetNFDeploymentRevision(nfDeployment *corev1alpha1.NetworkFunctionDeployment, revision string) bool {
+func SetNFDeploymentRevision(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, revision string) bool {
 	updated := false
 
 	if nfDeployment.Annotations == nil {
@@ -423,7 +422,7 @@ func SetNFDeploymentRevision(nfDeployment *corev1alpha1.NetworkFunctionDeploymen
 
 // NFDeploymentComplete considers a nf deployment to be complete once all of its desired replicas
 // are updated and available, and no old pods are running.
-func NFDeploymentComplete(nfDeployment *corev1alpha1.NetworkFunctionDeployment) bool {
+func NFDeploymentComplete(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) bool {
 	// A deployment is considered complete if it has observed the latest generation
 	// and the number of updated replicas equals desired replicas
 	return nfDeployment.Status.UpdatedReplicas == *(nfDeployment.Spec.Replicas) &&
@@ -479,11 +478,11 @@ func (o ReplicaSetsByRevision) Less(i, j int) bool {
 // When one of the followings is true, we're rolling out the nf deployment; otherwise, we're scaling it.
 // 1) The new RS is saturated: newRS's replicas == nfDeployment's replicas
 // 2) Max number of pods allowed is reached: nf deployment's replicas + maxSurge == all RSs' replicas
-func NewRSNewReplicas(nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+func NewRSNewReplicas(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 	newRS *schedulingv1alpha1.NetworkFunctionReplicaSet) (int32, error) {
 	switch nfDeployment.Spec.Strategy.Type {
-	case corev1alpha1.DeploymentStrategyTypeRollingUpdate:
+	case schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate:
 		// Find the total number of pods
 		currentPodCount := GetReplicaCountForReplicaSets(allRSs)
 		maxTotalPods := *(nfDeployment.Spec.Replicas) + MaxSurge(nfDeployment)
@@ -496,7 +495,7 @@ func NewRSNewReplicas(nfDeployment *corev1alpha1.NetworkFunctionDeployment,
 		// Do not exceed the number of desired replicas.
 		scaleUpCount = min(scaleUpCount, *(nfDeployment.Spec.Replicas)-*(newRS.Spec.Replicas))
 		return *(newRS.Spec.Replicas) + scaleUpCount, nil
-	case corev1alpha1.DeploymentStrategyTypeRecreate:
+	case schedulingv1alpha1.DeploymentStrategyTypeRecreate:
 		return *(nfDeployment.Spec.Replicas), nil
 	default:
 		return 0, fmt.Errorf("deployment type %v isn't supported", nfDeployment.Spec.Strategy.Type)

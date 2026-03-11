@@ -11,16 +11,16 @@ metadata:
   labels:
     app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
-  name: core-networkfunctiondeployment-admin-role
+  name: scheduling-networkfunctiondeployment-admin-role
 rules:
 - apiGroups:
-  - core.loom.io
+  - scheduling.loom.io
   resources:
   - networkfunctiondeployments
   verbs:
   - '*'
 - apiGroups:
-  - core.loom.io
+  - scheduling.loom.io
   resources:
   - networkfunctiondeployments/status
   verbs:

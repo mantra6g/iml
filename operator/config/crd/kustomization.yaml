@@ -3,7 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/core.loom.io_applications.yaml
-- bases/core.loom.io_networkfunctiondeployments.yaml
+- bases/scheduling.loom.io_networkfunctiondeployments.yaml
 - bases/core.loom.io_servicechains.yaml
 - bases/core.loom.io_p4targets.yaml
 - bases/scheduling.loom.io_networkfunctionreplicasets.yaml

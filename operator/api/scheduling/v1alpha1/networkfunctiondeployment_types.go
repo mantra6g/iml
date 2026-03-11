@@ -20,8 +20,6 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -95,7 +93,7 @@ type NetworkFunctionDeploymentSpec struct {
 
 	// Template describes the NetworkFunctionDeployment that will be created
 	// +required
-	Template schedulingv1alpha1.NetworkFunctionTemplate `json:"template,omitempty"`
+	Template NetworkFunctionTemplate `json:"template,omitempty"`
 
 	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunction
 	// should be ready without any of its container crashing, for it to be considered available. Defaults

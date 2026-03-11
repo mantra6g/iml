@@ -13,14 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymentutil "loom/internal/controller/core/networkfunctiondeployment/util"
+	deploymentutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
 	"loom/pkg/util/ptr"
 )
 
 func (r *NetworkFunctionDeploymentReconciler) sortAndSplitReplicaSets(ctx context.Context,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment, replicaSets []*schedulingv1alpha1.NetworkFunctionReplicaSet) (
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, replicaSets []*schedulingv1alpha1.NetworkFunctionReplicaSet) (
 	current *schedulingv1alpha1.NetworkFunctionReplicaSet, old []*schedulingv1alpha1.NetworkFunctionReplicaSet) {
 	old = make([]*schedulingv1alpha1.NetworkFunctionReplicaSet, 0)
 	// Calculate the hash of the current nfDeployment spec
@@ -29,7 +28,7 @@ func (r *NetworkFunctionDeploymentReconciler) sortAndSplitReplicaSets(ctx contex
 	sort.Sort(deploymentutil.ReplicaSetsByCreationTimestamp(replicaSets))
 	// Get the new replicaSet (if it exists)
 	for _, rs := range replicaSets {
-		if rs != nil && rs.Labels[corev1alpha1.NFSpecHashLabel] == currentSpecHash {
+		if rs != nil && rs.Labels[schedulingv1alpha1.NFSpecHashLabel] == currentSpecHash {
 			current = rs
 			break
 		}
@@ -45,7 +44,7 @@ func (r *NetworkFunctionDeploymentReconciler) sortAndSplitReplicaSets(ctx contex
 }
 
 func (r *NetworkFunctionDeploymentReconciler) listReplicaSets(ctx context.Context,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment) ([]*schedulingv1alpha1.NetworkFunctionReplicaSet, error) {
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) ([]*schedulingv1alpha1.NetworkFunctionReplicaSet, error) {
 	replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
 	nfReplicaSetSelector, err := metav1.LabelSelectorAsSelector(nfDeployment.Spec.Selector)
 	if err != nil {
@@ -83,7 +82,7 @@ func (r *NetworkFunctionDeploymentReconciler) listReplicaSets(ctx context.Contex
 }
 
 func (r *NetworkFunctionDeploymentReconciler) ensureUpdatedReplicaSet(ctx context.Context,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment, existingNewRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, existingNewRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet) (updated bool, err error) {
 	logger := logf.FromContext(ctx)
 	// Get the max revision number
@@ -124,9 +123,9 @@ func (r *NetworkFunctionDeploymentReconciler) ensureUpdatedReplicaSet(ctx contex
 			Template: *nfDeployment.Spec.Template.DeepCopy(),
 		},
 	}
-	newRS.ObjectMeta.Labels[corev1alpha1.NFSpecHashLabel] = updatedSpecHash
-	newRS.Spec.Selector.MatchLabels[corev1alpha1.NFSpecHashLabel] = updatedSpecHash
-	newRS.Spec.Template.Labels[corev1alpha1.NFSpecHashLabel] = updatedSpecHash
+	newRS.ObjectMeta.Labels[schedulingv1alpha1.NFSpecHashLabel] = updatedSpecHash
+	newRS.Spec.Selector.MatchLabels[schedulingv1alpha1.NFSpecHashLabel] = updatedSpecHash
+	newRS.Spec.Template.Labels[schedulingv1alpha1.NFSpecHashLabel] = updatedSpecHash
 
 	// Calculate the number of replicas for the new ReplicaSet.
 	// This is based on the desired number of replicas in the NetworkFunctionDeployment spec,
@@ -215,7 +214,7 @@ func (r *NetworkFunctionDeploymentReconciler) ensureUpdatedReplicaSet(ctx contex
 // and the old ReplicaSets have been scaled down to zero. This function will delete all old ReplicaSets
 // and return any errors encountered during the deletion process.
 func (r *NetworkFunctionDeploymentReconciler) cleanupOldReplicaSets(ctx context.Context,
-	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment) error {
+	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) error {
 	logger := logf.FromContext(ctx)
 	cleanableRSes := deploymentutil.FilterAliveReplicaSets(oldRSs)
 
@@ -243,7 +242,7 @@ func (r *NetworkFunctionDeploymentReconciler) cleanupOldReplicaSets(ctx context.
 
 func (r *NetworkFunctionDeploymentReconciler) scaleReplicaSet(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, newScale int32,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment, forceUpdate bool,
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, forceUpdate bool,
 ) (scaled bool, updatedRS *schedulingv1alpha1.NetworkFunctionReplicaSet, err error) {
 	// Don't scale, unless it's a forced update or the replicas actually differ
 	if !forceUpdate && *(rs.Spec.Replicas) == newScale {

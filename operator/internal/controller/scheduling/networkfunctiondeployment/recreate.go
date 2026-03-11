@@ -3,13 +3,12 @@ package networkfunctiondeployment
 import (
 	"context"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymentutil "loom/internal/controller/core/networkfunctiondeployment/util"
+	deploymentutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
 )
 
 func (r *NetworkFunctionDeploymentReconciler) scaleDownOldReplicaSetsForRecreate(ctx context.Context,
-	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (bool, error) {
 	scaled := false
 	for i := range oldRSs {
@@ -62,14 +61,14 @@ func oldPodsRunning(currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
 }
 
 func (r *NetworkFunctionDeploymentReconciler) scaleUpNewReplicaSetForRecreate(ctx context.Context,
-	currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *corev1alpha1.NetworkFunctionDeployment,
+	currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet, nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (bool, error) {
 	scaled, _, err := r.scaleReplicaSet(ctx, currentRS, *(nfDeployment.Spec.Replicas), nfDeployment, false)
 	return scaled, err
 }
 
 func (r *NetworkFunctionDeploymentReconciler) applyRecreate(ctx context.Context,
-	nfDeployment *corev1alpha1.NetworkFunctionDeployment, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment, allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 	oldRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet, currentRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) error {
 	// scale down old replica sets.
