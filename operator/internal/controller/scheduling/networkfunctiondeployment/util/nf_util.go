@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"loom/api/core/v1alpha1"
 	"math"
 	"strconv"
 
@@ -232,8 +233,8 @@ func ComputeSpecHash(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment)
 //  1. The hash result would be different upon podTemplateSpec API changes
 //     (e.g. the addition of a new field will cause the hash code to change)
 //  2. The deployment template won't have hash labels
-func EqualIgnoreHash(t1 *schedulingv1alpha1.NetworkFunctionTemplate,
-	t2 *schedulingv1alpha1.NetworkFunctionTemplate) bool {
+func EqualIgnoreHash(t1 *v1alpha1.NetworkFunctionTemplate,
+	t2 *v1alpha1.NetworkFunctionTemplate) bool {
 	t1Copy := t1.DeepCopy()
 	t2Copy := t2.DeepCopy()
 	// Remove hash labels from template.Labels before comparing

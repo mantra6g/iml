@@ -5,6 +5,6 @@ resources:
 - core_v1alpha1_servicechain.yaml
 - core_v1alpha1_p4target.yaml
 - scheduling_v1alpha1_networkfunctionreplicaset.yaml
-- scheduling_v1alpha1_networkfunction.yaml
+- core_v1alpha1_networkfunction.yaml
 - infra_v1alpha1_bmv2target.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

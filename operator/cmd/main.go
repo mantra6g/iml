@@ -38,10 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"loom/internal/controller/core/application"
+	"loom/internal/controller/core/networkfunction"
 	"loom/internal/controller/core/p4target"
 	"loom/internal/controller/core/servicechain"
 	"loom/internal/controller/infra/bmv2target"
-	"loom/internal/controller/scheduling/networkfunction"
 	"loom/internal/controller/scheduling/networkfunctiondeployment"
 	"loom/internal/controller/scheduling/networkfunctionreplicaset"
 

@@ -3,6 +3,7 @@ package networkfunctionreplicaset
 import (
 	"context"
 	"fmt"
+	"loom/api/core/v1alpha1"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
@@ -66,7 +67,7 @@ const (
 
 func (r *NetworkFunctionReplicaSetReconciler) listActiveNFs(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-) ([]*schedulingv1alpha1.NetworkFunction, error) {
+) ([]*v1alpha1.NetworkFunction, error) {
 	// Convert the NetworkFunctionReplicaSet's label selector to a selector that can be used to list
 	// NetworkFunctions
 	nfSelector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
@@ -75,13 +76,13 @@ func (r *NetworkFunctionReplicaSetReconciler) listActiveNFs(ctx context.Context,
 			rs.Namespace, rs.Name, err)
 	}
 
-	var nfList schedulingv1alpha1.NetworkFunctionList
+	var nfList v1alpha1.NetworkFunctionList
 	if err = r.List(ctx, &nfList,
 		client.MatchingLabelsSelector{Selector: nfSelector}); err != nil {
 		return nil, err
 	}
 
-	allNFs := make([]*schedulingv1alpha1.NetworkFunction, 0, len(nfList.Items))
+	allNFs := make([]*v1alpha1.NetworkFunction, 0, len(nfList.Items))
 	for i := range nfList.Items {
 		allNFs = append(allNFs, &nfList.Items[i])
 	}
@@ -94,7 +95,7 @@ func (r *NetworkFunctionReplicaSetReconciler) listActiveNFs(ctx context.Context,
 // It will requeue the replica set in case of an error while creating/deleting nfs.
 func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 	ctx context.Context,
-	activeNFs []*schedulingv1alpha1.NetworkFunction,
+	activeNFs []*v1alpha1.NetworkFunction,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
 ) error {
 	diff := len(activeNFs) - int(*(rs.Spec.Replicas))
@@ -174,7 +175,7 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 		var wg sync.WaitGroup
 		wg.Add(diff)
 		for _, nf := range nfsToDelete {
-			go func(targetNF *schedulingv1alpha1.NetworkFunction) {
+			go func(targetNF *v1alpha1.NetworkFunction) {
 				defer wg.Done()
 				if err := r.DeleteNF(ctx, rs.Namespace, targetNF.Name); err != nil {
 					// Decrement the expected number of deletes because the informer won't observe this deletion
@@ -261,7 +262,7 @@ func (r *NetworkFunctionReplicaSetReconciler) CreateNFWithGenerateName(ctx conte
 }
 func (r *NetworkFunctionReplicaSetReconciler) GetNetworkFunctionFromRS(
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-) (*schedulingv1alpha1.NetworkFunction, error) {
+) (*v1alpha1.NetworkFunction, error) {
 	desiredLabels := rsutil.GetNFLabelSet(&rs.Spec.Template)
 	desiredFinalizers := rsutil.GetNFFinalizers(&rs.Spec.Template)
 	desiredAnnotations := rsutil.GetNFAnnotationSet(&rs.Spec.Template)
@@ -271,7 +272,7 @@ func (r *NetworkFunctionReplicaSetReconciler) GetNetworkFunctionFromRS(
 	}
 	prefix := rsutil.GetNFPrefix(accessor.GetName())
 
-	nf := &schedulingv1alpha1.NetworkFunction{
+	nf := &v1alpha1.NetworkFunction{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:       desiredLabels,
 			Annotations:  desiredAnnotations,
@@ -289,7 +290,7 @@ func (r *NetworkFunctionReplicaSetReconciler) GetNetworkFunctionFromRS(
 }
 
 func (r *NetworkFunctionReplicaSetReconciler) createNFs(ctx context.Context,
-	nf *schedulingv1alpha1.NetworkFunction) error {
+	nf *v1alpha1.NetworkFunction) error {
 	if len(labels.Set(nf.Labels)) == 0 {
 		return fmt.Errorf("unable to create nf, no labels")
 	}
@@ -307,7 +308,7 @@ func (r *NetworkFunctionReplicaSetReconciler) DeleteNF(ctx context.Context, name
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Deleting nf",
 		"nf.Name", podID, "nf.Namespace", namespace)
-	nf := &schedulingv1alpha1.NetworkFunction{ObjectMeta: metav1.ObjectMeta{
+	nf := &v1alpha1.NetworkFunction{ObjectMeta: metav1.ObjectMeta{
 		Name:      podID,
 		Namespace: namespace,
 	}}
@@ -329,9 +330,9 @@ func (r *NetworkFunctionReplicaSetReconciler) DeleteNF(ctx context.Context, name
 // that is owned by the given ReplicaSet's owner.
 func (r *NetworkFunctionReplicaSetReconciler) getIndirectlyRelatedNFs(
 	ctx context.Context, rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-) ([]*schedulingv1alpha1.NetworkFunction, error) {
+) ([]*v1alpha1.NetworkFunction, error) {
 	logger := logf.FromContext(ctx)
-	var relatedNFs []*schedulingv1alpha1.NetworkFunction
+	var relatedNFs []*v1alpha1.NetworkFunction
 	seen := make(map[types.UID]*schedulingv1alpha1.NetworkFunctionReplicaSet)
 	for _, relatedRS := range r.getReplicaSetsWithSameController(ctx, rs) {
 		selector, err := metav1.LabelSelectorAsSelector(relatedRS.Spec.Selector)
@@ -339,7 +340,7 @@ func (r *NetworkFunctionReplicaSetReconciler) getIndirectlyRelatedNFs(
 			// This object has an invalid selector, it does not match any pods
 			continue
 		}
-		nfList := &schedulingv1alpha1.NetworkFunctionList{}
+		nfList := &v1alpha1.NetworkFunctionList{}
 		err = r.List(ctx, nfList, client.MatchingLabelsSelector{Selector: selector})
 		if err != nil {
 			return nil, err
@@ -385,9 +386,9 @@ func (r *NetworkFunctionReplicaSetReconciler) getReplicaSetsWithSameController(c
 }
 
 func (r *NetworkFunctionReplicaSetReconciler) filterOwnedPods(ctx context.Context,
-	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, allActiveNFs []*schedulingv1alpha1.NetworkFunction,
-) ([]*schedulingv1alpha1.NetworkFunction, error) {
-	ownedNFs := make([]*schedulingv1alpha1.NetworkFunction, 0, len(allActiveNFs))
+	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, allActiveNFs []*v1alpha1.NetworkFunction,
+) ([]*v1alpha1.NetworkFunction, error) {
+	ownedNFs := make([]*v1alpha1.NetworkFunction, 0, len(allActiveNFs))
 	for i := range allActiveNFs {
 		b := allActiveNFs[i]
 		if metav1.IsControlledBy(b, rs) {

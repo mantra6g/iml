@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1alpha1 "loom/api/core/v1alpha1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -71,7 +73,7 @@ type NetworkFunctionReplicaSetSpec struct {
 
 	// Template describes the NetworkFunction that will be created
 	// +required
-	Template NetworkFunctionTemplate `json:"template,omitempty"`
+	Template corev1alpha1.NetworkFunctionTemplate `json:"template,omitempty"`
 
 	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunction
 	// should be ready without any of its container crashing, for it to be considered available. Defaults

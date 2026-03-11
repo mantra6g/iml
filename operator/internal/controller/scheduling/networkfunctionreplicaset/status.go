@@ -3,6 +3,7 @@ package networkfunctionreplicaset
 import (
 	"context"
 	"fmt"
+	"loom/api/core/v1alpha1"
 	"reflect"
 	"time"
 
@@ -21,7 +22,7 @@ const (
 )
 
 func calculateStatus(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	activeNFs []*schedulingv1alpha1.NetworkFunction, manageReplicasErr error, now time.Time,
+	activeNFs []*v1alpha1.NetworkFunction, manageReplicasErr error, now time.Time,
 ) schedulingv1alpha1.NetworkFunctionReplicaSetStatus {
 	newStatus := rs.Status
 	// Count the number of nfs that have labels matching the labels of the pod

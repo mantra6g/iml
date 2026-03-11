@@ -11,10 +11,10 @@ metadata:
   labels:
     app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
-  name: scheduling-networkfunction-editor-role
+  name: core-networkfunction-editor-role
 rules:
 - apiGroups:
-  - scheduling.loom.io
+  - core.loom.io
   resources:
   - networkfunctions
   verbs:
@@ -26,7 +26,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - scheduling.loom.io
+  - core.loom.io
   resources:
   - networkfunctions/status
   verbs:

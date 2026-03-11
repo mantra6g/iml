@@ -19,12 +19,11 @@ package networkfunction
 import (
 	"context"
 	"fmt"
+	nfutils "loom/internal/controller/core/networkfunction/util"
 	"time"
 
 	corev1alpha1 "loom/api/core/v1alpha1"
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 	p4targetutil "loom/internal/controller/core/p4target/util"
-	nfutils "loom/internal/controller/scheduling/networkfunction/util"
 	stringutils "loom/pkg/util/string"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -58,7 +57,7 @@ type NetworkFunctionReconciler struct {
 func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
-	nf := &schedulingv1alpha1.NetworkFunction{}
+	nf := &corev1alpha1.NetworkFunction{}
 	if err := r.Get(ctx, req.NamespacedName, nf); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("NetworkFunction resource not found. Ignoring since object must be deleted.")
@@ -72,9 +71,9 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Check if being deleted
 	if !nf.DeletionTimestamp.IsZero() {
 		// Handle deletion
-		if stringutils.ContainsElement(nf.GetFinalizers(), schedulingv1alpha1.NetworkFunctionFinalizer) {
+		if stringutils.ContainsElement(nf.GetFinalizers(), corev1alpha1.NetworkFunctionFinalizer) {
 			// Remove finalizer
-			nf.SetFinalizers(stringutils.RemoveElement(nf.GetFinalizers(), schedulingv1alpha1.NetworkFunctionFinalizer))
+			nf.SetFinalizers(stringutils.RemoveElement(nf.GetFinalizers(), corev1alpha1.NetworkFunctionFinalizer))
 			if err := r.Update(ctx, nf); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -83,8 +82,8 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Add finalizer if not present
-	if !stringutils.ContainsElement(nf.Finalizers, schedulingv1alpha1.NetworkFunctionFinalizer) {
-		nf.Finalizers = append(nf.Finalizers, schedulingv1alpha1.NetworkFunctionFinalizer)
+	if !stringutils.ContainsElement(nf.Finalizers, corev1alpha1.NetworkFunctionFinalizer) {
+		nf.Finalizers = append(nf.Finalizers, corev1alpha1.NetworkFunctionFinalizer)
 		if err := r.Update(ctx, nf); err != nil {
 			logger.Error(err, "failed to add finalizer to NetworkFunction")
 			return ctrl.Result{}, err
@@ -131,13 +130,13 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkFunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&schedulingv1alpha1.NetworkFunction{}).
-		Named("scheduling-networkfunction").
+		For(&corev1alpha1.NetworkFunction{}).
+		Named("core-networkfunction").
 		Complete(r)
 }
 
 func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
-	ctx context.Context, nf *schedulingv1alpha1.NetworkFunction) error {
+	ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
 	logger := logf.FromContext(ctx)
 
 	// List available P4Targets
@@ -159,20 +158,20 @@ func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
 }
 
 func (r *NetworkFunctionReconciler) updateStatus(ctx context.Context,
-	nf *schedulingv1alpha1.NetworkFunction) error {
+	nf *corev1alpha1.NetworkFunction) error {
 	original := nf.DeepCopy()
 	newStatus := calculateStatus(nf)
 	nf.Status = newStatus
 	return r.Status().Patch(ctx, nf, client.MergeFrom(original))
 }
 
-func calculateStatus(nf *schedulingv1alpha1.NetworkFunction,
-) schedulingv1alpha1.NetworkFunctionStatus {
-	status := schedulingv1alpha1.NetworkFunctionStatus{
+func calculateStatus(nf *corev1alpha1.NetworkFunction,
+) corev1alpha1.NetworkFunctionStatus {
+	status := corev1alpha1.NetworkFunctionStatus{
 		ObservedGeneration: nf.Generation,
 	}
 	// Copy conditions to the new status
-	status.Conditions = make([]schedulingv1alpha1.NetworkFunctionCondition, len(nf.Status.Conditions))
+	status.Conditions = make([]corev1alpha1.NetworkFunctionCondition, len(nf.Status.Conditions))
 	for i := range nf.Status.Conditions {
 		status.Conditions = append(status.Conditions, nf.Status.Conditions[i])
 	}
@@ -189,7 +188,7 @@ func calculateStatus(nf *schedulingv1alpha1.NetworkFunction,
 }
 
 func (r *NetworkFunctionReconciler) listTargets(ctx context.Context,
-	nf *schedulingv1alpha1.NetworkFunction) ([]*corev1alpha1.P4Target, error) {
+	nf *corev1alpha1.NetworkFunction) ([]*corev1alpha1.P4Target, error) {
 	targetLabelsSel, err := labels.ValidatedSelectorFromSet(nf.Spec.TargetSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create label selector: %w", err)
@@ -206,7 +205,7 @@ func (r *NetworkFunctionReconciler) listTargets(ctx context.Context,
 }
 
 func filterFeasible(
-	nf *schedulingv1alpha1.NetworkFunction, allTargets []*corev1alpha1.P4Target) []*corev1alpha1.P4Target {
+	nf *corev1alpha1.NetworkFunction, allTargets []*corev1alpha1.P4Target) []*corev1alpha1.P4Target {
 	feasible := make([]*corev1alpha1.P4Target, 0)
 	for _, t := range allTargets {
 		// Skip targets with taints
@@ -225,7 +224,7 @@ func filterFeasible(
 }
 
 func (r *NetworkFunctionReconciler) pickNode(
-	nf *schedulingv1alpha1.NetworkFunction, feasible []*corev1alpha1.P4Target) *corev1alpha1.P4Target {
+	nf *corev1alpha1.NetworkFunction, feasible []*corev1alpha1.P4Target) *corev1alpha1.P4Target {
 	// Example of how we could use a ML model to get recommendations
 	// rec := nf.Status.Recommendations
 	// if rec.TargetNode != "" && rec.Confidence > 0.7 {
@@ -249,7 +248,7 @@ func (r *NetworkFunctionReconciler) pickNode(
 }
 
 func (r *NetworkFunctionReconciler) ensureControlPlaneDeployment(
-	ctx context.Context, nf *schedulingv1alpha1.NetworkFunction) (controllerutil.OperationResult, error) {
+	ctx context.Context, nf *corev1alpha1.NetworkFunction) (controllerutil.OperationResult, error) {
 	logger := logf.FromContext(ctx)
 
 	dep := &appsv1.Deployment{
@@ -265,11 +264,11 @@ func (r *NetworkFunctionReconciler) ensureControlPlaneDeployment(
 		// Ensure selector and template labels match for proper ownership
 		dep.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				schedulingv1alpha1.CONTROL_PLANE_POD_LABEL: nf.Name,
+				corev1alpha1.CONTROL_PLANE_POD_LABEL: nf.Name,
 			},
 		}
 		dep.Spec.Template.Labels = map[string]string{
-			schedulingv1alpha1.CONTROL_PLANE_POD_LABEL: nf.Name,
+			corev1alpha1.CONTROL_PLANE_POD_LABEL: nf.Name,
 		}
 
 		// Ensure scheduling hints
@@ -292,19 +291,19 @@ func (r *NetworkFunctionReconciler) ensureControlPlaneDeployment(
 			if env.Name == "" {
 				return fmt.Errorf("invalid environment variable with empty name in ControlPlaneSpec.ExtraEnv")
 			}
-			if env.Name == schedulingv1alpha1.CONTROL_PLANE_POD_NF_NAMESPACE_ENV_VAR_KEY ||
-				env.Name == schedulingv1alpha1.CONTROL_PLANE_POD_NF_NAME_ENV_VAR_KEY {
+			if env.Name == corev1alpha1.CONTROL_PLANE_POD_NF_NAMESPACE_ENV_VAR_KEY ||
+				env.Name == corev1alpha1.CONTROL_PLANE_POD_NF_NAME_ENV_VAR_KEY {
 				logger.Info("Skipping environment variable with reserved name", "name", env.Name)
 			}
 			validEnvs = append(validEnvs, env)
 		}
 		// Add mandatory environment variables for the control plane to know its nf context
 		validEnvs = append(validEnvs, corev1.EnvVar{
-			Name:  schedulingv1alpha1.CONTROL_PLANE_POD_NF_NAME_ENV_VAR_KEY,
+			Name:  corev1alpha1.CONTROL_PLANE_POD_NF_NAME_ENV_VAR_KEY,
 			Value: nf.Name,
 		})
 		validEnvs = append(validEnvs, corev1.EnvVar{
-			Name:  schedulingv1alpha1.CONTROL_PLANE_POD_NF_NAMESPACE_ENV_VAR_KEY,
+			Name:  corev1alpha1.CONTROL_PLANE_POD_NF_NAMESPACE_ENV_VAR_KEY,
 			Value: nf.Namespace,
 		})
 		dep.Spec.Template.Spec.Containers[0].Env = validEnvs
@@ -314,7 +313,7 @@ func (r *NetworkFunctionReconciler) ensureControlPlaneDeployment(
 }
 
 func (r *NetworkFunctionReconciler) updateNFWithChosenTarget(ctx context.Context,
-	nf *schedulingv1alpha1.NetworkFunction, chosen *corev1alpha1.P4Target) error {
+	nf *corev1alpha1.NetworkFunction, chosen *corev1alpha1.P4Target) error {
 	original := nf.DeepCopy()
 	nf.Spec.TargetName = chosen.Name
 	return r.Patch(ctx, nf, client.MergeFrom(original))

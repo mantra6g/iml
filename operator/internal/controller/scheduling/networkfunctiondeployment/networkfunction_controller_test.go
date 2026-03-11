@@ -73,12 +73,12 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: resourceLabels,
 					},
-					Template: schedulingv1alpha1.NetworkFunctionTemplate{
+					Template: corev1alpha1.NetworkFunctionTemplate{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: resourceLabels,
 						},
-						Spec: schedulingv1alpha1.NetworkFunctionSpec{
-							ControlPlane: &schedulingv1alpha1.ControlPlaneSpec{
+						Spec: corev1alpha1.NetworkFunctionSpec{
+							ControlPlane: &corev1alpha1.ControlPlaneSpec{
 								Image: "example.com/control-plane:latest",
 							},
 							TargetSelector: map[string]string{
@@ -127,14 +127,14 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 								"app": "test-nf",
 							},
 						},
-						Template: schedulingv1alpha1.NetworkFunctionTemplate{
+						Template: corev1alpha1.NetworkFunctionTemplate{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: map[string]string{
 									"app": "test-nf",
 								},
 							},
-							Spec: schedulingv1alpha1.NetworkFunctionSpec{
-								ControlPlane: &schedulingv1alpha1.ControlPlaneSpec{
+							Spec: corev1alpha1.NetworkFunctionSpec{
+								ControlPlane: &corev1alpha1.ControlPlaneSpec{
 									Image: "example.com/control-plane:latest",
 								},
 								TargetSelector: map[string]string{

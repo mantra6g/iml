@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctions.scheduling.loom.io
+  name: networkfunctions.core.loom.io
 spec:
-  group: scheduling.loom.io
+  group: core.loom.io
   names:
     kind: NetworkFunction
     listKind: NetworkFunctionList

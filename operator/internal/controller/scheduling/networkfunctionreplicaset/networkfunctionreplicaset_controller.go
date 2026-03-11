@@ -18,6 +18,7 @@ package networkfunctionreplicaset
 
 import (
 	"context"
+	"loom/api/core/v1alpha1"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -127,7 +128,7 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 
 func calculateTimeUntilNextRequeue(
 	updatedRS *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	activeNFs []*schedulingv1alpha1.NetworkFunction,
+	activeNFs []*v1alpha1.NetworkFunction,
 	now time.Time) *time.Duration {
 	// Plan the next availability check as a last line of defense against queue preemption (we have one queue key for checking availability of all the pods)
 	// or early sync (see https://github.com/kubernetes/kubernetes/issues/39785#issuecomment-279959133 for more info).
@@ -149,10 +150,10 @@ func (r *NetworkFunctionReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager)
 	r.expectations = util.NewUIDTrackingControllerExpectations(util.NewControllerExpectations())
 
 	// Index the nfs by its controller UID, so that we can easily list the nfs for a given ReplicaSet.
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &schedulingv1alpha1.NetworkFunction{},
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.NetworkFunction{},
 		controllerUIDIndex,
 		func(obj client.Object) []string {
-			nf := obj.(*schedulingv1alpha1.NetworkFunction)
+			nf := obj.(*v1alpha1.NetworkFunction)
 			controllerRef := metav1.GetControllerOf(nf)
 			if controllerRef == nil {
 				return []string{}
@@ -165,7 +166,7 @@ func (r *NetworkFunctionReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&schedulingv1alpha1.NetworkFunctionReplicaSet{}).
-		Owns(&schedulingv1alpha1.NetworkFunction{}).
+		Owns(&v1alpha1.NetworkFunction{}).
 		Named("scheduling-networkfunctionreplicaset").
 		Complete(r)
 }

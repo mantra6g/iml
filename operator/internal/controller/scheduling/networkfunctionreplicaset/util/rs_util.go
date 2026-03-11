@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"loom/api/core/v1alpha1"
 	"sort"
 	"time"
 
@@ -13,13 +14,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func IsNFReady(nf *schedulingv1alpha1.NetworkFunction) bool {
-	cond := GetNFCondition(nf, schedulingv1alpha1.NetworkFunctionReady)
+func IsNFReady(nf *v1alpha1.NetworkFunction) bool {
+	cond := GetNFCondition(nf, v1alpha1.NetworkFunctionReady)
 	return cond != nil && cond.Status == metav1.ConditionTrue
 }
 
-func IsNFAvailable(nf *schedulingv1alpha1.NetworkFunction, minReadySeconds int32, now time.Time) bool {
-	readyCondition := GetNFCondition(nf, schedulingv1alpha1.NetworkFunctionReady)
+func IsNFAvailable(nf *v1alpha1.NetworkFunction, minReadySeconds int32, now time.Time) bool {
+	readyCondition := GetNFCondition(nf, v1alpha1.NetworkFunctionReady)
 	if readyCondition == nil || readyCondition.Status != metav1.ConditionTrue {
 		return false
 	}
@@ -31,8 +32,8 @@ func IsNFAvailable(nf *schedulingv1alpha1.NetworkFunction, minReadySeconds int32
 	return true
 }
 
-func GetNFCondition(nf *schedulingv1alpha1.NetworkFunction,
-	conditionType schedulingv1alpha1.NetworkFunctionConditionType) *schedulingv1alpha1.NetworkFunctionCondition {
+func GetNFCondition(nf *v1alpha1.NetworkFunction,
+	conditionType v1alpha1.NetworkFunctionConditionType) *v1alpha1.NetworkFunctionCondition {
 	for _, cond := range nf.Status.Conditions {
 		if cond.Type == conditionType {
 			return &cond
@@ -41,7 +42,7 @@ func GetNFCondition(nf *schedulingv1alpha1.NetworkFunction,
 	return nil
 }
 
-func GetNFLabelSet(template *schedulingv1alpha1.NetworkFunctionTemplate) labels.Set {
+func GetNFLabelSet(template *v1alpha1.NetworkFunctionTemplate) labels.Set {
 	desiredLabels := make(labels.Set)
 	for k, v := range template.Labels {
 		desiredLabels[k] = v
@@ -49,13 +50,13 @@ func GetNFLabelSet(template *schedulingv1alpha1.NetworkFunctionTemplate) labels.
 	return desiredLabels
 }
 
-func GetNFFinalizers(template *schedulingv1alpha1.NetworkFunctionTemplate) []string {
+func GetNFFinalizers(template *v1alpha1.NetworkFunctionTemplate) []string {
 	desiredFinalizers := make([]string, len(template.Finalizers))
 	copy(desiredFinalizers, template.Finalizers)
 	return desiredFinalizers
 }
 
-func GetNFAnnotationSet(template *schedulingv1alpha1.NetworkFunctionTemplate) labels.Set {
+func GetNFAnnotationSet(template *v1alpha1.NetworkFunctionTemplate) labels.Set {
 	desiredAnnotations := make(labels.Set)
 	for k, v := range template.Annotations {
 		desiredAnnotations[k] = v
@@ -72,8 +73,8 @@ func GetNFPrefix(rsName string) string {
 	return prefix
 }
 
-func GetNFsToDelete(filteredNFs, relatedNFs []*schedulingv1alpha1.NetworkFunction, diff int,
-) []*schedulingv1alpha1.NetworkFunction {
+func GetNFsToDelete(filteredNFs, relatedNFs []*v1alpha1.NetworkFunction, diff int,
+) []*v1alpha1.NetworkFunction {
 	// No need to sort pods if we are about to delete all of them.
 	// diff will always be <= len(filteredNFs), so not need to handle > case.
 	if diff < len(filteredNFs) {
@@ -88,7 +89,7 @@ func GetNFsToDelete(filteredNFs, relatedNFs []*schedulingv1alpha1.NetworkFunctio
 // active nf in relatedNFs that are colocated on the same node with the pod.
 // relatedNFs generally should be a superset of nfsToRank.
 func GetNFsRankedByRelatedNFsOnSameTarget(
-	nfsToRank, relatedNFs []*schedulingv1alpha1.NetworkFunction,
+	nfsToRank, relatedNFs []*v1alpha1.NetworkFunction,
 ) ActiveNFsWithRanks {
 	nfsOnTarget := make(map[string]int)
 	for _, nf := range relatedNFs {
@@ -103,7 +104,7 @@ func GetNFsRankedByRelatedNFsOnSameTarget(
 	return ActiveNFsWithRanks{NFs: nfsToRank, Rank: ranks, Now: metav1.Now()}
 }
 
-func GetNFKeys(pods []*schedulingv1alpha1.NetworkFunction) []string {
+func GetNFKeys(pods []*v1alpha1.NetworkFunction) []string {
 	podKeys := make([]string, 0, len(pods))
 	for _, pod := range pods {
 		podKeys = append(podKeys, NFKey(pod))
@@ -111,16 +112,16 @@ func GetNFKeys(pods []*schedulingv1alpha1.NetworkFunction) []string {
 	return podKeys
 }
 
-func IsNFActive(b *schedulingv1alpha1.NetworkFunction) bool {
-	return schedulingv1alpha1.NetworkFunctionFailed != b.Status.Phase &&
+func IsNFActive(b *v1alpha1.NetworkFunction) bool {
+	return v1alpha1.NetworkFunctionFailed != b.Status.Phase &&
 		b.DeletionTimestamp == nil
 }
 
 // FilterActiveNFs returns nfs that have not terminated.
 func FilterActiveNFs(
-	nfs []*schedulingv1alpha1.NetworkFunction,
-) []*schedulingv1alpha1.NetworkFunction {
-	var result []*schedulingv1alpha1.NetworkFunction
+	nfs []*v1alpha1.NetworkFunction,
+) []*v1alpha1.NetworkFunction {
+	var result []*v1alpha1.NetworkFunction
 	for _, nf := range nfs {
 		if IsNFActive(nf) {
 			result = append(result, nf)
@@ -202,7 +203,7 @@ func EqualConditions(c1, c2 *schedulingv1alpha1.ReplicaSetCondition) bool {
 }
 
 func CountReplicas(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
-	activeNFs []*schedulingv1alpha1.NetworkFunction,
+	activeNFs []*v1alpha1.NetworkFunction,
 	now time.Time,
 ) (fullyLabeledReplicasCount, readyReplicasCount, availableReplicasCount int) {
 	fullyLabeledReplicasCount = 0
@@ -228,7 +229,7 @@ func CountReplicas(rs *schedulingv1alpha1.NetworkFunctionReplicaSet,
 // passing lastOwnerStatusEvaluation. This ensures that we will not skip any pods that might become available
 // (findMinNextPodAvailabilitySimpleCheck would return nil in the future time), since the owner status evaluation.
 // clock is then used to calculate the precise time for the next availability check.
-func FindMinNextNFAvailabilityCheck(nfs []*schedulingv1alpha1.NetworkFunction,
+func FindMinNextNFAvailabilityCheck(nfs []*v1alpha1.NetworkFunction,
 	minReadySeconds int32, lastOwnerStatusEvaluation time.Time,
 ) *time.Duration {
 	nextCheckAccordingToOwnerStatusEvaluation, checkPod := findMinNextNFAvailabilitySimpleCheck(nfs,
@@ -250,10 +251,10 @@ func FindMinNextNFAvailabilityCheck(nfs []*schedulingv1alpha1.NetworkFunction,
 // findMinNextNFAvailabilitySimpleCheck finds a duration when the next availability check should occur.
 // It also returns the first nf affected by the future availability recalculation (there might be more
 // nfs if they became ready at the same time; this helps to implement FindMinNextNFAvailabilityCheck).
-func findMinNextNFAvailabilitySimpleCheck(nfs []*schedulingv1alpha1.NetworkFunction,
-	minReadySeconds int32, now time.Time) (*time.Duration, *schedulingv1alpha1.NetworkFunction) {
+func findMinNextNFAvailabilitySimpleCheck(nfs []*v1alpha1.NetworkFunction,
+	minReadySeconds int32, now time.Time) (*time.Duration, *v1alpha1.NetworkFunction) {
 	var minAvailabilityCheck *time.Duration
-	var checkNF *schedulingv1alpha1.NetworkFunction
+	var checkNF *v1alpha1.NetworkFunction
 	for _, p := range nfs {
 		nextCheck := nextNFAvailabilityCheck(p, minReadySeconds, now)
 		if nextCheck != nil && (minAvailabilityCheck == nil || *nextCheck < *minAvailabilityCheck) {
@@ -265,7 +266,7 @@ func findMinNextNFAvailabilitySimpleCheck(nfs []*schedulingv1alpha1.NetworkFunct
 }
 
 // nextNFAvailabilityCheck implements similar logic to IsNFAvailable
-func nextNFAvailabilityCheck(nf *schedulingv1alpha1.NetworkFunction, minReadySeconds int32,
+func nextNFAvailabilityCheck(nf *v1alpha1.NetworkFunction, minReadySeconds int32,
 	now time.Time) *time.Duration {
 	if !IsNFReady(nf) || minReadySeconds <= 0 {
 		return nil
@@ -286,10 +287,10 @@ func nextNFAvailabilityCheck(nf *schedulingv1alpha1.NetworkFunction, minReadySec
 	return nil
 }
 
-func GetNFReadyCondition(status *schedulingv1alpha1.NetworkFunctionStatus,
-) *schedulingv1alpha1.NetworkFunctionCondition {
+func GetNFReadyCondition(status *v1alpha1.NetworkFunctionStatus,
+) *v1alpha1.NetworkFunctionCondition {
 	for _, cond := range status.Conditions {
-		if cond.Type == schedulingv1alpha1.NetworkFunctionReady {
+		if cond.Type == v1alpha1.NetworkFunctionReady {
 			return &cond
 		}
 	}

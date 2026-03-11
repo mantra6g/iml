@@ -1,11 +1,10 @@
 package util
 
 import (
+	schedulingv1alpha1 "loom/api/core/v1alpha1"
 	"math"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 var nfPhaseToOrdinal = map[schedulingv1alpha1.NetworkFunctionPhase]int{

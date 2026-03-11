@@ -2986,9 +2986,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctions.scheduling.loom.io
+  name: networkfunctions.core.loom.io
 spec:
-  group: scheduling.loom.io
+  group: core.loom.io
   names:
     kind: NetworkFunction
     listKind: NetworkFunctionList
@@ -4662,6 +4662,77 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: loom-operator
+  name: loom-core-networkfunction-admin-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions
+  verbs:
+  - '*'
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-core-networkfunction-editor-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-core-networkfunction-viewer-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
   name: loom-core-p4target-admin-role
 rules:
 - apiGroups:
@@ -5022,77 +5093,6 @@ metadata:
 rules:
 - nonResourceURLs:
   - /metrics
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: loom-operator
-  name: loom-scheduling-networkfunction-admin-role
-rules:
-- apiGroups:
-  - scheduling.loom.io
-  resources:
-  - networkfunctions
-  verbs:
-  - '*'
-- apiGroups:
-  - scheduling.loom.io
-  resources:
-  - networkfunctions/status
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: loom-operator
-  name: loom-scheduling-networkfunction-editor-role
-rules:
-- apiGroups:
-  - scheduling.loom.io
-  resources:
-  - networkfunctions
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - scheduling.loom.io
-  resources:
-  - networkfunctions/status
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: loom-operator
-  name: loom-scheduling-networkfunction-viewer-role
-rules:
-- apiGroups:
-  - scheduling.loom.io
-  resources:
-  - networkfunctions
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - scheduling.loom.io
-  resources:
-  - networkfunctions/status
   verbs:
   - get
 ---

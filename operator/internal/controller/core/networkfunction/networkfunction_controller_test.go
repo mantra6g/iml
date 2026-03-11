@@ -18,6 +18,7 @@ package networkfunction
 
 import (
 	"context"
+	schedulingv1alpha1 "loom/api/core/v1alpha1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 const (

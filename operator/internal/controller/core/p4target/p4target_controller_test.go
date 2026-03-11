@@ -30,7 +30,6 @@ import (
 
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 	p4targetutil "loom/internal/controller/core/p4target/util"
 )
 
@@ -286,15 +285,15 @@ var _ = Describe("P4Target Controller", func() {
 			_ = k8sClient.Create(ctx, namespace)
 
 			By("Creating a nf for that target")
-			nf := &schedulingv1alpha1.NetworkFunction{
+			nf := &corev1alpha1.NetworkFunction{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nf-for-" + resourceName,
 					Namespace: "default",
 					Labels: map[string]string{
-						schedulingv1alpha1.TARGET_ASSIGNMENT_LABEL: resourceName,
+						corev1alpha1.TARGET_ASSIGNMENT_LABEL: resourceName,
 					},
 				},
-				Spec: schedulingv1alpha1.NetworkFunctionSpec{
+				Spec: corev1alpha1.NetworkFunctionSpec{
 					TargetSelector: map[string]string{
 						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureBMv2,
 					},

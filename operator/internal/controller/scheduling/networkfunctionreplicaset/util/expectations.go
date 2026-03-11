@@ -21,6 +21,7 @@ package util
 
 import (
 	"fmt"
+	schedulingv1alpha1 "loom/api/core/v1alpha1"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,8 +30,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
-
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 )
 
 const (
