@@ -1,0 +1,211 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package networkfunctiondeployment
+
+import (
+	"context"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	corev1alpha1 "loom/api/core/v1alpha1"
+	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	"loom/pkg/util/ptr"
+)
+
+const (
+	TargetArchitectureBMv2 = "bmv2"
+)
+
+var _ = Describe("NetworkFunctionDeployment Controller", func() {
+	Context("When reconciling a resource", func() {
+		const resourceName = "test-resource"
+
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "default",
+		}
+		resourceLabels := map[string]string{
+			"app": "test-nf",
+		}
+
+		BeforeEach(func() {})
+
+		AfterEach(func() {
+			resource := &schedulingv1alpha1.NetworkFunctionDeployment{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the specific resource instance NetworkFunctionDeployment")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			By("Reconcile again for the finalizer to take effect and delete the resource")
+			controllerReconciler := &NetworkFunctionDeploymentReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that the NetworkFunctionDeployment resource is deleted")
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).To(HaveOccurred())
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+
+			By("Deleting any remaining NetworkFunctionReplicaSet resources associated with the NetworkFunctionDeployment")
+			Expect(k8sClient.DeleteAllOf(context.Background(), &schedulingv1alpha1.NetworkFunctionReplicaSet{},
+				client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+
+			By("Verifying that the associated NetworkFunctionReplicaSet resources are deleted")
+			replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
+			Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+			Expect(replicaSetList.Items).To(BeEmpty())
+		})
+
+		It("should successfully reconcile the resource", func() {
+			By("creating the custom resource for the Kind NetworkFunctionDeployment")
+			replicas := int32(1)
+			resource := &schedulingv1alpha1.NetworkFunctionDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      typeNamespacedName.Name,
+					Namespace: typeNamespacedName.Namespace,
+				},
+				Spec: schedulingv1alpha1.NetworkFunctionDeploymentSpec{
+					Replicas: &replicas,
+					Selector: &metav1.LabelSelector{
+						MatchLabels: resourceLabels,
+					},
+					Template: corev1alpha1.NetworkFunctionTemplate{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: resourceLabels,
+						},
+						Spec: corev1alpha1.NetworkFunctionSpec{
+							ControlPlane: &corev1alpha1.ControlPlaneSpec{
+								Image: "example.com/control-plane:latest",
+							},
+							TargetSelector: map[string]string{
+								corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureBMv2,
+							},
+							P4File: "https://example.com/p4file.p4",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			By("Reconciling the created resource")
+			controllerReconciler := &NetworkFunctionDeploymentReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that the NetworkFunctionReplicaSet was created")
+			replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
+			Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+			Expect(replicaSetList.Items).To(HaveLen(1))
+			for k, v := range resourceLabels {
+				Expect(replicaSetList.Items[0].Spec.Template.Labels).To(HaveKeyWithValue(k, v))
+			}
+		})
+
+		It("Should create a new NetworkFunctionReplicaSet when the NetworkFunctionDeployment is updated with a new P4 file",
+			func() {
+				originalP4File := "https://example.com/p4file.p4"
+				newP4File := "https://example.com/newP4file.p4"
+
+				By("creating the custom resource for the Kind NetworkFunctionDeployment")
+				original := &schedulingv1alpha1.NetworkFunctionDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      typeNamespacedName.Name,
+						Namespace: typeNamespacedName.Namespace,
+					},
+					Spec: schedulingv1alpha1.NetworkFunctionDeploymentSpec{
+						Replicas: ptr.To[int32](1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"app": "test-nf",
+							},
+						},
+						Template: corev1alpha1.NetworkFunctionTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"app": "test-nf",
+								},
+							},
+							Spec: corev1alpha1.NetworkFunctionSpec{
+								ControlPlane: &corev1alpha1.ControlPlaneSpec{
+									Image: "example.com/control-plane:latest",
+								},
+								TargetSelector: map[string]string{
+									corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureBMv2,
+								},
+								P4File: originalP4File,
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, original)).To(Succeed())
+
+				By("Reconciling the created resource")
+				controllerReconciler := &NetworkFunctionDeploymentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying that the NetworkFunctionReplicaSet was created")
+				replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
+				Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+				Expect(replicaSetList.Items).To(HaveLen(1))
+				Expect(replicaSetList.Items[0].Spec.Template.Spec.P4File).To(Equal(originalP4File))
+
+				By("Updating the NetworkFunctionDeployment with a new P4 file")
+				updated := &schedulingv1alpha1.NetworkFunctionDeployment{}
+				Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
+				updated.Spec.Template.Spec.P4File = newP4File
+				Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+
+				By("Reconciling the updated resource")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying that a new NetworkFunctionReplicaSet was created with the new P4 file")
+				Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+				Expect(replicaSetList.Items).To(HaveLen(2))
+				Expect(replicaSetList.Items[1].Spec.Template.Spec.P4File).To(Equal(newP4File))
+			})
+	})
+})

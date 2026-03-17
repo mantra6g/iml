@@ -1,4 +1,4 @@
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-client
@@ -6,7 +6,7 @@ metadata:
 spec: 
   override_id: dead-beef
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-server
@@ -14,7 +14,7 @@ metadata:
 spec: 
   override_id: face-feed
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
   name: pkt-logger
@@ -26,7 +26,7 @@ spec:
     - name: pkt-logger
       image: tomasagata/pkt-logger:latest
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
 metadata:
   name: client-server-with-logger

@@ -1,4 +1,4 @@
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-client-1
@@ -6,7 +6,7 @@ metadata:
 spec: 
   override_id: dead-beef-1
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-client-2
@@ -14,7 +14,7 @@ metadata:
 spec: 
   override_id: dead-beef-2
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-server
@@ -22,7 +22,7 @@ metadata:
 spec: 
   override_id: face-feed
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
   name: pkt-logger
@@ -38,7 +38,7 @@ spec:
     id: 2
     code: https://raw.githubusercontent.com/DESIRE6G/IML-LNFVO/refs/heads/tomas/feat/srv6/examples/verified/program2.p4
 ---
-  apiVersion: cache.desire6g.eu/v1alpha1
+  apiVersion: core.loom.io/v1alpha1
   kind: ServiceChain
   metadata:
     name: client-1-to-server
@@ -55,7 +55,7 @@ spec:
       namespace: default
       subFunctionID: 1
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
 metadata:
   name: client-2-to-server

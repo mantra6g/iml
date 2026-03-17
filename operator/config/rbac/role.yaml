@@ -1,0 +1,128 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - applications
+  - networkfunctions
+  - p4targets
+  - servicechains
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - applications/finalizers
+  - networkfunctions/finalizers
+  - p4targets/finalizers
+  - servicechains/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.loom.io
+  resources:
+  - applications/status
+  - networkfunctions/status
+  - p4targets/status
+  - servicechains/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - bmv2targets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - bmv2targets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - bmv2targets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - scheduling.loom.io
+  resources:
+  - networkfunctionreplicasets
+  - networkfunctions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduling.loom.io
+  resources:
+  - networkfunctionreplicasets/finalizers
+  - networkfunctions/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - scheduling.loom.io
+  resources:
+  - networkfunctionreplicasets/status
+  - networkfunctions/status
+  verbs:
+  - get
+  - patch
+  - update

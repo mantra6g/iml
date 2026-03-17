@@ -1,5 +1,5 @@
 # Infrastructure Management Layer: Local NFV Orchestrator
-This local NFVO is responsible for handling the available resources at the given DESIRE6G site, perform local optimization through selecting the proper resources to implement the network service graphs, deploy network functions and configure networking and the data network. The configuration of the data network includes the setup of various infrastructure network functions. 
+This local NFVO is responsible for handling the available resources in the cluster, perform local optimization through selecting the proper resources to implement the network service graphs, deploy network functions and configure networking and the data network. The configuration of the data network includes the setup of various infrastructure network functions. 
 
 # Installation
 1. Create a kubernetes cluster.
@@ -14,8 +14,8 @@ kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/
 ```
 5. Clone the repository
 ```sh
-git clone -b tomas/feat/srv6 https://github.com/DESIRE6G/IML-LNFVO.git
-cd IML-LNFVO
+git clone https://github.com/mantra6g/loom
+cd loom
 ```
 6. Install IML
 ```sh
@@ -52,7 +52,7 @@ deployment procedure, you can view the `examples` folder, where three examples a
 These are the source and destinations for the traffic. All traffic must flow from one application to another. Currently, these must be defined first in IML, and then deployed using the CNI. Here is an example extracted from the `examples/simple/definitions.yaml` file.
 
 ```yaml
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-client
@@ -60,7 +60,7 @@ metadata:
 spec: 
   override_id: dead-beef
 ---
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
   name: web-server
@@ -73,7 +73,7 @@ spec:
 These are middleboxes that take in packets in real time and perform some operation with them. In this scenario, we'll be using a simple packet logger NF that essentially prints "Function executed" every time a packet from the App-App flow is successfully identified. Network Functions, unlike applications, are automatically deployed.
 
 ```yaml
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
   name: pkt-logger
@@ -90,7 +90,7 @@ spec:
 They describe how the traffic should flow between the applications. In this case, we want the traffic from A to B to flow through the packet logger network function. **These traffic flows are NOT bidirectional**. Meaning, you can define a packet function when traffic flows from A to B and another network function when traffic flows from B to A. If you want to make it bidirectional, just create a service chain in the opposite direction.
 
 ```yaml
-apiVersion: cache.desire6g.eu/v1alpha1
+apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
 metadata:
   name: client-server-with-logger
