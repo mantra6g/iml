@@ -19,6 +19,8 @@ package networkfunctionreplicaset
 import (
 	"context"
 	"loom/api/core/v1alpha1"
+	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
+	"loom/pkg/util/ptr"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -49,7 +51,6 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 			By("creating the custom resource for the Kind NetworkFunctionReplicaSet")
 			err := k8sClient.Get(ctx, typeNamespacedName, nfReplicaSet)
 			if err != nil && errors.IsNotFound(err) {
-				replicas := int32(1)
 				resource := &schedulingv1alpha1.NetworkFunctionReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
@@ -57,7 +58,7 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 						Labels:    testLabels,
 					},
 					Spec: schedulingv1alpha1.NetworkFunctionReplicaSetSpec{
-						Replicas: &replicas,
+						Replicas: ptr.To[int32](1),
 						Selector: &metav1.LabelSelector{
 							MatchLabels: testLabels,
 						},
@@ -87,9 +88,11 @@ var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
 
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
+			controllerExpectations := rsutil.NewUIDTrackingControllerExpectations(rsutil.NewControllerExpectations())
 			controllerReconciler := &NetworkFunctionReplicaSetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				Expectations: controllerExpectations,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

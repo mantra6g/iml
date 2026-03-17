@@ -117,20 +117,20 @@ func (r *BMv2TargetReconciler) ensureP4Target(
 }
 
 func (r *BMv2TargetReconciler) ensureDeployment(ctx context.Context,
-	targetDeployment *infrav1alpha1.BMv2Target) (*appsv1.Deployment, error) {
+	target *infrav1alpha1.BMv2Target) (*appsv1.Deployment, error) {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      targetDeployment.Name,
-			Namespace: targetDeployment.Namespace,
+			Name:      target.Name,
+			Namespace: infrav1alpha1.BMV2_POD_NAMESPACE,
 		},
 	}
 
 	_, err := controllerutil.CreateOrPatch(ctx, r.Client, dep, func() error {
-		dep.Labels = bmv2utils.EnsureBMv2DeploymentLabels(targetDeployment, dep.Labels)
-		dep.Annotations = bmv2utils.EnsureBMv2DeploymentAnnotations(targetDeployment, dep.Annotations)
-		dep.Finalizers = bmv2utils.EnsureBMv2DeploymentFinalizers(targetDeployment, dep.Finalizers)
-		dep.Spec = *bmv2utils.EnsureBMv2DeploymentSpec(targetDeployment, &dep.Spec)
-		return controllerutil.SetControllerReference(targetDeployment, dep, r.Scheme) // BMv2Target owns Deployment
+		dep.Labels = bmv2utils.EnsureBMv2DeploymentLabels(target, dep.Labels)
+		dep.Annotations = bmv2utils.EnsureBMv2DeploymentAnnotations(target, dep.Annotations)
+		dep.Finalizers = bmv2utils.EnsureBMv2DeploymentFinalizers(target, dep.Finalizers)
+		dep.Spec = *bmv2utils.EnsureBMv2DeploymentSpec(target, &dep.Spec)
+		return controllerutil.SetControllerReference(target, dep, r.Scheme) // BMv2Target owns Deployment
 	})
 	return dep, err
 }

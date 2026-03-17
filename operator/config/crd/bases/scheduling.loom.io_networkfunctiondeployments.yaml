@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: networkfunctionreplicasets.scheduling.loom.io
+  name: networkfunctiondeployments.scheduling.loom.io
 spec:
   group: scheduling.loom.io
   names:
-    kind: NetworkFunctionReplicaSet
-    listKind: NetworkFunctionReplicaSetList
-    plural: networkfunctionreplicasets
-    singular: networkfunctionreplicaset
+    kind: NetworkFunctionDeployment
+    listKind: NetworkFunctionDeploymentList
+    plural: networkfunctiondeployments
+    singular: networkfunctiondeployment
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkFunctionReplicaSet is the Schema for the networkfunctionreplicasets
+        description: NetworkFunctionDeployment is the Schema for the networkfunctions
           API
         properties:
           apiVersion:
@@ -38,7 +38,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of NetworkFunctionReplicaSet
+            description: spec defines the desired state of NetworkFunctionDeployment
             properties:
               minReadySeconds:
                 description: |-
@@ -50,8 +50,10 @@ spec:
                 type: integer
               replicas:
                 default: 1
-                description: Replicas is the number of desired replicas of the NetworkFunction
+                description: Replicas is the number of desired replicas of the network
+                  function
                 format: int32
+                minimum: 0
                 type: integer
               selector:
                 description: |-
@@ -101,8 +103,51 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
+              strategy:
+                description: Strategy defines the deployment strategy for the network
+                  function
+                properties:
+                  rollingUpdate:
+                    description: RollingUpdate strategy parameters. Should only be
+                      present if Type is RollingUpdate.
+                    properties:
+                      maxSurge:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        default: 25%
+                        description: |-
+                          MaxSurge is the maximum number of pods that can be created above the desired
+                          number of replicas during the update process.
+                          It can be an absolute number (e.g., 1) or a percentage (e.g., "25%").
+                          Defaults to 25% if not specified.
+                        pattern: ^((100|[0-9]{1,2})%|[0-9]+)$
+                        x-kubernetes-int-or-string: true
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        default: 25%
+                        description: |-
+                          MaxUnavailable is the maximum number of pods that can be unavailable during the update process.
+                          It can be an absolute number (e.g., 1) or a percentage (e.g., "25%").
+                          Defaults to 25% if not specified.
+                        pattern: ^((100|[0-9]{1,2})%|[0-9]+)$
+                        x-kubernetes-int-or-string: true
+                    type: object
+                  type:
+                    default: RollingUpdate
+                    description: Type of deployment. Can be "RollingUpdate" or "Recreate".
+                    enum:
+                    - RollingUpdate
+                    - Recreate
+                    type: string
+                required:
+                - type
+                type: object
               template:
-                description: Template describes the NetworkFunction that will be created
+                description: Template describes the NetworkFunctionDeployment that
+                  will be created
                 properties:
                   metadata:
                     description: Standard object's metadata.
@@ -1324,63 +1369,73 @@ spec:
             - template
             type: object
           status:
-            description: status defines the observed state of NetworkFunctionReplicaSet
+            description: status defines the observed state of NetworkFunctionDeployment
             properties:
               availableReplicas:
-                description: AvailableReplicas is the number of available NetworkFunction
-                  replicas
+                description: |-
+                  AvailableReplicas is the number of replicas that are ready and stable for at least minReadySeconds.
+                  A replica is considered available when its ready condition is true, and it has been ready for
+                  at least minReadySeconds. Defaults to 0 (the replica will be considered available as soon as it is ready)
+                format: int32
+                type: integer
+              collisionCount:
+                description: |-
+                  CollisionCount is the count of hash collisions for the NetworkFunctionDeployment. The number is incremented by the
+                  controller when it detects a hash collision between NetworkFunctionReplicaSets with different spec templates.
+                  The controller uses this field to generate a unique name for the NetworkFunction
                 format: int32
                 type: integer
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the
-                  NetworkFunctionReplicaSet's current state.
+                  NetworkFunctionDeployment's current state.
                 items:
-                  description: ReplicaSetCondition describes the state of a replica
-                    set at a certain point.
                   properties:
                     lastTransitionTime:
-                      description: The last time the condition transitioned from one
-                        status to another.
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
                       format: date-time
                       type: string
                     message:
-                      description: A human readable message indicating details about
-                        the transition.
                       type: string
                     reason:
-                      description: The reason for the condition's last transition.
                       type: string
                     status:
-                      description: Status of the condition, one of True, False, Unknown.
                       type: string
                     type:
-                      description: Type of replica set condition.
                       type: string
                   required:
+                  - lastTransitionTime
+                  - lastUpdateTime
                   - status
                   - type
                   type: object
                 type: array
-              fullyLabeledReplicas:
-                description: FullyLabeledReplicas is the number of replicas that are
-                  fully labeled and ready.
-                format: int32
-                type: integer
               observedGeneration:
                 description: |-
-                  ObservedGeneration is the most recent generation observed for this NetworkFunctionReplicaSet.
-                  It corresponds to the generation of the most recently observed NetworkFunctionReplicaSet's desired state.
+                  ObservedGeneration is the most recent generation observed for this NetworkFunctionDeployment. It corresponds to the
+                  generation of the NetworkFunctionDeploymentSpec that was last processed by the controller.
                 format: int64
                 type: integer
               readyReplicas:
-                description: ReadyReplicas is the number of ready NetworkFunction
-                  replicas
+                description: ReadyReplicas is the number of ready replicas of the
+                  network function
                 format: int32
                 type: integer
               replicas:
-                description: Replicas is the total number of non-terminated replicas
-                  that are currently running and ready.
+                description: Replicas is the total number of replicas observed by
+                  the controller.
+                format: int32
+                type: integer
+              unavailableReplicas:
+                description: UnavailableReplicas is the number of unavailable replicas
+                  of the network function
+                format: int32
+                type: integer
+              updatedReplicas:
+                description: UpdatedReplicas is the total number of replicas that
+                  have been updated to match the desired state.
                 format: int32
                 type: integer
             type: object

@@ -137,7 +137,7 @@ func (r *NetworkFunctionDeploymentReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
-	switch nfDeployment.Spec.Strategy.Type {
+	switch nfutil.GetDeploymentStrategyType(nfDeployment) {
 	case schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate:
 		err = r.applyRollingUpdate(ctx, nfDeployment, allRSs, oldRSs, currentRS)
 	case schedulingv1alpha1.DeploymentStrategyTypeRecreate:

@@ -26,10 +26,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog/v2"
-	"k8s.io/utils/clock"
 )
 
 const (
@@ -86,15 +85,15 @@ var ExpKeyFunc = func(obj interface{}) (string, error) {
 // types of controllers, because the keys might conflict across types.
 type ControllerExpectationsInterface interface {
 	GetExpectations(controllerKey string) (*ControlleeExpectations, bool, error)
-	SatisfiedExpectations(logger klog.Logger, controllerKey string) bool
-	DeleteExpectations(logger klog.Logger, controllerKey string)
-	SetExpectations(logger klog.Logger, controllerKey string, add, del int) error
-	ExpectCreations(logger klog.Logger, controllerKey string, adds int) error
-	ExpectDeletions(logger klog.Logger, controllerKey string, dels int) error
-	CreationObserved(logger klog.Logger, controllerKey string)
-	DeletionObserved(logger klog.Logger, controllerKey string)
-	RaiseExpectations(logger klog.Logger, controllerKey string, add, del int)
-	LowerExpectations(logger klog.Logger, controllerKey string, add, del int)
+	SatisfiedExpectations(logger logr.Logger, controllerKey string) bool
+	DeleteExpectations(logger logr.Logger, controllerKey string)
+	SetExpectations(logger logr.Logger, controllerKey string, add, del int) error
+	ExpectCreations(logger logr.Logger, controllerKey string, adds int) error
+	ExpectDeletions(logger logr.Logger, controllerKey string, dels int) error
+	CreationObserved(logger logr.Logger, controllerKey string)
+	DeletionObserved(logger logr.Logger, controllerKey string)
+	RaiseExpectations(logger logr.Logger, controllerKey string, add, del int)
+	LowerExpectations(logger logr.Logger, controllerKey string, add, del int)
 }
 
 // ControllerExpectations is a cache mapping controllers to what they expect to see before being woken up for a sync.
@@ -112,7 +111,7 @@ func (r *ControllerExpectations) GetExpectations(controllerKey string) (*Control
 }
 
 // DeleteExpectations deletes the expectations of the given controller from the TTLStore.
-func (r *ControllerExpectations) DeleteExpectations(logger klog.Logger, controllerKey string) {
+func (r *ControllerExpectations) DeleteExpectations(logger logr.Logger, controllerKey string) {
 	if exp, exists, err := r.GetByKey(controllerKey); err == nil && exists {
 		if err := r.Delete(exp); err != nil {
 
@@ -124,7 +123,7 @@ func (r *ControllerExpectations) DeleteExpectations(logger klog.Logger, controll
 // SatisfiedExpectations returns true if the required adds/dels for the given controller have been observed.
 // Add/del counts are established by the controller at sync time, and updated as controllees are observed by the controller
 // manager.
-func (r *ControllerExpectations) SatisfiedExpectations(logger klog.Logger, controllerKey string) bool {
+func (r *ControllerExpectations) SatisfiedExpectations(logger logr.Logger, controllerKey string) bool {
 	if exp, exists, err := r.GetExpectations(controllerKey); exists {
 		if exp.Fulfilled() {
 			logger.V(4).Info("Controller expectations fulfilled", "expectations", exp)
@@ -152,22 +151,22 @@ func (r *ControllerExpectations) SatisfiedExpectations(logger klog.Logger, contr
 }
 
 // SetExpectations registers new expectations for the given controller. Forgets existing expectations.
-func (r *ControllerExpectations) SetExpectations(logger klog.Logger, controllerKey string, add, del int) error {
-	exp := &ControlleeExpectations{add: int64(add), del: int64(del), key: controllerKey, timestamp: clock.RealClock{}.Now()}
+func (r *ControllerExpectations) SetExpectations(logger logr.Logger, controllerKey string, add, del int) error {
+	exp := &ControlleeExpectations{add: int64(add), del: int64(del), key: controllerKey, timestamp: time.Now()}
 	logger.V(4).Info("Setting expectations", "expectations", exp)
 	return r.Add(exp)
 }
 
-func (r *ControllerExpectations) ExpectCreations(logger klog.Logger, controllerKey string, adds int) error {
+func (r *ControllerExpectations) ExpectCreations(logger logr.Logger, controllerKey string, adds int) error {
 	return r.SetExpectations(logger, controllerKey, adds, 0)
 }
 
-func (r *ControllerExpectations) ExpectDeletions(logger klog.Logger, controllerKey string, dels int) error {
+func (r *ControllerExpectations) ExpectDeletions(logger logr.Logger, controllerKey string, dels int) error {
 	return r.SetExpectations(logger, controllerKey, 0, dels)
 }
 
 // LowerExpectations decrements the expectation counts of the given controller.
-func (r *ControllerExpectations) LowerExpectations(logger klog.Logger, controllerKey string, add, del int) {
+func (r *ControllerExpectations) LowerExpectations(logger logr.Logger, controllerKey string, add, del int) {
 	if exp, exists, err := r.GetExpectations(controllerKey); err == nil && exists {
 		exp.Add(int64(-add), int64(-del))
 		// The expectations might've been modified since the update on the previous line.
@@ -176,7 +175,7 @@ func (r *ControllerExpectations) LowerExpectations(logger klog.Logger, controlle
 }
 
 // RaiseExpectations increments the expectation counts of the given controller.
-func (r *ControllerExpectations) RaiseExpectations(logger klog.Logger, controllerKey string, add, del int) {
+func (r *ControllerExpectations) RaiseExpectations(logger logr.Logger, controllerKey string, add, del int) {
 	if exp, exists, err := r.GetExpectations(controllerKey); err == nil && exists {
 		exp.Add(int64(add), int64(del))
 		// The expectations might've been modified since the update on the previous line.
@@ -185,12 +184,12 @@ func (r *ControllerExpectations) RaiseExpectations(logger klog.Logger, controlle
 }
 
 // CreationObserved atomically decrements the `add` expectation count of the given controller.
-func (r *ControllerExpectations) CreationObserved(logger klog.Logger, controllerKey string) {
+func (r *ControllerExpectations) CreationObserved(logger logr.Logger, controllerKey string) {
 	r.LowerExpectations(logger, controllerKey, 1, 0)
 }
 
 // DeletionObserved atomically decrements the `del` expectation count of the given controller.
-func (r *ControllerExpectations) DeletionObserved(logger klog.Logger, controllerKey string) {
+func (r *ControllerExpectations) DeletionObserved(logger logr.Logger, controllerKey string) {
 	r.LowerExpectations(logger, controllerKey, 0, 1)
 }
 
@@ -242,7 +241,7 @@ func (u *UIDTrackingControllerExpectations) GetUIDs(controllerKey string) sets.S
 }
 
 // ExpectDeletions records expectations for the given deleteKeys, against the given controller.
-func (u *UIDTrackingControllerExpectations) ExpectDeletions(logger klog.Logger, rcKey string, deletedKeys []string) error {
+func (u *UIDTrackingControllerExpectations) ExpectDeletions(logger logr.Logger, rcKey string, deletedKeys []string) error {
 	expectedUIDs := sets.New[string]()
 	for _, k := range deletedKeys {
 		expectedUIDs.Insert(k)
@@ -261,7 +260,7 @@ func (u *UIDTrackingControllerExpectations) ExpectDeletions(logger klog.Logger, 
 }
 
 // DeletionObserved records the given deleteKey as a deletion, for the given rc.
-func (u *UIDTrackingControllerExpectations) DeletionObserved(logger klog.Logger, rcKey, deleteKey string) {
+func (u *UIDTrackingControllerExpectations) DeletionObserved(logger logr.Logger, rcKey, deleteKey string) {
 	u.uidStoreLock.Lock()
 	defer u.uidStoreLock.Unlock()
 
@@ -275,7 +274,7 @@ func (u *UIDTrackingControllerExpectations) DeletionObserved(logger klog.Logger,
 
 // DeleteExpectations deletes the UID set and invokes DeleteExpectations on the
 // underlying ControllerExpectationsInterface.
-func (u *UIDTrackingControllerExpectations) DeleteExpectations(logger klog.Logger, rcKey string) {
+func (u *UIDTrackingControllerExpectations) DeleteExpectations(logger logr.Logger, rcKey string) {
 	u.uidStoreLock.Lock()
 	defer u.uidStoreLock.Unlock()
 
@@ -338,5 +337,5 @@ func (e *ControlleeExpectations) MarshalLog() interface{} {
 // TODO: Make this possible to disable in tests.
 // TODO: Support injection of clock.
 func (e *ControlleeExpectations) isExpired() bool {
-	return clock.RealClock{}.Since(e.timestamp) > ExpectationsTimeout
+	return time.Since(e.timestamp) > ExpectationsTimeout
 }

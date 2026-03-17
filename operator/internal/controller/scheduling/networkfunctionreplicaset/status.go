@@ -63,7 +63,7 @@ func (r *NetworkFunctionReplicaSetReconciler) updateReplicaSetStatus(ctx context
 ) (*schedulingv1alpha1.NetworkFunctionReplicaSet, error) {
 	logger := logf.FromContext(ctx)
 
-	// This is the steady state. It happens when the ReplicaSet doesn't have any expectations, since
+	// This is the steady state. It happens when the ReplicaSet doesn't have any Expectations, since
 	// we do a periodic relist every 30s. If the generations differ but the replicas are
 	// the same, a caller might've resized to the same replica count.
 	if rs.Status.Replicas == newStatus.Replicas &&

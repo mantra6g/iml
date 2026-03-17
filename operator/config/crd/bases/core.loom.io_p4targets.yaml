@@ -14,14 +14,7 @@ spec:
     singular: p4target
   scope: Cluster
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.ready
-      name: READY
-      type: string
-    - jsonPath: .metadata.creationTimestamp
-      name: AGE
-      type: date
-    name: v1alpha1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API
@@ -70,8 +63,6 @@ spec:
                 description: Unschedulable indicates whether the P4 target is unschedulable
                   for new network functions.
                 type: boolean
-            required:
-            - taints
             type: object
           status:
             description: status defines the observed state of P4Target

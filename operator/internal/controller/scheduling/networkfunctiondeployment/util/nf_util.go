@@ -95,8 +95,13 @@ func ResolveFenceposts(maxSurge, maxUnavailable *intstrutil.IntOrString, desired
 }
 
 func IsRollingUpdate(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) bool {
-	return nfDeployment.Spec.Strategy == nil ||
-		nfDeployment.Spec.Strategy.Type == schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate
+	return nfDeployment.Spec.Strategy.Type == schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate
+}
+
+func GetDeploymentStrategyType(
+	nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
+) schedulingv1alpha1.DeploymentStrategyType {
+	return nfDeployment.Spec.Strategy.Type
 }
 
 func MaxUnavailable(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment) int32 {
@@ -482,7 +487,7 @@ func (o ReplicaSetsByRevision) Less(i, j int) bool {
 func NewRSNewReplicas(nfDeployment *schedulingv1alpha1.NetworkFunctionDeployment,
 	allRSs []*schedulingv1alpha1.NetworkFunctionReplicaSet,
 	newRS *schedulingv1alpha1.NetworkFunctionReplicaSet) (int32, error) {
-	switch nfDeployment.Spec.Strategy.Type {
+	switch GetDeploymentStrategyType(nfDeployment) {
 	case schedulingv1alpha1.DeploymentStrategyTypeRollingUpdate:
 		// Find the total number of pods
 		currentPodCount := GetReplicaCountForReplicaSets(allRSs)

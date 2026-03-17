@@ -24,6 +24,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const P4TargetLeaseNamespace = "p4target-leases"
+
 const TARGET_LABEL = "core.loom.io/target"
 const P4TARGET_FINALIZER_LABEL = "p4target.loom.io/finalizer"
 
@@ -63,9 +65,11 @@ type P4TargetSpec struct {
 
 	// Taints represents the taints applied to the P4 target, which can affect
 	// scheduling and operation of network functions on it.
+	// +optional
 	Taints []Taint `json:"taints"`
 
 	// Unschedulable indicates whether the P4 target is unschedulable for new network functions.
+	// +optional
 	Unschedulable bool `json:"unschedulable,omitempty"`
 }
 
@@ -88,10 +92,10 @@ const (
 type P4TargetCondition struct {
 	Type               P4TargetConditionType  `json:"type"`
 	Status             metav1.ConditionStatus `json:"status"`
-	LastHeartbeatTime  metav1.Time            `json:"lastHeartbeatTime,omitempty"`
-	LastTransitionTime metav1.Time            `json:"lastTransitionTime,omitempty"`
-	Reason             string                 `json:"reason,omitempty"`
-	Message            string                 `json:"message,omitempty"`
+	LastHeartbeatTime  metav1.Time            `json:"lastHeartbeatTime,omitempty,omitzero"`
+	LastTransitionTime metav1.Time            `json:"lastTransitionTime,omitempty,omitzero"`
+	Reason             string                 `json:"reason,omitempty,omitzero"`
+	Message            string                 `json:"message,omitempty,omitzero"`
 }
 
 // P4TargetStatus defines the observed state of P4Target.
@@ -111,8 +115,6 @@ type P4TargetStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="READY",type=string,JSONPath=".status.ready"
-// +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=".metadata.creationTimestamp"
 
 // P4Target is the Schema for the p4targets API
 type P4Target struct {

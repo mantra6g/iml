@@ -29,7 +29,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	"loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 	"loom/pkg/util/ptr"
 )
@@ -44,7 +43,7 @@ type NetworkFunctionReplicaSetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	expectations *util.UIDTrackingControllerExpectations
+	Expectations *rsutil.UIDTrackingControllerExpectations
 }
 
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
@@ -64,7 +63,7 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 	if err := r.Get(ctx, req.NamespacedName, rs); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("NetworkFunctionReplicaSet resource not found. Ignoring since object must be deleted.")
-			r.expectations.DeleteExpectations(logger, req.NamespacedName.String())
+			r.Expectations.DeleteExpectations(logger, req.NamespacedName.String())
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "unable to fetch NetworkFunctionReplicaSet")
@@ -74,7 +73,7 @@ func (r *NetworkFunctionReplicaSetReconciler) Reconcile(ctx context.Context, req
 		"name", rs.Name, "namespace", rs.Namespace)
 
 	// Check if all nfs that are expected to be created or deleted were fulfilled
-	rsNeedsSync := r.expectations.SatisfiedExpectations(logger, req.NamespacedName.String())
+	rsNeedsSync := r.Expectations.SatisfiedExpectations(logger, req.NamespacedName.String())
 
 	// Lists all active nfs that match the selector of the ReplicaSet.
 	// It will also list nfs that haven't been claimed by the ReplicaSet yet, but match the selector
@@ -147,7 +146,7 @@ func calculateTimeUntilNextRequeue(
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkFunctionReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.expectations = util.NewUIDTrackingControllerExpectations(util.NewControllerExpectations())
+	r.Expectations = rsutil.NewUIDTrackingControllerExpectations(rsutil.NewControllerExpectations())
 
 	// Index the nfs by its controller UID, so that we can easily list the nfs for a given ReplicaSet.
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.NetworkFunction{},

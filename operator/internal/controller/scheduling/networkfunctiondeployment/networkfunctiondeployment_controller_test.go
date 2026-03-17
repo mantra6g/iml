@@ -58,6 +58,30 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 
 			By("Cleanup the specific resource instance NetworkFunctionDeployment")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			By("Reconcile again for the finalizer to take effect and delete the resource")
+			controllerReconciler := &NetworkFunctionDeploymentReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that the NetworkFunctionDeployment resource is deleted")
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).To(HaveOccurred())
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+
+			By("Deleting any remaining NetworkFunctionReplicaSet resources associated with the NetworkFunctionDeployment")
+			Expect(k8sClient.DeleteAllOf(context.Background(), &schedulingv1alpha1.NetworkFunctionReplicaSet{},
+				client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+
+			By("Verifying that the associated NetworkFunctionReplicaSet resources are deleted")
+			replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
+			Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
+			Expect(replicaSetList.Items).To(BeEmpty())
 		})
 
 		It("should successfully reconcile the resource", func() {
@@ -106,7 +130,9 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 			replicaSetList := &schedulingv1alpha1.NetworkFunctionReplicaSetList{}
 			Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
 			Expect(replicaSetList.Items).To(HaveLen(1))
-			Expect(replicaSetList.Items[0].Spec.Template.Labels).To(Equal(resourceLabels))
+			for k, v := range resourceLabels {
+				Expect(replicaSetList.Items[0].Spec.Template.Labels).To(HaveKeyWithValue(k, v))
+			}
 		})
 
 		It("Should create a new NetworkFunctionReplicaSet when the NetworkFunctionDeployment is updated with a new P4 file",

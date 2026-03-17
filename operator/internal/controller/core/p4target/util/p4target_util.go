@@ -61,51 +61,60 @@ func TaintsAreEqual(taint1, taint2 corev1alpha1.Taint) bool {
 // AddTaints adds the given taints to the P4Target if they don't already exist,
 // or updates them if they do exist but are different.
 // It returns true if any taints were added or updated, and false otherwise.
-func AddTaints(p4target *corev1alpha1.P4Target, taints []corev1alpha1.Taint) (updated bool) {
-	for i := range taints {
-		// Check if the taint already exists on the P4Target
-		existingTaint := GetTaint(p4target, taints[0].Key)
+func AddTaints(
+	existingTaints []corev1alpha1.Taint, newTaints ...corev1alpha1.Taint,
+) (updatedTaints []corev1alpha1.Taint, updated bool) {
+	if existingTaints == nil || len(existingTaints) == 0 {
+		return newTaints, len(newTaints) > 0
+	}
+	updatedTaints = make([]corev1alpha1.Taint, len(existingTaints))
+	copy(updatedTaints, existingTaints)
+	for i := range newTaints {
+		// Check if the taint already exists
+		existingTaint := GetTaint(updatedTaints, newTaints[i].Key)
 		// If the taint already exists and is different, then we should update it with the new values
-		if existingTaint != nil && !TaintsAreEqual(*existingTaint, taints[0]) {
-			existingTaint.Value = taints[0].Value
-			existingTaint.Effect = taints[0].Effect
-			existingTaint.TimeAdded = taints[0].TimeAdded
+		if existingTaint != nil && !TaintsAreEqual(*existingTaint, newTaints[i]) {
+			existingTaint.Value = newTaints[i].Value
+			existingTaint.Effect = newTaints[i].Effect
+			existingTaint.TimeAdded = newTaints[i].TimeAdded
 			updated = true
 			continue
 		}
 		// If the taint doesn't exist, then we should add it to the P4Target
-		p4target.Spec.Taints = append(p4target.Spec.Taints, taints[i])
+		existingTaints = append(existingTaints, newTaints[i])
 		updated = true
 	}
-	return updated
+	return updatedTaints, updated
 }
 
 // RemoveTaints removes the taints with the given keys from the P4Target if they exist.
 // It returns true if any taints were removed, and false otherwise.
-func RemoveTaints(p4target *corev1alpha1.P4Target, taintKeys []string) (updated bool) {
-	newTaints := make([]corev1alpha1.Taint, 0)
-	for i := range p4target.Spec.Taints {
+func RemoveTaints(taints []corev1alpha1.Taint, taintKeys ...string) (newTaints []corev1alpha1.Taint, updated bool) {
+	if len(taints) == 0 {
+		return []corev1alpha1.Taint{}, false
+	}
+	newTaints = make([]corev1alpha1.Taint, 0)
+	for i := range taints {
 		toRemove := false
 		for j := range taintKeys {
-			if p4target.Spec.Taints[i].Key == taintKeys[j] {
+			if taints[i].Key == taintKeys[j] {
 				toRemove = true
 				break
 			}
 		}
 		if !toRemove {
 			updated = true
-			newTaints = append(newTaints, p4target.Spec.Taints[i])
+			newTaints = append(newTaints, taints[i])
 		}
 	}
-	p4target.Spec.Taints = newTaints
-	return updated
+	return newTaints, updated
 }
 
-// GetTaint returns a pointer to the taint with the given key if it exists on the P4Target, and nil otherwise.
-func GetTaint(p4target *corev1alpha1.P4Target, taintKey string) *corev1alpha1.Taint {
-	for i := range p4target.Spec.Taints {
-		if p4target.Spec.Taints[i].Key == taintKey {
-			return &p4target.Spec.Taints[i]
+// GetTaint returns a pointer to the taint with the given key if it exists on the slice, and nil otherwise.
+func GetTaint(taints []corev1alpha1.Taint, taintKey string) *corev1alpha1.Taint {
+	for i := range taints {
+		if taints[i].Key == taintKey {
+			return &taints[i]
 		}
 	}
 	return nil
@@ -128,4 +137,64 @@ func HasTaintWithEffects(p4target *corev1alpha1.P4Target, effects ...corev1alpha
 		}
 	}
 	return false
+}
+
+func GetCondition(
+	conditions []corev1alpha1.P4TargetCondition, conditionType corev1alpha1.P4TargetConditionType,
+) *corev1alpha1.P4TargetCondition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
+}
+
+func AddConditions(
+	conditions []corev1alpha1.P4TargetCondition, newConditions ...corev1alpha1.P4TargetCondition,
+) (updatedConditions []corev1alpha1.P4TargetCondition, updated bool) {
+	if len(conditions) == 0 {
+		return newConditions, len(newConditions) > 0
+	}
+	updatedConditions = make([]corev1alpha1.P4TargetCondition, len(conditions))
+	copy(updatedConditions, conditions)
+	for i := range newConditions {
+		previousCondition := GetCondition(updatedConditions, newConditions[i].Type)
+		if previousCondition == nil {
+			// If the condition doesn't exist, then we should add it to the P4Target
+			updatedConditions = append(updatedConditions, newConditions[i])
+			updated = true
+		} else if !ConditionsAreEqual(*previousCondition, newConditions[i]) {
+			// If the condition already exists and is different, then we should update it with the new values
+			previousCondition.Status = newConditions[i].Status
+			previousCondition.Reason = newConditions[i].Reason
+			previousCondition.Message = newConditions[i].Message
+			previousCondition.LastTransitionTime = newConditions[i].LastTransitionTime
+			updated = true
+		}
+	}
+	return updatedConditions, updated
+}
+
+func RemoveConditions(
+	conditions []corev1alpha1.P4TargetCondition, conditionTypes ...corev1alpha1.P4TargetConditionType,
+) (newConditions []corev1alpha1.P4TargetCondition, updated bool) {
+	if len(conditions) == 0 {
+		return []corev1alpha1.P4TargetCondition{}, false
+	}
+	newConditions = make([]corev1alpha1.P4TargetCondition, 0)
+	for i := range conditions {
+		toRemove := false
+		for j := range conditionTypes {
+			if conditions[i].Type == conditionTypes[j] {
+				toRemove = true
+				break
+			}
+		}
+		if !toRemove {
+			updated = true
+			newConditions = append(newConditions, conditions[i])
+		}
+	}
+	return newConditions, updated
 }

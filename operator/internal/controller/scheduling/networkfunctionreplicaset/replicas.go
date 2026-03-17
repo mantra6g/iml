@@ -3,21 +3,19 @@ package networkfunctionreplicaset
 import (
 	"context"
 	"fmt"
-	"loom/api/core/v1alpha1"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"loom/api/core/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
 	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 )
@@ -46,7 +44,7 @@ const (
 
 // controllerUIDIndex is the index of ReplicaSets by their controller's UID.
 // It is used to quickly find all ReplicaSets that are owned by the same controller,
-// which is necessary when managing expectations for deletions.
+// which is necessary when managing Expectations for deletions.
 var controllerUIDIndex = "controller-uid-index"
 
 // Reasons for nf events
@@ -115,7 +113,7 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 		//   UID, which would require locking *across* the create, which will turn
 		//   into a performance bottleneck. We should generate a UID for the pod
 		//   beforehand and store it via ExpectCreations.
-		r.expectations.ExpectCreations(logger, rsKey, diff)
+		r.Expectations.ExpectCreations(logger, rsKey, diff)
 		logger.V(2).Info("Too few replicas",
 			"replicaSet", rs, "need", *(rs.Spec.Replicas), "creating", diff)
 		// Batch the pod creates. Batch sizes start at SlowStartInitialBatchSize
@@ -142,11 +140,11 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 		// The skipped pods will be retried later. The next controller resync will
 		// retry the slow start process.
 		if skippedPods := diff - successfulCreations; skippedPods > 0 {
-			logger.V(2).Info("Slow-start failure. Skipping creation of pods, decrementing expectations",
+			logger.V(2).Info("Slow-start failure. Skipping creation of pods, decrementing Expectations",
 				"podsSkipped", skippedPods, "replicaSet", rs)
 			for i := 0; i < skippedPods; i++ {
 				// Decrement the expected number of creates because the informer won't observe this pod
-				r.expectations.CreationObserved(logger, rsKey)
+				r.Expectations.CreationObserved(logger, rsKey)
 			}
 		}
 		return err
@@ -164,12 +162,12 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 		nfsToDelete := rsutil.GetNFsToDelete(activeNFs, relatedPods, diff)
 
 		// Snapshot the UIDs (ns/name) of the pods we're expecting to see
-		// deleted, so we know to record their expectations exactly once either
+		// deleted, so we know to record their Expectations exactly once either
 		// when we see it as an update of the deletion timestamp, or as a delete.
 		// Note that if the labels on a nf/rs change in a way that the nf gets
-		// orphaned, the rs will only wake up after the expectations have
+		// orphaned, the rs will only wake up after the Expectations have
 		// expired even if other pods are deleted.
-		r.expectations.ExpectDeletions(logger, rsKey, rsutil.GetNFKeys(nfsToDelete))
+		r.Expectations.ExpectDeletions(logger, rsKey, rsutil.GetNFKeys(nfsToDelete))
 
 		errCh := make(chan error, diff)
 		var wg sync.WaitGroup
@@ -180,9 +178,9 @@ func (r *NetworkFunctionReplicaSetReconciler) manageReplicas(
 				if err := r.DeleteNF(ctx, rs.Namespace, targetNF.Name); err != nil {
 					// Decrement the expected number of deletes because the informer won't observe this deletion
 					nfKey := rsutil.NFKey(targetNF)
-					r.expectations.DeletionObserved(logger, rsKey, nfKey)
+					r.Expectations.DeletionObserved(logger, rsKey, nfKey)
 					if !apierrors.IsNotFound(err) {
-						logger.V(2).Info("Failed to delete nf, decremented expectations",
+						logger.V(2).Info("Failed to delete nf, decremented Expectations",
 							"nf", nfKey, "replicaSet", rs)
 						errCh <- err
 					}
@@ -251,7 +249,10 @@ func (r *NetworkFunctionReplicaSetReconciler) CreateNFs(ctx context.Context,
 func (r *NetworkFunctionReplicaSetReconciler) CreateNFWithGenerateName(ctx context.Context,
 	rs *schedulingv1alpha1.NetworkFunctionReplicaSet, generateName string,
 ) error {
+	logger := logf.FromContext(ctx)
 	nf, err := r.GetNetworkFunctionFromRS(rs)
+	logger.V(4).Info("Got nf from rs",
+		"nf", nf, "rs", rs)
 	if err != nil {
 		return err
 	}
@@ -266,21 +267,18 @@ func (r *NetworkFunctionReplicaSetReconciler) GetNetworkFunctionFromRS(
 	desiredLabels := rsutil.GetNFLabelSet(&rs.Spec.Template)
 	desiredFinalizers := rsutil.GetNFFinalizers(&rs.Spec.Template)
 	desiredAnnotations := rsutil.GetNFAnnotationSet(&rs.Spec.Template)
-	accessor, err := meta.Accessor(rs)
-	if err != nil {
-		return nil, fmt.Errorf("nf replicaset does not have ObjectMeta, %v", err)
-	}
-	prefix := rsutil.GetNFPrefix(accessor.GetName())
+	prefix := rsutil.GetNFPrefix(rs.Name)
 
 	nf := &v1alpha1.NetworkFunction{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:       desiredLabels,
 			Annotations:  desiredAnnotations,
 			GenerateName: prefix,
+			Namespace:    rs.Namespace,
 			Finalizers:   desiredFinalizers,
 		},
 	}
-	err = controllerutil.SetOwnerReference(rs, nf, r.Scheme)
+	err := controllerutil.SetOwnerReference(rs, nf, r.Scheme)
 	if err != nil {
 		// skip the deep copy of the spec since we won't be creating the nf if we can't set the owner reference
 		return nil, fmt.Errorf("failed to set owner reference on nf: %v", err)
@@ -305,7 +303,7 @@ func (r *NetworkFunctionReplicaSetReconciler) createNFs(ctx context.Context,
 }
 
 func (r *NetworkFunctionReplicaSetReconciler) DeleteNF(ctx context.Context, namespace string, podID string) error {
-	logger := klog.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 	logger.V(2).Info("Deleting nf",
 		"nf.Name", podID, "nf.Namespace", namespace)
 	nf := &v1alpha1.NetworkFunction{ObjectMeta: metav1.ObjectMeta{
@@ -345,14 +343,18 @@ func (r *NetworkFunctionReplicaSetReconciler) getIndirectlyRelatedNFs(
 		if err != nil {
 			return nil, err
 		}
-		for _, b := range nfList.Items {
-			if otherRS, found := seen[b.UID]; found {
+		for _, nf := range nfList.Items {
+			if otherRS, found := seen[nf.UID]; found {
 				logger.V(5).Info("Network function is owned by both",
-					"nf", b, "replicaSets", klog.KObjSlice([]klog.KMetadata{otherRS, relatedRS}))
+					"nf", nf,
+					"replicaSets", []client.ObjectKey{
+						client.ObjectKeyFromObject(otherRS),
+						client.ObjectKeyFromObject(relatedRS),
+					})
 				continue
 			}
-			seen[b.UID] = relatedRS
-			relatedNFs = append(relatedNFs, &b)
+			seen[nf.UID] = relatedRS
+			relatedNFs = append(relatedNFs, &nf)
 		}
 	}
 	logger.V(4).Info("Found related nfs",

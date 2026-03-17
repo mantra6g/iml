@@ -19,8 +19,11 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	webhookschedulingv1alpha1 "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 	"os"
 	"path/filepath"
+
+	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -248,9 +251,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 		os.Exit(1)
 	}
+	rsExpectations := rsutil.NewUIDTrackingControllerExpectations(rsutil.NewControllerExpectations())
 	if err := (&networkfunctionreplicaset.NetworkFunctionReplicaSetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		Expectations: rsExpectations,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionReplicaSet")
 		os.Exit(1)
@@ -268,6 +273,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BMv2Target")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookschedulingv1alpha1.SetupNetworkFunctionDeploymentWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "NetworkFunctionDeployment")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

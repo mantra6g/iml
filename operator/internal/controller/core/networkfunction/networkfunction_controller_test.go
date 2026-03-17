@@ -18,7 +18,6 @@ package networkfunction
 
 import (
 	"context"
-	schedulingv1alpha1 "loom/api/core/v1alpha1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,6 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	corev1alpha1 "loom/api/core/v1alpha1"
+	schedulingv1alpha1 "loom/api/core/v1alpha1"
 )
 
 const (
@@ -66,7 +68,7 @@ var _ = Describe("NetworkFunction Controller", func() {
 			})
 		})
 
-		It("should successfully reconcile the resource", func() {
+		It("should successfully schedule a network function to a p4target", func() {
 			By("Creating a new NetworkFunction resource")
 			resource := &schedulingv1alpha1.NetworkFunction{
 				ObjectMeta: metav1.ObjectMeta{
@@ -80,6 +82,16 @@ var _ = Describe("NetworkFunction Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
+			By("Creating a target resource that matches the NetworkFunction's TargetSelector")
+			targetResource := &corev1alpha1.P4Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "matching-target",
+					Namespace: "default",
+				},
+				Spec: corev1alpha1.P4TargetSpec{},
+			}
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+
 			By("Reconciling the created resource")
 			controllerReconciler := &NetworkFunctionReconciler{
 				Client: k8sClient,
@@ -90,6 +102,12 @@ var _ = Describe("NetworkFunction Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the NetworkFunction is scheduled to the matching target")
+			updatedResource := &schedulingv1alpha1.NetworkFunction{}
+			err = k8sClient.Get(ctx, typeNamespacedName, updatedResource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedResource.Spec.TargetName).To(Equal("matching-target"))
 		})
 
 		It("should add finalizer on creation", func() {

@@ -73,8 +73,14 @@ type ControlPlaneSpec struct {
 }
 
 type NetworkFunctionTemplate struct {
+	// Standard object's metadata.
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              NetworkFunctionSpec `json:"spec,omitempty"`
+
+	// Specification of the desired behavior of the pod.
+	// +optional
+	Spec NetworkFunctionSpec `json:"spec,omitempty"`
 }
 
 // NetworkFunctionSpec defines the desired state of NetworkFunction
@@ -96,7 +102,7 @@ type NetworkFunctionSpec struct {
 	ControlPlane *ControlPlaneSpec `json:"controlPlane"`
 
 	// TargetSelector is used to select P4 targets based on their supported architectures
-	// +required
+	// +optional
 	TargetSelector map[string]string `json:"targetselector,omitempty"`
 
 	// P4File is the actual P4 program file for the network function.

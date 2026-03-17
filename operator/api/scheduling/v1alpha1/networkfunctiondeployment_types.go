@@ -27,6 +27,11 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	DefaultDeploymentStrategyType      = DeploymentStrategyTypeRollingUpdate
+	DefaultRollingUpdateMaxUnavailable = "25%"
+	DefaultRollingUpdateMaxSurge       = "25%"
+)
 const NFDeploymentFinalizer = "networkfunctiondeployment.loom.io/finalizer"
 const NFSpecHashLabel = "networkfunction.loom.io/specHash"
 
@@ -81,7 +86,7 @@ type NetworkFunctionDeploymentSpec struct {
 	// Replicas is the number of desired replicas of the network function
 	// +optional
 	// +kubebuilder:default=1
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Strategy defines the deployment strategy for the network function

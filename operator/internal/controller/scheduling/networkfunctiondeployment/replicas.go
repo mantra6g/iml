@@ -123,6 +123,9 @@ func (r *NetworkFunctionDeploymentReconciler) ensureUpdatedReplicaSet(ctx contex
 			Template: *nfDeployment.Spec.Template.DeepCopy(),
 		},
 	}
+	if newRS.ObjectMeta.Labels == nil {
+		newRS.ObjectMeta.Labels = make(map[string]string)
+	}
 	newRS.ObjectMeta.Labels[schedulingv1alpha1.NFSpecHashLabel] = updatedSpecHash
 	newRS.Spec.Selector.MatchLabels[schedulingv1alpha1.NFSpecHashLabel] = updatedSpecHash
 	newRS.Spec.Template.Labels[schedulingv1alpha1.NFSpecHashLabel] = updatedSpecHash

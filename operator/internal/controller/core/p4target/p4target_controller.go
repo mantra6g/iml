@@ -33,8 +33,6 @@ import (
 	p4targetutil "loom/internal/controller/core/p4target/util"
 )
 
-const P4TargetLeaseNamespace = "p4target-leases"
-
 // P4TargetReconciler reconciles a P4Target object
 type P4TargetReconciler struct {
 	client.Client
@@ -44,7 +42,7 @@ type P4TargetReconciler struct {
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -73,6 +71,7 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		_ = r.ensureReadinessState(ctx, p4target, readyCondition) // best effort
 		return ctrl.Result{}, err
 	}
+	logger.V(1).Info("obtained lease for P4Target", "lease", lease)
 
 	readyCondition, err := r.calculateReadinessCondition(p4target, lease)
 	if err != nil {
@@ -82,6 +81,8 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		_ = r.ensureReadinessState(ctx, p4target, readyCondition) // best effort
 		return ctrl.Result{}, err
 	}
+	logger.V(1).Info("calculated readiness condition for P4Target",
+		"readyCondition", readyCondition)
 
 	err = r.ensureReadinessState(ctx, p4target, readyCondition)
 	if err != nil {
@@ -120,7 +121,8 @@ func (r *P4TargetReconciler) mapLeaseToRequests(ctx context.Context, obj client.
 
 func (r *P4TargetReconciler) obtainLease(ctx context.Context, p4target *corev1alpha1.P4Target) (*v1.Lease, error) {
 	lease := &v1.Lease{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: p4target.Name, Namespace: P4TargetLeaseNamespace}, lease)
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: p4target.Name, Namespace: corev1alpha1.P4TargetLeaseNamespace}, lease)
 	return lease, err
 }
 
@@ -154,7 +156,7 @@ func (r *P4TargetReconciler) calculateReadinessCondition(target *corev1alpha1.P4
 
 	// If the lease is valid, then we can trust the existing readiness condition on the P4Target, if it exists.
 	// If it doesn't exist, then we should return an unknown readiness condition.
-	readinessCondition := getCondition(target, corev1alpha1.P4_TARGET_CONDITION_READY)
+	readinessCondition := p4targetutil.GetCondition(target.Status.Conditions, corev1alpha1.P4_TARGET_CONDITION_READY)
 	if readinessCondition == nil {
 		return p4targetutil.NewReadyCondition(
 			metav1.ConditionUnknown, "NoReadinessCondition", "No readiness condition found for P4Target",
@@ -163,90 +165,87 @@ func (r *P4TargetReconciler) calculateReadinessCondition(target *corev1alpha1.P4
 	return *readinessCondition, nil
 }
 
-func getCondition(
-	p4target *corev1alpha1.P4Target, conditionType corev1alpha1.P4TargetConditionType,
-) *corev1alpha1.P4TargetCondition {
-	for i := range p4target.Status.Conditions {
-		if p4target.Status.Conditions[i].Type == conditionType {
-			return &p4target.Status.Conditions[i]
-		}
-	}
-	return nil
-}
-
 func (r *P4TargetReconciler) ensureReadinessTaints(p4target *corev1alpha1.P4Target,
-	readinessCondition corev1alpha1.P4TargetCondition) (updated bool) {
+	readinessCondition corev1alpha1.P4TargetCondition) (newTaints []corev1alpha1.Taint, updated bool) {
 	switch readinessCondition.Status {
 	case metav1.ConditionTrue:
 		// If the P4Target is ready, then we should remove the "unreachable" or "not-ready" taints
-		return p4targetutil.RemoveTaints(p4target, []string{
-			corev1alpha1.TaintP4TargetUnreachable,
-			corev1alpha1.TaintP4TargetNotReady,
-		})
+		return p4targetutil.RemoveTaints(p4target.Spec.Taints,
+			corev1alpha1.TaintP4TargetUnreachable, corev1alpha1.TaintP4TargetNotReady)
 	case metav1.ConditionFalse:
 		// If the P4Target is not ready, then we should remove the "unreachable" taint (if any)
 		// and add the "not-ready" taint to indicate that it's not ready
-		removedTaints := p4targetutil.RemoveTaints(p4target, []string{
-			corev1alpha1.TaintP4TargetUnreachable,
+		updatedTaints, removed := p4targetutil.RemoveTaints(p4target.Spec.Taints, corev1alpha1.TaintP4TargetUnreachable)
+		updatedTaints, added := p4targetutil.AddTaints(updatedTaints, corev1alpha1.Taint{
+			Key:       corev1alpha1.TaintP4TargetNotReady,
+			Effect:    corev1alpha1.TaintEffectNoSchedule,
+			TimeAdded: metav1.Now(),
 		})
-		addedTaints := p4targetutil.AddTaints(p4target, []corev1alpha1.Taint{
-			{
-				Key:       corev1alpha1.TaintP4TargetNotReady,
-				Effect:    corev1alpha1.TaintEffectNoSchedule,
-				TimeAdded: metav1.Now(),
-			},
-		})
-		return removedTaints || addedTaints
+		return updatedTaints, removed || added
 	default:
 		// If the P4Target's readiness is unknown, then remove the "not-ready" taint (if any)
 		// and add a "unreachable" taint to indicate that it's unreachable
-		removedTaints := p4targetutil.RemoveTaints(p4target, []string{
-			corev1alpha1.TaintP4TargetNotReady,
+		updatedTaints, removed := p4targetutil.RemoveTaints(p4target.Spec.Taints, corev1alpha1.TaintP4TargetNotReady)
+		updatedTaints, added := p4targetutil.AddTaints(updatedTaints, corev1alpha1.Taint{
+			Key:       corev1alpha1.TaintP4TargetUnreachable,
+			Effect:    corev1alpha1.TaintEffectNoSchedule,
+			TimeAdded: metav1.Now(),
 		})
-		addedTaints := p4targetutil.AddTaints(p4target, []corev1alpha1.Taint{
-			{
-				Key:       corev1alpha1.TaintP4TargetUnreachable,
-				Effect:    corev1alpha1.TaintEffectNoSchedule,
-				TimeAdded: metav1.Now(),
-			},
-		})
-		return removedTaints || addedTaints
+		return updatedTaints, removed || added
 	}
 }
 
 func (r *P4TargetReconciler) ensureReadinessState(ctx context.Context, p4target *corev1alpha1.P4Target,
 	readyCondition corev1alpha1.P4TargetCondition) error {
-	original := p4target.DeepCopy()
-	updatedTaints := r.ensureReadinessTaints(p4target, readyCondition)
-	updatedConditions := r.ensureReadinessConditions(p4target, readyCondition)
+	if p4target.Spec.Taints == nil {
+		p4target.Spec.Taints = []corev1alpha1.Taint{}
+	}
+	if p4target.Status.Conditions == nil {
+		p4target.Status.Conditions = []corev1alpha1.P4TargetCondition{}
+	}
 
+	var err error
+	newTaints, updatedTaints := r.ensureReadinessTaints(p4target, readyCondition)
 	if updatedTaints {
-		// This also updates conditions if they've changed
-		return r.Client.Patch(ctx, p4target, client.MergeFrom(original))
+		original := p4target.DeepCopy()
+		p4target.Spec.Taints = newTaints
+		err = r.Client.Patch(ctx, p4target, client.MergeFrom(original))
 	}
+	if err != nil {
+		return err
+	}
+
+	newConditions, updatedConditions := p4targetutil.AddConditions(p4target.Status.Conditions, readyCondition)
 	if updatedConditions {
-		return r.Client.Status().Patch(ctx, p4target, client.MergeFrom(original))
+		original := p4target.DeepCopy()
+		p4target.Status.Conditions = newConditions
+		err = r.Client.Status().Patch(ctx, p4target, client.MergeFrom(original))
 	}
-	return nil
+	return err
 }
 
-func (r *P4TargetReconciler) ensureReadinessConditions(target *corev1alpha1.P4Target,
-	condition corev1alpha1.P4TargetCondition) (updated bool) {
-	existingReadyCondition := getCondition(target, corev1alpha1.P4_TARGET_CONDITION_READY)
+func (r *P4TargetReconciler) ensureReadinessConditions(preExistingConditions []corev1alpha1.P4TargetCondition,
+	newCond corev1alpha1.P4TargetCondition) (newConditions []corev1alpha1.P4TargetCondition, updated bool) {
+	if preExistingConditions == nil || len(preExistingConditions) == 0 {
+		return []corev1alpha1.P4TargetCondition{newCond}, true
+	}
+	newConditions = make([]corev1alpha1.P4TargetCondition, 0, len(preExistingConditions))
+	copy(newConditions, preExistingConditions)
+
+	existingReadyCondition := p4targetutil.GetCondition(newConditions, corev1alpha1.P4_TARGET_CONDITION_READY)
 	if existingReadyCondition == nil {
-		// If there is no existing readiness condition, then we should add the new condition to the target's status
-		target.Status.Conditions = append(target.Status.Conditions, condition)
-		return true
+		// If there is no existing readiness newCond, then we should add the new newCond to the target's status
+		return append(newConditions, newCond), true
 	}
-	// If there is an existing readiness condition, then we should update it with the new values
+	// If there is an existing readiness newCond, then we should update it with the new values
 	// First check if the status has actually changed, and if it hasn't,
-	// then we shouldn't update the condition to avoid unnecessary updates to the target's status
-	if p4targetutil.ConditionsAreEqual(*existingReadyCondition, condition) {
-		return false
+	// then we shouldn't update the newCond to avoid unnecessary updates to the target's status
+	if p4targetutil.ConditionsAreEqual(*existingReadyCondition, newCond) {
+		return newConditions, false
 	}
-	existingReadyCondition.Status = condition.Status
-	existingReadyCondition.Reason = condition.Reason
-	existingReadyCondition.Message = condition.Message
-	existingReadyCondition.LastTransitionTime = condition.LastTransitionTime
-	return true
+	existingReadyCondition.Status = newCond.Status
+	existingReadyCondition.Reason = newCond.Reason
+	existingReadyCondition.Message = newCond.Message
+	existingReadyCondition.LastTransitionTime = newCond.LastTransitionTime
+	return newConditions, true
 }
