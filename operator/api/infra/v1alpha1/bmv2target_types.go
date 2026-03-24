@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,12 +36,25 @@ const BMV2_CONTROLPLANE_READY_PROBE_PATH = "/healthz"
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type ResourceRequirements struct {
+	// Limits describes the maximum amount of compute resources allowed for the target.
+	// The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+	Limits corev1.ResourceList `json:"limits"`
+
+	// Requests describes the minimum amount of compute resources required for the target.
+	// The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+	Requests corev1.ResourceList `json:"requests"`
+}
+
 // BMv2TargetSpec defines the desired state of BMv2Target
 type BMv2TargetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+
+	// Resources defines the compute resource requirements for the BMv2 target.
+	Resources ResourceRequirements `json:"resources,omitempty"`
 }
 
 type BMv2TargetConditionType string
