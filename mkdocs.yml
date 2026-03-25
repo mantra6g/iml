@@ -47,10 +47,9 @@ nav:
 #    - Network Function development: guides/network-function-development.md
   - Architecture:
     - Overview: architecture/overview.md
-    - P4Target Abstraction: architecture/p4target-abstraction.md
-    - Target Agents: architecture/target-agents.md
-    - Network Function Development Services: architecture/network-function-development-services.md
-    - IML Networking Plugin: architecture/iml-networking-plugin.md
+    - Network function scheduling system: architecture/nf-scheduling-system.md
+    - P4Target addon system: architecture/p4target-addon-system.md
+    - IML's networking plugin: architecture/iml-networking-plugin.md
   - API:
     - Overview: api/overview.md
     - Applications: api/applications.md
