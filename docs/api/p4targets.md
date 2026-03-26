@@ -92,6 +92,14 @@ status:
   new network functions. If set to true, it indicates that new network functions should not be scheduled 
   on this target, but it does not affect already running network functions. This can be used by administrators 
   to mark a target as unschedulable for maintenance or other reasons.
+* `targetIP`: The IP address assigned to the P4 target, which can be used for communication and management purposes.
+  This field is typically updated by the driver when the target is registered and becomes available.
+* `driverIPs`: A list of IP addresses belonging to the driver managing this programmable target. These IPs can be used
+  for retrieving data-plane object information from external pods. These IPs are assigned by the *primary CNI*, when
+  the driver pod is being initialized, and then they are updated to this P4Target's spec by the driver itself. This is
+  a list exclusively for dual-stack configuration purposes.
+* `nfCIDR`: Block of addresses dedicated to NFs running on this P4Target. This field is assigned and set by IML's 
+  operator.
 
 ## Status fields
 * `capacity`: Represents the total resources of the P4 target, such as CPU and memory
