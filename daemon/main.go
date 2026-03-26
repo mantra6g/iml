@@ -2,10 +2,17 @@ package main
 
 import (
 	"context"
-	"iml-daemon/api"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"iml-daemon/apps"
+	"iml-daemon/cni"
 	"iml-daemon/db"
 	"iml-daemon/env"
+	nfinformer "iml-daemon/informers/networkfunctions"
+	scinformer "iml-daemon/informers/servicechains"
 	"iml-daemon/logger"
 	"iml-daemon/mqtt"
 	"iml-daemon/services/events"
@@ -16,20 +23,62 @@ import (
 	"iml-daemon/services/router"
 	"iml-daemon/services/router/dataplane"
 	"iml-daemon/vnfs"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+
+	corev1alpha1 "iml-daemon/api/core/v1alpha1"
+	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
+	schedulingv1alpha1 "iml-daemon/api/scheduling/v1alpha1"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+const (
+	ShutdownTimeout = 10 * time.Second
+)
+
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(infrav1alpha1.AddToScheme(scheme))
+	utilruntime.Must(schedulingv1alpha1.AddToScheme(scheme))
+	// +kubebuilder:scaffold:scheme
+}
+
 func main() {
+	// Start the controller-runtime manager
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:         scheme,
+		LeaderElection: false,
+	})
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to start controller manager: %v", err)
+		panic("Failed to start controller manager: " + err.Error())
+	}
+
 	// Request the NodeManager subnet from IML
 	// This will be used to assign IPs to app containers and VNFs.
 	logger.InfoLogger().Printf("Requesting NodeManager subnet from IML")
-	config, err := env.RequestConfigFromIML()
+	err = env.SetUpNode(mgr.GetClient())
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to request NodeManager subnet: %v", err)
 		panic("Failed to request NodeManager subnet: " + err.Error())
+	}
+
+	// Set up informers
+	err = nfinformer.SetUpInformer(mgr)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to set up network function's informer: %v", err)
+	}
+	err = scinformer.SetUpInformer(mgr)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to set up service chains's informer: %v", err)
 	}
 
 	// Initialize the registry
@@ -161,7 +210,7 @@ func main() {
 	}
 
 	// Initialize the APIs
-	cniApi, err := api.InitializeCNIApi(appFactory, vnfFactory, registry)
+	cniApi, err := cni.InitializeCNIApi(appFactory, vnfFactory, registry)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize CNI API: %v", err)
 		panic("Failed to initialize CNI API: " + err.Error())
@@ -175,7 +224,7 @@ func main() {
 	logger.InfoLogger().Println("Shutting down services...")
 
 	// Graceful shutdown context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
 	defer cancel()
 
 	// Shutdown services gracefully

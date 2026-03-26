@@ -44,3 +44,13 @@ resources:
 - core_application_editor_role.yaml
 - core_application_viewer_role.yaml
 
+# For each CRD, "Admin", "Editor" and "Viewer" roles are scaffolded by
+# default, aiding admins in cluster management. Those roles are
+# not used by the loom-operator itself. You can comment the following lines
+# if you do not want those helpers be installed with your Project.
+- core_networkfunctionconfig_admin_role.yaml
+- core_networkfunctionconfig_editor_role.yaml
+- core_networkfunctionconfig_viewer_role.yaml
+- infra_loomnode_admin_role.yaml
+- infra_loomnode_editor_role.yaml
+- infra_loomnode_viewer_role.yaml

@@ -93,7 +93,13 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-        volumeMounts: []
-      volumes: []
+        volumeMounts:
+          - name: iml-config
+            mountPath: /etc/iml/config
+            readOnly: true
+      volumes:
+        - name: iml-config
+          configMap:
+            name: iml-config
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

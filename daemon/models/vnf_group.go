@@ -21,7 +21,7 @@ type VnfGroup interface {
 type BaseVnfGroup struct {
 	ID        uuid.UUID `gorm:"primaryKey"`
 	VnfID     uuid.UUID
-	Subnet    string // IPNet
+	Subnet    string // IPNets
 	GatewayIP string // IP
 	Bridge    string
 }
@@ -61,11 +61,11 @@ type SimpleVnfGroup struct {
 	BaseVnfGroup `gorm:"embedded"`
 	// ID        uuid.UUID `gorm:"primaryKey"`
 	// VnfID     uuid.UUID
-	SID       string              // IPNet
+	SID       string              // IPNets
 	Instances []SimpleVnfInstance `gorm:"foreignKey:group_id"`
 	Stages    []RouteStage        `gorm:"polymorphic:VnfGroup;"`
-	// Subnet    net.IPNet
-	// GatewayIP net.IP
+	// Subnet    net.IPNets
+	// Gateways net.IP
 	// Bridge    string
 }
 
@@ -93,8 +93,8 @@ type MultiplexedVnfGroup struct {
 	SidAssignments []SidAssignment          `gorm:"foreignKey:VnfMultiplexedGroupID"`
 	Instances      []MultiplexedVnfInstance `gorm:"foreignKey:group_id"`
 	Stages         []RouteStage             `gorm:"polymorphic:VnfGroup;"`
-	// Subnet     net.IPNet
-	// GatewayIP  net.IP
+	// Subnet     net.IPNets
+	// Gateways  net.IP
 	// Bridge     string
 }
 

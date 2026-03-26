@@ -12,7 +12,7 @@ type AppGroup struct {
 	ID        uuid.UUID `gorm:"primaryKey"` // Surrogate key
 	AppID     uuid.UUID
 	Instances []AppInstance `gorm:"foreignKey:group_id"`
-	Subnet    string        // IPNet
+	Subnet    string        // IPNets
 	GatewayIP string        // IP
 	Bridge    string
 }

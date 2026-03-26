@@ -15,3 +15,7 @@ kustomize
 
 # Webdocs generated files
 site/
+
+# Helm generated files
+chart/charts/*.tgz
+Chart.lock

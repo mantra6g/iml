@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iml-config
+  namespace: loom-system
+data:
+  cluster-pool-ipv4-cidr: "10.0.0.0/8"
+  cluster-pool-ipv4-mask-size: "24"
+  cluster-pool-ipv6-cidr: "fd00::/8"
+  cluster-pool-ipv6-mask-size: "64"

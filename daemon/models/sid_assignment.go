@@ -9,7 +9,7 @@ import (
 type SidAssignment struct {
 	VnfMultiplexedGroupID uuid.UUID `gorm:"primaryKey"`
 	VNFSubfunctionID      uint32    `gorm:"primaryKey"`
-	SID                   string    // IPNet
+	SID                   string    // IPNets
 }
 
 func (sa *SidAssignment) GetSID() net.IPNet {

@@ -1,10 +1,29 @@
 package env
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net"
-	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	KubernetesAPICallTimeout = 20 * time.Second
+	RetryTimes               = 5
+	TotalRetryTimeout        = RetryTimes * KubernetesAPICallTimeout
+
+	// Default path to read the configmap from
+	DefaultIMLConfigMapPath = "/etc/iml/config"
 )
 
 const P4_CONTROLLER_ADDR = "iml-p4-controller.loom-system.svc.cluster.local"
@@ -15,73 +34,137 @@ const API_URL = "http://" + IML_ADDR + ":" + API_PORT
 const MQTT_URL = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
 const P4_CONTROLLER_API_URL = "http://" + P4_CONTROLLER_ADDR
 
-type GlobalConfig struct {
-	ClusterCIDR *net.IPNet
-	AppSubnet   *net.IPNet
-	NFSubnet    *net.IPNet
-	SIDSubnet   *net.IPNet
-	TunSubnet   *net.IPNet
-	DecapSID    *net.IPNet
-	NodeID      string
+type IMLConfigMap struct {
+	ClusterPoolIPv4CIDR net.IPNet
+	ClusterPoolIPv6CIDR net.IPNet
 }
 
-type controllerResponse struct {
-	ClusterCIDR net.IPNet `json:"cluster_cidr"`
-	AppSubnet   net.IPNet `json:"app_subnet"`
-	NFSubnet    net.IPNet `json:"nf_subnet"`
-	SIDSubnet   net.IPNet `json:"sid_subnet"`
-	TunSubnet   net.IPNet `json:"tun_subnet"`
+type GlobalConfig struct {
+	IMLConfigMap
+	PodCIDR   *net.IPNet
+	NFSubnet  *net.IPNet
+	SIDSubnet *net.IPNet
+	TunSubnet *net.IPNet
+	DecapSID  *net.IPNet
+	NodeID    string
 }
 
 // Singleton instance of GlobalConfig
 var globalConfig *GlobalConfig
-
-func (e *GlobalConfig) getSubnetFromIML() error {
-	resp, err := http.Get(API_URL + "/api/v1/nodemanager/subnet")
-	if err != nil {
-		return fmt.Errorf("failed contacting IML: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("IML returned status code %d", resp.StatusCode)
-	}
-
-	var subnetResponse controllerResponse
-	if err := json.NewDecoder(resp.Body).Decode(&subnetResponse); err != nil {
-		return fmt.Errorf("failed to decode IML response: %w", err)
-	}
-
-	e.AppSubnet = &subnetResponse.AppSubnet
-	e.NFSubnet = &subnetResponse.NFSubnet
-	e.SIDSubnet = &subnetResponse.SIDSubnet
-	e.TunSubnet = &subnetResponse.TunSubnet
-	e.ClusterCIDR = &subnetResponse.ClusterCIDR
-	return nil
-}
-
-// RequestConfigFromIML requests the NodeManager subnet from IML
-func RequestConfigFromIML() (*GlobalConfig, error) {
-	env := &GlobalConfig{}
-
-	nodeID, err := K8sGetNodeID()
-	if err != nil {
-		return nil, fmt.Errorf("error getting node ID: %w", err)
-	}
-	env.NodeID = nodeID
-
-	err = env.getSubnetFromIML()
-	if err != nil {
-		return nil, fmt.Errorf("error getting subnet from IML: %w", err)
-	}
-
-	globalConfig = env
-	return env, nil
-}
 
 func Config() (*GlobalConfig, error) {
 	if globalConfig != nil {
 		return globalConfig, nil
 	}
 	return nil, fmt.Errorf("global config not initialized")
+}
+
+func SetUpNode(k8sClient client.Client) error {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("error getting hostname: %w", err)
+	}
+	if hostname == "" {
+		return fmt.Errorf("hostname is empty")
+	}
+	configMap, err := readIMLConfigMap()
+	if err != nil {
+		return fmt.Errorf("error reading configmap: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), KubernetesAPICallTimeout)
+	defer cancel()
+
+	loomNode := &infrav1alpha1.LoomNode{}
+	err = k8sClient.Get(ctx, client.ObjectKey{Name: hostname}, loomNode)
+	// Discard every other error except NotFound
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("error getting loomNode: %w", err)
+	}
+	// If the error is NotFound, then we need to create the LoomNode resource
+	if errors.IsNotFound(err) {
+		loomNode, err = createLoomNode(ctx, k8sClient, hostname)
+		if err != nil {
+			return fmt.Errorf("error creating loomNode: %w", err)
+		}
+	}
+	// If the loomNode exists but no CIDRs were assigned yet, wait until they are assigned
+	if len(loomNode.Spec.PodCIDRs) == 0 {
+		err = waitForCIDRs(ctx, k8sClient, hostname)
+		if err != nil {
+			return fmt.Errorf("error waiting for CIDRs to be created: %w", err)
+		}
+	}
+	globalConfig = &GlobalConfig{
+		IMLConfigMap: *configMap,
+		PodCIDR:      loomNode.Spec.PodCIDRs,
+		NFSubnet:     loomNode.Spec.P4TargetCIDRs,
+		SIDSubnet:    loomNode.Spec.SidCIDRs,
+		TunSubnet:    loomNode.Spec.TunnelCIDRs,
+		NodeID:       string(loomNode.UID),
+	}
+}
+
+func readIMLConfigMap() (*IMLConfigMap, error) {
+	get := func(key string) (string, error) {
+		data, err := os.ReadFile(filepath.Join(DefaultIMLConfigMapPath, key))
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+
+	ipv4CidrStr, err := get("cluster-pool-ipv4-cidr")
+	if err != nil {
+		return nil, err
+	}
+	_, ipv4Cidr, err := net.ParseCIDR(ipv4CidrStr)
+	if err != nil {
+		return nil, err
+	}
+
+	ipv6CidrStr, err := get("cluster-pool-ipv6-cidr")
+	if err != nil {
+		return nil, err
+	}
+	_, ipv6Cidr, err := net.ParseCIDR(ipv6CidrStr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &IMLConfigMap{
+		ClusterPoolIPv4CIDR: *ipv4Cidr,
+		ClusterPoolIPv6CIDR: *ipv6Cidr,
+	}, nil
+}
+
+func createLoomNode(ctx context.Context, k8sClient client.Client, nodeName string) (*infrav1alpha1.LoomNode, error) {
+	loomNode := &infrav1alpha1.LoomNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nodeName,
+		},
+		Spec: infrav1alpha1.LoomNodeSpec{
+			PodCIDRs:      make([]string, 0),
+			SidCIDRs:      make([]string, 0),
+			P4TargetCIDRs: make([]string, 0),
+			TunnelCIDRs:   make([]string, 0),
+		},
+	}
+	err := k8sClient.Create(ctx, loomNode)
+	if err != nil {
+		return nil, err
+	}
+	return loomNode, nil
+}
+
+func waitForCIDRs(ctx context.Context, k8sClient client.Client, nodeName string) error {
+	subCtx, cancel := context.WithTimeout(ctx, TotalRetryTimeout)
+	defer cancel()
+	return wait.PollUntilContextCancel(subCtx, KubernetesAPICallTimeout, true, func(ctx context.Context) (bool, error) {
+		loomNode := &infrav1alpha1.LoomNode{}
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: nodeName}, loomNode)
+		if errors.IsNotFound(err) {
+			return false, err // Resource was deleted, stop retrying and return error
+		}
+		return true, nil // stop retrying
+	})
 }

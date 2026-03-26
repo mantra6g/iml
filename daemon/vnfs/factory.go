@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+
 	"iml-daemon/db"
 	"iml-daemon/env"
 	"iml-daemon/logger"
@@ -11,8 +14,6 @@ import (
 	"iml-daemon/services/events"
 	"iml-daemon/services/iml"
 	"iml-daemon/services/router/dataplane"
-	"net"
-	"net/http"
 
 	"github.com/google/uuid"
 )
@@ -64,7 +65,7 @@ func (f *InstanceFactoryImpl) NewLocalInstance(req *RegistrationRequest) (*Insta
 		simpleInstance, simpleGroup, err := f.newLocalSimpleInstance(req.VnfID, vnf, req.ContainerID)
 		response.IPNet = simpleInstance.GetIP()
 		response.SIDs = []net.IPNet{simpleGroup.GetSID()}
-		response.ClusterCIDR = *globalConfig.ClusterCIDR
+		response.ClusterCIDR = *globalConfig.ClusterPoolIPv4CIDR
 		response.GatewayIP = simpleGroup.GetGatewayIP()
 		response.BridgeName = simpleGroup.Bridge
 		response.IfaceName = simpleInstance.IfaceName
@@ -72,7 +73,7 @@ func (f *InstanceFactoryImpl) NewLocalInstance(req *RegistrationRequest) (*Insta
 	case models.NetworkFunctionTypeMultiplexed:
 		multiInstance, multiGroup, err := f.newLocalMultiplexedInstance(req.VnfID, vnf, req.ContainerID)
 		response.IPNet = multiInstance.GetIP()
-		response.ClusterCIDR = *globalConfig.ClusterCIDR
+		response.ClusterCIDR = *globalConfig.ClusterPoolIPv4CIDR
 		response.GatewayIP = multiGroup.GetGatewayIP()
 		response.BridgeName = multiGroup.Bridge
 		response.IfaceName = multiInstance.IfaceName

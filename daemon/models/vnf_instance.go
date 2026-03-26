@@ -23,7 +23,7 @@ type VnfInstance interface {
 type BaseVnfInstance struct {
 	ID          uuid.UUID `gorm:"primaryKey"`
 	GroupID     uuid.UUID
-	IP          string // IPNet
+	IP          string // IPNets
 	ContainerID string
 	IfaceName   string
 }
@@ -64,7 +64,7 @@ type SimpleVnfInstance struct {
 	BaseVnfInstance `gorm:"embedded"`
 	// ID          uuid.UUID `gorm:"primaryKey"`
 	// GroupID     uuid.UUID
-	// IP          net.IPNet // in "ip"/"prefix" format
+	// IP          net.IPNets // in "ip"/"prefix" format
 	// ContainerID string
 	// IfaceName   string // e.g., "nfr-aabbcc"
 }
@@ -83,7 +83,7 @@ type MultiplexedVnfInstance struct {
 	// MultiplexedGroupID uuid.UUID
 	// ContainerID        string
 	// IfaceName          string    // e.g., "nfr-aabbcc"
-	// IP                 net.IPNet // in "IP/prefix" format
+	// IP                 net.IPNets // in "IP/prefix" format
 }
 
 func (mi *MultiplexedVnfInstance) Save(dbClient *gorm.DB) error {

@@ -63,7 +63,7 @@ func (f *InstanceFactoryImpl) NewLocalInstance(req *RegistrationRequest) (*Insta
 	}
 	response.IPNet = appInstance.GetIP()
 	response.IfaceName = appInstance.IfaceName
-	response.ClusterCIDR = *globalConfig.ClusterCIDR
+	response.ClusterCIDR = *globalConfig.ClusterPoolIPv4CIDR
 	response.GatewayIP = appGroup.GetGatewayIP()
 	response.BridgeName = appGroup.Bridge
 

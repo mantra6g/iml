@@ -40,6 +40,7 @@ rules:
   - core.loom.io
   resources:
   - applications
+  - networkfunctionconfigs
   - networkfunctions
   - p4targets
   - servicechains
@@ -55,6 +56,7 @@ rules:
   - core.loom.io
   resources:
   - applications/finalizers
+  - networkfunctionconfigs/finalizers
   - networkfunctions/finalizers
   - p4targets/finalizers
   - servicechains/finalizers
@@ -64,6 +66,7 @@ rules:
   - core.loom.io
   resources:
   - applications/status
+  - networkfunctionconfigs/status
   - networkfunctions/status
   - p4targets/status
   - servicechains/status
@@ -75,6 +78,7 @@ rules:
   - infra.loom.io
   resources:
   - bmv2targets
+  - loomnodes
   verbs:
   - create
   - delete
@@ -87,12 +91,14 @@ rules:
   - infra.loom.io
   resources:
   - bmv2targets/finalizers
+  - loomnodes/finalizers
   verbs:
   - update
 - apiGroups:
   - infra.loom.io
   resources:
   - bmv2targets/status
+  - loomnodes/status
   verbs:
   - get
   - patch

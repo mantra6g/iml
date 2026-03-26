@@ -12,7 +12,7 @@ type AppInstance struct {
 	GroupID     uuid.UUID
 	ContainerID string
 	IfaceName   string // e.g., "nfr-aabbcc"
-	IP          string // IPNet
+	IP          string // IPNets
 }
 
 func (ai AppInstance) GetIP() net.IPNet {

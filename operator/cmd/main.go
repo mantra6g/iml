@@ -19,9 +19,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	webhookschedulingv1alpha1 "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 	"os"
 	"path/filepath"
+
+	webhookschedulingv1alpha1 "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 
 	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
 
@@ -45,12 +46,14 @@ import (
 	"loom/internal/controller/core/p4target"
 	"loom/internal/controller/core/servicechain"
 	"loom/internal/controller/infra/bmv2target"
+	"loom/internal/controller/infra/loomnode"
 	"loom/internal/controller/scheduling/networkfunctiondeployment"
 	"loom/internal/controller/scheduling/networkfunctionreplicaset"
 
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	corecontroller "loom/internal/controller/core"
 	"loom/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
@@ -280,6 +283,20 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "NetworkFunctionDeployment")
 			os.Exit(1)
 		}
+	}
+	if err := (&loomnode.LoomNodeReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LoomNode")
+		os.Exit(1)
+	}
+	if err := (&corecontroller.NetworkFunctionConfigReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "NetworkFunctionConfig")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
