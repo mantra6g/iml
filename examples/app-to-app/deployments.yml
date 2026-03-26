@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "iml-cni", 
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "face-feed"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            { 
+              "name": "iml-cni",
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "dead-beef"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: mongodb
+          image: mongo:latest
+          ports:
+            - containerPort: 27017

@@ -1,7 +1,9 @@
+from http import HTTPStatus
 import os
+import uuid
 from ruamel.yaml import YAML
-from ruamel.yaml.scalarstring import SingleQuotedScalarString,DoubleQuotedScalarString
-import json
+from ruamel.yaml.scalarstring import SingleQuotedScalarString
+from ruamel.yaml.parser import ParserError
 import random
 from subprocess import run
 
@@ -13,6 +15,9 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+app_registry = []
+ns_registry = []
+
 interpod_mode = 'br'
 #interpod_mode = 'memif'
 nf_memif_setup = False
@@ -21,6 +26,8 @@ DEFAULT_CHART = './graph-chart'
 SERVICES_FOLDER = "services"
 DEPLOY_FOLDER = "deploys"
 UPLOAD_FOLDER = 'files'
+IML_SUBNET = '10.100'
+IML_SUBNET_PREFIX = '/16'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 if not os.path.exists(UPLOAD_FOLDER):
@@ -62,7 +69,7 @@ given_ips = []
 def generate_ip():
   global given_ips
   while True:
-    next_ip = "10." + ".".join([f"{random.randint(0, 255)}" for x in range(3)])
+    next_ip = IML_SUBNET + "." + ".".join([f"{random.randint(0, 255)}" for x in range(2)])
     if next_ip not in given_ips:
       break
   given_ips.append(next_ip)
@@ -202,10 +209,28 @@ def generate_values(nsd, path):
     data['services'] = {}
     data['interfaces'] = {}
     for i in nsd['lnsd']['ns']['application-functions']:
+      found_app = None
+      for af in app_registry:
+        if af['id'] == i['af-id']:
+          found_app = af
+          break
+      if found_app is None:
+        print(f"Application function {i['af-id']} not found in app registry.")
+        return
+
       s = {}
       s['name'] = i['af-id']
-      s['node'] = i['af-node']
+      s['node'] = found_app['node']
       data['services'][i['af-instance-id']] = s
+
+    # services:
+    #   pkt-src:
+    #     name: trex
+    #     node: epyc1
+    #   pkt-dst:
+    #     name: trex
+    #     node: epyc1
+
 
     for g in nsd['lnsd']['ns']['forwarding_graphs']:
       for l in g['links']:
@@ -218,17 +243,48 @@ def generate_values(nsd, path):
         srcnf = data['services'][srcid]
         dstnf = data['services'][dstid]
 
+        # Creates interfaces (ONLY, so no IP configs) for the src and dst containers
         addif(data['interfaces'], srcid, interpod_mode, srcifindex)
         addif(data['interfaces'], dstid, interpod_mode, dstifindex)
         srcintf = f'{srcid}-{interpod_mode}-{srcifindex}'
         dstintf = f'{dstid}-{interpod_mode}-{dstifindex}'
+
+        # interfaces:
+        #   pkt-src-br-1:
+        #     type: br
+        #   pkt-src-br-2:
+        #     type: br
+
         addtonf(srcnf, srcintf, srcintf, generate_mac(), generate_ip(), getnextmemifid(srcid) if interpod_mode == 'memif' else None)
         addtonf(dstnf, dstintf, dstintf, generate_mac(), generate_ip(), getnextmemifid(dstid) if interpod_mode == 'memif' else None)
+
+        # services:
+        #   pkt-src:
+        #     name: trex
+        #     node: epyc1
+        #     interfaces:
+        #     - interface: pkt-src-br-1
+        #       name: pkt-src-br-1
+        #       mac: '02:68:0f:d0:01:aa'
+        #     - interface: pkt-src-br-2
+        #       name: pkt-src-br-2
+        #       mac: '02:22:c4:d7:ac:84'
+        #     initcmd: 'ip addr add 10.196.188.182/32 dev pkt-src-br-1;ip addr add 10.14.80.122/32 dev pkt-src-br-2;arp -i pkt-src-br-1 -s 10.14.80.122 02:22:c4:d7:ac:84;ip route add 10.14.80.122/32 dev pkt-src-br-1;arp -i pkt-src-br-2 -s 10.196.188.182 02:68:0f:d0:01:aa;ip route add 10.196.188.182/32 dev pkt-src-br-2;'
+        #     initimage: busybox:1.36
 
         addnfr(data['services'], srcnf['node'])
         addnfr(data['services'], dstnf['node'])
         nfrsrc = data['services'][f"nfr-{srcnf['node']}"]
         nfrdst = data['services'][f"nfr-{dstnf['node']}"]
+
+        # services:
+        #  nfr-epyc1:
+        #    name: nfrouter
+        #    node: epyc1
+        #    files:
+        #      ipv6rules.cfg: 'R::/128 0'
+        #      ipv4rules.cfg: ""
+
         if interpod_mode == 'memif':
           srcnf['hostpath'] = {'name': 'shared-dir', 'hostpath': f"/run/vpp/{srcid}", 'path': "/var/lib/cni/usrspcni"}
           dstnf['hostpath'] = {'name': 'shared-dir', 'hostpath': f"/run/vpp/{dstid}", 'path': "/var/lib/cni/usrspcni"}
@@ -238,13 +294,31 @@ def generate_values(nsd, path):
         addtonf(nfrsrc, srcintf, srcintf)
         addtonf(nfrdst, dstintf, dstintf)
 
+        # services:
+        #  nfr-epyc1:
+        #    name: nfrouter
+        #    node: epyc1
+        #    files:
+        #      ipv6rules.cfg: 'R::/128 0'
+        #      ipv4rules.cfg: ""
+        #    interfaces:
+        #    - interface: pkt-src-br-1
+        #      name: pkt-src-br-1
+        #    - interface: pkt-src-br-2
+        #      name: pkt-src-br-2
+
         if srcnf['node'] != dstnf['node']:
           addif(data['interfaces'], srcnf['node'], "sriov")
           addif(data['interfaces'], dstnf['node'], "sriov")
           addtonf(nfrsrc, f"{srcnf['node']}-sriov-1", f"{srcnf['node']}-{dstnf['node']}-1")
 
         addroutetoinit(srcnf, dstnf, dstintf, srcintf)
+
+        
+
         addroutetonfr(nfrsrc, nfrdst, srcnf['node'], dstnf, dstintf)
+
+
 
     for n in data['services'].values():
       if n['name'] == 'nfrouter':
@@ -258,41 +332,265 @@ def generate_values(nsd, path):
     yaml.default_flow_style = False
     yaml.dump(data, f)
 
-@app.route("/iml/yaml/deploy/<id>", methods=["DELETE"])
-def deleteDeployment(id):
-  result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'deploy-{id}'], capture_output = True, text = True)
+def get_app(app_id):
+  for af in app_registry:
+    if af['id'] == app_id:
+      return af
+  return None
+
+def get_app_by_name(app_name):
+  global app_registry
+  for af in app_registry:
+    if af['instance-id'] == app_name:
+      return af
+  return None
+
+def generate_values2(ns, path):
+  values = {}
+  values["nfrouters"] = []
+
+  for graph in ns['forwarding_graphs']:
+    # Get the source and destination application functions from the graph
+    # The source and destination are in the format "app_name:intf_number"
+    # e.g., "app1:1", "app1:2", "app2:1", etc.
+    src_app_name, src_intf_number = graph['source'].split(':')
+    dst_app_name, dst_intf_number = graph['target'].split(':')
+
+    # Find the source and destination application functions in the app registry
+    src_app = get_app_by_name(src_app_name)
+    dst_app = get_app_by_name(dst_app_name)
+    
+    if not src_app:
+      print(f"Source application function {src_app_name} not found in app registry.")
+      return
+    if not dst_app:
+      print(f"Target application function {dst_app_name} not found in app registry.")
+      return
+
+    nfrouter_data = {}
+
+    # Generate a "unique" ID for the nfrouter. 
+    # TODO: check if this ID is already used in the registry
+    nfrouter_id = random.randint(0x0000, 0xFFFF)
+
+    # Assign a name to the nfrouter like "nfrouter-89ab"
+    nfrouter_data["name"] = f"nfrouter-{nfrouter_id:04x}"
+
+    # Assign the node where the nfrouter will be deployed.
+    # For now, it is assumed that all application functions are deployed on the same node.
+    # As a result, the node the nfrouter will be deployed will be on the first node 
+    # of the first application function.
+    # In a real scenario, this should be calculated based on the forwarding graph.
+    nfrouter_data["node"] = src_app['node']
+
+    # Generate the interfaces for the nfrouter from the 
+    # application functions in the forwarding graph
+    nfrouter_data["interfaces"] = []
+    for app in [src_app, dst_app]:
+      # Get the interface name and MAC address from the application function
+      interface_data = {
+        'name': app['peer_name'],
+        'peer_mac': SingleQuotedScalarString(app['mac']), # SingleQuotedScalarString needed because yaml does not like colons in MAC addresses
+        'peer_ip': app['ip'][:-3], # Remove the last 3 characters (the /16 part)
+      }
+      nfrouter_data["interfaces"].append(interface_data)
+    
+    # Add the nfrouter data to the values dictionary
+    # This will be used to generate the values.yaml file for the Helm chart
+    values["nfrouters"].append(nfrouter_data)
+
+  with open(path, 'w') as f:
+    yaml=YAML()
+    yaml.width = 4096
+    yaml.default_flow_style = False
+    yaml.dump(values, f)
+
+def register_app_instance(app_data):
+  app_instance = {
+    'id': app_data['af-id'],
+    'instance-id': app_data['af-instance-id'],
+    'af-version': app_data['af-version'],
+    'node': None,  # This will be updated later
+    'ip': None,  # This will be generated later
+    'mac': None,  # This will be generated later
+  }
+  app_registry.append(app_instance)
+
+def update_app_instance(app_id, host_id):
+  app.logger.info(f"Updating app instance {app_id} on host {host_id}")
+  global app_registry
+  ip = None; src_mac = None; gateway_mac = None; peer_name = None
+
+  for af in app_registry:
+    if af['id'] == app_id:
+      af['node'] = host_id
+      # Generate a new IP and MAC address for the app instance
+      ip = generate_ip() + IML_SUBNET_PREFIX
+      src_mac = generate_mac()
+      gateway_mac = generate_mac()
+      peer_name = f"nfr-{hex(random.randint(0x0000, 0xFFFF))[2:]}"
+      # Update the app instance with the new IP and MAC
+      af['ip'] = ip
+      af['mac'] = src_mac
+      af['gateway_mac'] = gateway_mac
+      af['peer_name'] = peer_name
+
+  notify_app_instance_update()
+  return ip, src_mac, gateway_mac, peer_name
+
+def notify_app_instance_update():
+  for ns in ns_registry:
+    required_app_ids = ns['required_app_instances']
+    missing_apps = len(required_app_ids)
+    for af in app_registry:
+      if af['id'] in required_app_ids and af['node'] is not None:
+        missing_apps -= 1
+    app.logger.info(f"Checking deployment for network service {ns['id']}: {missing_apps} missing apps")
+    if missing_apps == 0:
+      # All required apps are available, trigger NS deployment
+      deploy_ns(ns)
+
+def deploy_ns(ns):
+  deploy_id = ns['id']
+  values_path = os.path.join(DEPLOY_FOLDER, f'values-{deploy_id}.yaml')
+  generate_values2(ns, values_path)
+
+  result = run([
+    'helm', 'install', 
+    '--namespace', DEFAULT_NAMESPACE, '--create-namespace', 
+    '-f', values_path, 
+    f'nfrouter-{deploy_id}', 
+    DEFAULT_CHART
+  ], capture_output = True, text = True)
 
   if result.stderr:
-    return jsonify({"response": result.stderr}), 500
-  else:
-    return jsonify({"response": f"Succesfull deletion of the deployment with id: {id}"}), 200
+    app.logger.error(f"Failed to deploy: {result.stderr}")
+    return
+  
+  set_ns_deployed(deploy_id)
+  app.logger.info(f"Deployed: network service {deploy_id}")
+
+def set_ns_deployed(ns_id):
+  global ns_registry
+  for ns in ns_registry:
+    if ns['id'] == ns_id:
+      ns['deployed'] = True
+      return
+  print(f"Network service {ns_id} not found in registry.")
+
+@app.route("/iml/yaml/deploy/<id>", methods=["DELETE"])
+def deleteDeployment(id):
+  ns = find_ns_by_id(id)
+  if ns is None: return jsonify({
+    "response": "network service does not exist"
+  }), HTTPStatus.NO_CONTENT
+
+  if ns['deployed']:
+    result = run(['helm', 'uninstall', '--namespace', DEFAULT_NAMESPACE, f'nfrouter-{id}'], capture_output = True, text = True)
+
+    if result.stderr: return jsonify({
+      "response": result.stderr
+    }), HTTPStatus.INTERNAL_SERVER_ERROR
+  
+  remove_ns(id)
+
+  return jsonify({
+    "response": f"Succesful deletion of the deployment with id: {id}"
+  }), HTTPStatus.NO_CONTENT
 
 @app.route("/iml/yaml/deploy", methods=["POST"])
 def deploy_yaml():
-  path = os.path.join(app.config['UPLOAD_FOLDER'], "uploaded.yml")
   file = request.files['file']
-  file.save(path)
 
-  with open(path, 'r') as f:
-    try:
-      yaml=YAML(typ='safe')
-      yaml_data = yaml.load(f)
+  try:
+    yaml=YAML(typ='safe')
+    yaml_data = yaml.load(file.stream)
+  except ParserError:
+    return jsonify({
+      "message": "Failed to parse yaml file"
+    }), HTTPStatus.BAD_REQUEST
 
-      deploy_id = get_next_deploy_id()
-      values_path = os.path.join(DEPLOY_FOLDER, f'values-{deploy_id}.yaml')
-      generate_values(yaml_data, values_path)
+  # found_ns = find_ns_by_id(yaml_data['lnsd']['ns']['id'])
+  # if found_ns is not None: return jsonify({
+  #   "message": "a network service with that ID already exists"
+  # }), HTTPStatus.CONFLICT
 
-      result = run(['helm', 'install', '--namespace', DEFAULT_NAMESPACE, '--create-namespace', '--post-renderer', './kustomize.sh', '-f', values_path, f'deploy-{deploy_id}', DEFAULT_CHART], capture_output = True, text = True)
+  ns = {
+    'id': uuid.uuid4().hex,
+    'forwarding_graphs': yaml_data['lnsd']['ns']['forwarding_graphs'],
+    'required_app_instances': [],
+    'deployed': False,
+  }
 
-      if result.stderr:
-        response = (f"Failed to deploy: {result.stderr}", 500)
-      else:
-        response = (f"Deployed: {yaml_data['lnsd']['ns']['name']} as id {deploy_id}", 200)
+  for af in yaml_data['lnsd']['ns']['application-functions']:
+    register_app_instance(af)
+    ns['required_app_instances'].append(af['af-id'])
 
-    except yaml.parser.ParserError:
-      response = ("Failed to parse", 500)
+  ns_registry.append(ns)
+  
+  return jsonify(ns), HTTPStatus.OK
 
-  return jsonify({"response": response[0]}), response[1]
+@app.route("/iml/cni/register", methods=["POST"])
+def handle_cni_register():
+  data = request.get_json()
+  # Validate the received data
+  if 'application_id' not in data or 'host_id' not in data:
+    return jsonify({"error": "Invalid request data"}), HTTPStatus.BAD_REQUEST
+
+  # Extract app information from the received data
+  application_id = data.get("application_id")
+  host_id = data.get("host_id")
+
+  # Register app and obtain its IP and MAC address
+  ip, mac, gateway_mac, peer_name = update_app_instance(application_id, host_id)
+  if ip is None or mac is None: return jsonify({
+    "error": "Failed to update app: instance not found"
+  }), HTTPStatus.NOT_FOUND
+
+  # Return the app information in the response
+  return jsonify({
+    "ip": ip, 
+    "mac_address": mac,
+    "peer_name": peer_name,
+    "route": {
+      "destination": IML_SUBNET + ".0.0" + IML_SUBNET_PREFIX,
+      "gateway_ip": IML_SUBNET + ".0.1",
+      "gateway_mac": gateway_mac
+    }
+  }), HTTPStatus.OK
+
+def find_ns_by_id(ns_id):
+  global ns_registry
+  for ns in ns_registry:
+    if ns['id'] == ns_id: return ns
+  return None
+
+def remove_app_instance(app_id):
+  global app_registry
+  app_registry = [af for af in app_registry if af['id'] != app_id]
+
+def remove_ns(ns_id):
+  global ns_registry
+  ns_registry = [ns for ns in ns_registry if ns['id'] != ns_id]
+
+@app.route("/iml/cni/teardown", methods=["POST"])
+def handle_cni_teardown():
+  data = request.get_json()
+  # Validate the received data
+  if 'application_id' not in data: return jsonify({
+    "error": "Invalid request data"
+  }), HTTPStatus.BAD_REQUEST
+
+  # Extract app information from the received data
+  application_id = data.get("application_id")
+
+  remove_app_instance(application_id)
+
+  # Return the app information in the response
+  return jsonify({
+    "message": "Application removed successfully"
+  }), HTTPStatus.NO_CONTENT
+
 
 if __name__ == "__main__":
-  app.run(host='0.0.0.0', debug=True)
+  app.run(host='0.0.0.0', debug=False)

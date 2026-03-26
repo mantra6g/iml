@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "daemon.fullname" . }}
+  namespace: {{ include "daemon.namespaceName" . }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "daemon.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "daemon.fullname" . }}
+    spec:
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      serviceAccountName: {{ include "daemon.resourceName" (dict "context" . "suffix" "sa") }}
+      initContainers:
+        - name: {{ .Values.cniInstaller.containerName }}
+          image: {{ printf "%s:%s" .Values.cniInstaller.image .Values.cniInstaller.tag }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /app/{{.Values.cniConfig.type}} /host/opt/cni/bin/
+              chmod +x /host/opt/cni/bin/{{.Values.cniConfig.type}}
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+      containers:
+        - name: {{ include "daemon.fullname" . }}
+          image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - ./iml-daemon
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+      volumes:
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin

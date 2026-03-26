@@ -1,11 +1,17 @@
 all:
   hosts:
     node1:
-      vf_iface: enp1s0f0np0
-      vf_num: 4
+      ansible_host: <CHANGE>
+      ansible_user: <CHANGE>
+      vf_iface: <CHANGE>
+      sriov_vendor: '8086' # Intel. MUST CHANGE if you use other vendor. Use "sudo lspci -nn"
+      sriov_dev: '1521' # I350. MUST CHANGE if you use other device. Use "sudo lspci -nn"
     node2:
-      vf_iface: enp1s0f0np0
-      vf_num: 4
+      ansible_host: <CHANGE>
+      ansible_user: <CHANGE>
+      vf_iface: <CHANGE>
+      sriov_vendor: '8086' # Intel. MUST CHANGE if you use other vendor. Use "sudo lspci -nn"
+      sriov_dev: '1563' # 10G X550T. MUST CHANGE if you use other device. Use "sudo lspci -nn"
   children:
     k8s_controls:
       hosts:

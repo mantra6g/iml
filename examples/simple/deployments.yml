@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-client
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-client
+  template:
+    metadata:
+      labels:
+        app: web-client
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            { 
+              "name": "iml-cni",
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "dead-beef"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: curl
+          image: alpine:latest
+          command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "iml-cni", 
+              "cni-args": {
+                "app_type": "application_function",
+                "app_id": "face-feed"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: oai-01
+      containers:
+        - name: nginx
+          image: alpine:latest
+          ports:
+            - containerPort: 80

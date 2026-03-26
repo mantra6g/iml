@@ -1,0 +1,28 @@
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx
+  namespace: default
+spec: 
+  override_id: face-feed
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: mongodb
+  namespace: default
+spec: 
+  override_id: dead-beef
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: nginx-mongodb
+  namespace: default
+spec:
+  from:
+    name: nginx
+    namespace: default
+  to:
+    name: mongodb
+    namespace: default

@@ -1,0 +1,25 @@
+apiVersion: v2
+name: iml
+description: Umbrella Helm chart that deploys the operator, daemon and cni charts
+type: application
+
+version: 0.0.1
+appVersion: "0.0.1"
+
+keywords:
+  - iml
+  - umbrella
+
+dependencies:
+  - name: loom-operator
+    version: 0.0.1
+    repository: "file://../operator/dist/chart"
+    condition: operator.enabled
+  - name: loom-daemon
+    version: 0.0.1
+    repository: "file://../go-daemon/dist/chart"
+    condition: daemon.enabled
+  - name: loom-cni
+    version: 0.0.1
+    repository: "file://../cni/dist/chart"
+    condition: cni.enabled
