@@ -106,6 +106,37 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of BMv2Target
+            properties:
+              resources:
+                description: Resources defines the compute resource requirements for
+                  the BMv2 target.
+                properties:
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed for the target.
+                      The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required for the target.
+                      The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+                    type: object
+                required:
+                - limits
+                - requests
+                type: object
             type: object
           status:
             description: status defines the observed state of BMv2Target
@@ -194,7 +225,7 @@ spec:
                 description: Replicas is the number of desired replicas of the network
                   function
                 format: int32
-                minimum: 1
+                minimum: 0
                 type: integer
               selector:
                 description: |-
@@ -291,10 +322,11 @@ spec:
                   will be created
                 properties:
                   metadata:
+                    description: Standard object's metadata.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   spec:
-                    description: NetworkFunctionSpec defines the desired state of
-                      NetworkFunction
+                    description: Specification of the desired behavior of the pod.
                     properties:
                       controlPlane:
                         description: |-
@@ -1502,7 +1534,6 @@ spec:
                         type: object
                     required:
                     - p4File
-                    - targetselector
                     type: object
                 type: object
             required:
@@ -1694,10 +1725,11 @@ spec:
                 description: Template describes the NetworkFunction that will be created
                 properties:
                   metadata:
+                    description: Standard object's metadata.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   spec:
-                    description: NetworkFunctionSpec defines the desired state of
-                      NetworkFunction
+                    description: Specification of the desired behavior of the pod.
                     properties:
                       controlPlane:
                         description: |-
@@ -2905,7 +2937,6 @@ spec:
                         type: object
                     required:
                     - p4File
-                    - targetselector
                     type: object
                 type: object
             required:
@@ -4216,7 +4247,6 @@ spec:
                 type: object
             required:
             - p4File
-            - targetselector
             type: object
           status:
             description: status defines the observed state of NetworkFunction
@@ -4280,14 +4310,7 @@ spec:
     singular: p4target
   scope: Cluster
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.ready
-      name: READY
-      type: string
-    - jsonPath: .metadata.creationTimestamp
-      name: AGE
-      type: date
-    name: v1alpha1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API
@@ -4336,8 +4359,6 @@ spec:
                 description: Unschedulable indicates whether the P4 target is unschedulable
                   for new network functions.
                 type: boolean
-            required:
-            - taints
             type: object
           status:
             description: status defines the observed state of P4Target
@@ -5326,6 +5347,23 @@ spec:
     app.kubernetes.io/name: loom-operator
     control-plane: controller-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-webhook-service
+  namespace: loom-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/name: loom-operator
+    control-plane: controller-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5354,6 +5392,7 @@ spec:
         - --metrics-bind-address=:8443
         - --leader-elect
         - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
         image: tomasagata/loom-operator:latest
@@ -5364,7 +5403,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
-        ports: []
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -5384,11 +5426,118 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: true
-        volumeMounts: []
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: loom-controller-manager
       terminationGracePeriodSeconds: 10
-      volumes: []
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-metrics-certs
+  namespace: loom-system
+spec:
+  dnsNames:
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: loom-selfsigned-issuer
+  secretName: metrics-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-serving-cert
+  namespace: loom-system
+spec:
+  dnsNames:
+  - loom-webhook-service.loom-system.svc
+  - loom-webhook-service.loom-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: loom-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-selfsigned-issuer
+  namespace: loom-system
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: loom-system/loom-serving-cert
+  name: loom-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: loom-webhook-service
+      namespace: loom-system
+      path: /mutate-scheduling-loom-io-v1alpha1-networkfunctiondeployment
+  failurePolicy: Fail
+  name: mnetworkfunctiondeployment-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - scheduling.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctiondeployments
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: loom-system/loom-serving-cert
+  name: loom-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: loom-webhook-service
+      namespace: loom-system
+      path: /validate-scheduling-loom-io-v1alpha1-networkfunctiondeployment
+  failurePolicy: Fail
+  name: vnetworkfunctiondeployment-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - scheduling.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctiondeployments
+  sideEffects: None

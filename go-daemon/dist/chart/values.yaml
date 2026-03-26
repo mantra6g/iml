@@ -1,0 +1,27 @@
+## String to partially override chart.fullname template (will maintain the release name)
+##
+# nameOverride: ""
+
+## String to fully override chart.fullname template
+##
+# fullnameOverride: ""
+
+## Configure the networking daemon
+image:
+  repository: tomasagata/iml-daemon
+  tag: "0.0.1"
+  pullPolicy: IfNotPresent
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2048Mi
+  requests:
+    cpu: 500m
+    memory: 1024Mi
+cniInstaller:
+  containerName: iml-cni-installer
+  image: tomasagata/iml-cni
+  tag: "0.0.1"
+cniConfig:
+  cniVersion: "0.4.0"
+  type: imlcni
