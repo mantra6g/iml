@@ -1,0 +1,10 @@
+## String to partially override chart.fullname template (will maintain the release name)
+##
+# nameOverride: ""
+
+## String to fully override chart.fullname template
+##
+# fullnameOverride: ""
+
+cniVersion: "0.4.0"
+type: imlcni

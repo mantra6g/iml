@@ -1,0 +1,31 @@
+{{- if .Values.webhook.enable }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    {{- if .Values.certManager.enable }}
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "loom-operator.resourceName" (dict "suffix" "serving-cert" "context" $) }}
+    {{- end }}
+  name: {{ include "loom-operator.resourceName" (dict "suffix" "mutating-webhook-configuration" "context" $) }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "loom-operator.resourceName" (dict "suffix" "webhook-service" "context" $) }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-scheduling-loom-io-v1alpha1-networkfunctiondeployment
+  failurePolicy: Fail
+  name: mnetworkfunctiondeployment-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - scheduling.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctiondeployments
+  sideEffects: None
+{{- end }}
