@@ -7,6 +7,8 @@ import (
 	"iml-daemon/pkg/netutils"
 	"net"
 	"net/netip"
+
+	"github.com/vishvananda/netlink"
 )
 
 func CreateLinkLocalAddrFromMAC(mac net.HardwareAddr) (*net.IPNet, error) {
@@ -75,14 +77,14 @@ func GetVRFGatewayName(tableID uint32) string {
 	return fmt.Sprintf("gw-%d", tableID)
 }
 
-func ParseDualStackGatewayFromStrings(gwStrings []string) (netutils.DualStackGateway, error) {
+func ParseDualStackGatewayFromStrings(gwStrings []string) (netutils.DualStackAddress, error) {
 	addrs, err := ParseDualStackAddressFromStrings(gwStrings)
 	if err != nil {
-		return netutils.DualStackGateway{}, err
+		return netutils.DualStackAddress{}, err
 	}
-	return netutils.DualStackGateway{
-		IPv4Gateway: addrs.IPv4,
-		IPv6Gateway: addrs.IPv6,
+	return netutils.DualStackAddress{
+		IPv4: addrs.IPv4,
+		IPv6: addrs.IPv6,
 	}, nil
 }
 
@@ -192,4 +194,8 @@ func ElementsMatchInAnyOrder[T comparable](p1, p2 []T) bool {
 		}
 	}
 	return true
+}
+
+func GetDualStackAddressFromLink(link netlink.Link) (netutils.DualStackAddress, error) {
+
 }

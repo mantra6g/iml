@@ -19,7 +19,7 @@ type AppInstanceConfigRequest struct {
 type NetworkConfig struct {
 	IPNets       netutils.DualStackNetwork `json:"ip_nets"`
 	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
-	Gateways     netutils.DualStackGateway `json:"gateways"`
+	Gateways     netutils.DualStackAddress `json:"gateways"`
 	IfaceName    string                    `json:"iface_name"`
 	BridgeName   string                    `json:"bridge_name"`
 	MTU          uint32                    `json:"mtu"`

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"iml-daemon/pkg/dataplane/vrf"
+	"iml-daemon/pkg/tunnel/geneve"
 	"os"
 	"os/signal"
 	"syscall"
@@ -62,7 +63,12 @@ func main() {
 		panic("Failed to request NodeManager subnet: " + err.Error())
 	}
 
-	dataPlane, err := vrf.NewSoftware(config)
+	tunnelMgr, err := geneve.NewTunnelManager()
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to create tunnel manager: %v", err)
+	}
+
+	dataPlane, err := vrf.NewSoftware(config, tunnelMgr)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize VRF dataplane: %v", err)
 		panic("Failed to initialize VRF dataplane: " + err.Error())

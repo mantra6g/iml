@@ -3,6 +3,7 @@ package vrf
 import (
 	"fmt"
 	"iml-daemon/pkg/netutils"
+	"iml-daemon/pkg/tunnel"
 	"net"
 	"os"
 	"sync"
@@ -38,7 +39,7 @@ type Software struct {
 	appMu         sync.Mutex
 	p4Targets     map[types.UID]*P4TargetInstance
 	p4Mu          sync.Mutex
-	tunnelManager NodeTunnelManager
+	tunnelManager tunnel.Manager
 	routingSubnet *RoutingSubnet
 	//routerVrf  *netlink.Vrf
 
@@ -63,7 +64,7 @@ const (
 
 type Subnet interface {
 	GetNetwork() netutils.DualStackNetwork
-	GetGateway() netutils.DualStackGateway
+	GetGateway() netutils.DualStackAddress
 	GetStack() StackType
 }
 
@@ -72,7 +73,7 @@ type P4TargetInstance struct {
 	ifaceName string
 }
 
-func NewSoftware(cfg *env.GlobalConfig, tunnelManager NodeTunnelManager) (dataplane.Dataplane, error) {
+func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager) (dataplane.Dataplane, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("global config is nil")
 	}
@@ -262,8 +263,8 @@ func (d *Software) addApplicationSubnet(appUID types.UID) (subnet *AppSubnet, er
 func (d *Software) configureTunnelBetweenSubnets(
 	rtrSubnet *RoutingSubnet, appSubnet *AppSubnet,
 ) (
-	tunToRtrName string, tunToRtrAddrs netutils.DualStackGateway,
-	tunToAppName string, tunToAppAddrs netutils.DualStackGateway,
+	tunToRtrName string, tunToRtrAddrs netutils.DualStackAddress,
+	tunToAppName string, tunToAppAddrs netutils.DualStackAddress,
 	err error,
 ) {
 	var ipv4Enabled = d.tunNet4Allocator != nil
@@ -377,11 +378,11 @@ func (d *Software) configureTunnelBetweenSubnets(
 
 	tunToRtrName = tunToRtr.Attrs().Name
 	tunToAppName = tunToApp.Attrs().Name
-	tunToRtrAddrs.IPv6Gateway = tunToRtrIPv6.IP
-	tunToAppAddrs.IPv6Gateway = tunToAppIPv6.IP
+	tunToRtrAddrs.IPv6 = tunToRtrIPv6.IP
+	tunToAppAddrs.IPv6 = tunToAppIPv6.IP
 	if ipv4Enabled {
-		tunToRtrAddrs.IPv4Gateway = tunToRtrIPv4.IP
-		tunToAppAddrs.IPv4Gateway = tunToAppIPv4.IP
+		tunToRtrAddrs.IPv4 = tunToRtrIPv4.IP
+		tunToAppAddrs.IPv4 = tunToAppIPv4.IP
 	}
 	return
 }
@@ -499,14 +500,27 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	if err != nil {
 		return fmt.Errorf("failed to set master for tunnel interface for node %s: %w", node.Name, err)
 	}
-	addrsv4, err := netlink.AddrList(tunLink, netlink.FAMILY_V4)
+	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(node.Spec.PodCIDRs)
 	if err != nil {
-		return fmt.Errorf("failed to get IPv4 address for tunnel interface for node %s: %w", node.Name, err)
+		return fmt.Errorf("failed to parse CIDRs for node %s: %w", node.Name, err)
 	}
-
-	addrsv6, err := netlink.AddrList(tunLink, netlink.FAMILY_V6)
+	addrs, err := vrfutil.GetDualStackAddressFromLink(tunLink)
 	if err != nil {
-		return fmt.Errorf("failed to get IPv6 address for tunnel interface for node %s: %w", node.Name, err)
+		return fmt.Errorf("failed to get addresses from tunnel interface for node %s: %w", node.Name, err)
+	}
+	if addrs.IPv6 == nil {
+		tunAddr, err := d.routingSubnet.IP6Allocator.Allocate()
+		if err != nil {
+			return fmt.Errorf("failed to allocate IPv6 for node %s: %w", node.Name, err)
+		}
+		err = netlink.AddrAdd(tunLink, &netlink.Addr{IPNet: tunAddr})
+		if err != nil {
+			return fmt.Errorf("failed to add IPv6 address to tunnel interface for node %s: %w", node.Name, err)
+		}
+	}
+	err = d.routingSubnet.AddRoute(cidrs, addrs, tunLink.Attrs().Name)
+	if err != nil {
+		return fmt.Errorf("failed to add route for node %s: %w", node.Name, err)
 	}
 	return nil
 }

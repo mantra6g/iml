@@ -14,7 +14,7 @@ import (
 
 type AppSubnet struct {
 	Networks      netutils.DualStackNetwork
-	GatewayIPs    netutils.DualStackGateway
+	GatewayIPs    netutils.DualStackAddress
 	Bridge        *netlink.Bridge
 	VethBridgeVRF *netlink.Veth
 	Vrf           *netlink.Vrf
@@ -43,7 +43,7 @@ func NewAppSubnet(ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet 
 			return nil, fmt.Errorf("failed to allocate gateway IPv4 for application subnet: %w", err)
 		}
 		subnet.Networks.IPv4Net = ip4Net
-		subnet.GatewayIPs.IPv4Gateway = gatewayIPv4.IP
+		subnet.GatewayIPs.IPv4 = gatewayIPv4.IP
 	}
 
 	var gatewayIPv6 *net.IPNet
@@ -60,7 +60,7 @@ func NewAppSubnet(ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet 
 			return nil, fmt.Errorf("failed to allocate gateway IPv6 for application subnet: %w", err)
 		}
 		subnet.Networks.IPv6Net = ip6Net
-		subnet.GatewayIPs.IPv6Gateway = gatewayIPv6.IP
+		subnet.GatewayIPs.IPv6 = gatewayIPv6.IP
 	}
 
 	appVrf := &netlink.Vrf{
@@ -214,27 +214,27 @@ func (s *AppSubnet) AllocateIPs() (netutils.DualStackNetwork, error) {
 	return netutils.DualStackNetwork{}, fmt.Errorf("unknown stack type: %s", s.GetStack())
 }
 
-func (s *AppSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.DualStackGateway, tunnelInterfaceName string) error {
+func (s *AppSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
 	if subnet2.GetNetwork().IPv4Net == nil && subnet2.GetNetwork().IPv6Net == nil {
 		return fmt.Errorf(
 			"subnet's IPv4Net and IPv6Net are both nil: subnet must contain at least one non-nil network")
 	}
-	if subnet2.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4Gateway != nil {
+	if subnet2.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4 != nil {
 		return fmt.Errorf(
 			"subnet's IPv4Net is nil but gatewayIPs contains non-nil IPv4Gateway: " +
 				"gateway IPs are inconsistent with subnet network")
 	}
-	if subnet2.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6Gateway != nil {
+	if subnet2.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6 != nil {
 		return fmt.Errorf(
 			"subnet's IPv6Net is nil but gatewayIPs contains non-nil IPv6Gateway: " +
 				"gateway IPs are inconsistent with subnet network")
 	}
-	if subnet2.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4Gateway == nil {
+	if subnet2.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4 == nil {
 		return fmt.Errorf(
 			"subnet2's IPv4Net is non-nil but gatewayIPs contains nil IPv4Gateway: " +
 				"gateway IPs are inconsistent with subnet2 network")
 	}
-	if subnet2.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6Gateway == nil {
+	if subnet2.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6 == nil {
 		return fmt.Errorf(
 			"subnet2's IPv6Net is nil but gatewayIPs contains nil IPv6Gateway: " +
 				"gateway IPs are inconsistent with subnet2 network")
@@ -247,7 +247,7 @@ func (s *AppSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.DualSta
 	return nil
 }
 
-func (s *AppSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackGateway, tunnelInterfaceName string) error {
+func (s *AppSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
 	err := s.AddRoute(netutils.DualStackNetwork{
 		IPv4Net: &net.IPNet{
 			IP:   net.IPv4zero,
@@ -261,16 +261,16 @@ func (s *AppSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackGateway, tunnel
 	return err
 }
 
-func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStackGateway, outInterface string) error {
+func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStackAddress, outInterface string) error {
 	if dst.IPv4Net == nil && dst.IPv6Net == nil {
 		return fmt.Errorf(
 			"destination's IPv4Net and IPv6Net are both nil: destination must contain at least one non-nil network")
 	}
-	if dst.IPv4Net != nil && gw.IPv4Gateway == nil {
+	if dst.IPv4Net != nil && gw.IPv4 == nil {
 		return fmt.Errorf(
 			"destination's IPv4 network is non-nil (%s) but gatewayIPs contains nil IPv4Gateway", dst.IPv4Net)
 	}
-	if dst.IPv6Net != nil && gw.IPv6Gateway == nil {
+	if dst.IPv6Net != nil && gw.IPv6 == nil {
 		return fmt.Errorf(
 			"destination's IPv6 network is non-nil (%s) but gatewayIPs contains nil IPv6Gateway", dst.IPv6Net)
 	}
@@ -283,7 +283,7 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 		return fmt.Errorf("failed to set master for router tunnel in routing subnet: %w", err)
 	}
 
-	if gw.IPv6Gateway != nil {
+	if gw.IPv6 != nil {
 		// Create a route in the application VRF to reach the router subnet using
 		// the router tunnel as the outgoing interface.
 		ipv6DefaultRoute := &netlink.Route{
@@ -291,7 +291,7 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 				IP:   net.IPv6zero,
 				Mask: net.CIDRMask(0, 128),
 			},
-			Gw:        gw.IPv6Gateway,
+			Gw:        gw.IPv6,
 			Table:     int(s.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
@@ -302,13 +302,13 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 		}
 	}
 
-	if gw.IPv4Gateway != nil {
+	if gw.IPv4 != nil {
 		ipv4DefaultRoute := &netlink.Route{
 			Dst: &net.IPNet{
 				IP:   net.IPv4zero,
 				Mask: net.CIDRMask(0, 32),
 			},
-			Gw:        gw.IPv4Gateway,
+			Gw:        gw.IPv4,
 			Table:     int(s.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
@@ -346,7 +346,7 @@ func (s *AppSubnet) DeleteSRv6Route(dst net.IPNet) error {
 	}
 	err := netlink.RouteDel(route)
 	if err != nil {
-		return fmt.Errorf("failed to delete SRv6 route to %s with segs %s: %w", dst.String(), sids, err)
+		return fmt.Errorf("failed to delete SRv6 route to %s: %w", dst.String(), err)
 	}
 	return nil
 }
@@ -355,7 +355,7 @@ func (s *AppSubnet) GetNetwork() netutils.DualStackNetwork {
 	return s.Networks
 }
 
-func (s *AppSubnet) GetGateway() netutils.DualStackGateway {
+func (s *AppSubnet) GetGateway() netutils.DualStackAddress {
 	return s.GatewayIPs
 }
 

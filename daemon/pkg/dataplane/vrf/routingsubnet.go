@@ -158,27 +158,27 @@ func (r *RoutingSubnet) AllocateIPs() (netutils.DualStackNetwork, error) {
 	//return netutils.DualStackNetwork{}, fmt.Errorf("unknown stack type: %s", r.GetStack())
 }
 
-func (r *RoutingSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.DualStackGateway, tunnelInterfaceName string) error {
+func (r *RoutingSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
 	if subnet2.GetNetwork().IPv4Net == nil && subnet2.GetNetwork().IPv6Net == nil {
 		return fmt.Errorf(
 			"subnet's IPv4Net and IPv6Net are both nil: subnet must contain at least one non-nil network")
 	}
-	if subnet2.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4Gateway != nil {
+	if subnet2.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4 != nil {
 		return fmt.Errorf(
 			"subnet's IPv4Net is nil but gatewayIPs contains non-nil IPv4Gateway: " +
 				"gateway IPs are inconsistent with subnet network")
 	}
-	if subnet2.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6Gateway != nil {
+	if subnet2.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6 != nil {
 		return fmt.Errorf(
 			"subnet's IPv6Net is nil but gatewayIPs contains non-nil IPv6Gateway: " +
 				"gateway IPs are inconsistent with subnet network")
 	}
-	if subnet2.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4Gateway == nil {
+	if subnet2.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4 == nil {
 		return fmt.Errorf(
 			"subnet2's IPv4Net is non-nil but gatewayIPs contains nil IPv4Gateway: " +
 				"gateway IPs are inconsistent with subnet2 network")
 	}
-	if subnet2.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6Gateway == nil {
+	if subnet2.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6 == nil {
 		return fmt.Errorf(
 			"subnet2's IPv6Net is nil but gatewayIPs contains nil IPv6Gateway: " +
 				"gateway IPs are inconsistent with subnet2 network")
@@ -191,7 +191,7 @@ func (r *RoutingSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.Dua
 	return nil
 }
 
-func (r *RoutingSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackGateway, tunnelInterfaceName string) error {
+func (r *RoutingSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
 	err := r.AddRoute(netutils.DualStackNetwork{
 		IPv4Net: &net.IPNet{
 			IP:   net.IPv4zero,
@@ -205,16 +205,16 @@ func (r *RoutingSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackGateway, tu
 	return err
 }
 
-func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStackGateway, outInterface string) error {
+func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStackAddress, outInterface string) error {
 	if dst.IPv4Net == nil && dst.IPv6Net == nil {
 		return fmt.Errorf(
 			"destination's IPv4Net and IPv6Net are both nil: destination must contain at least one non-nil network")
 	}
-	if dst.IPv4Net != nil && gw.IPv4Gateway == nil {
+	if dst.IPv4Net != nil && gw.IPv4 == nil {
 		return fmt.Errorf(
 			"destination's IPv4 network is non-nil (%s) but gatewayIPs contains nil IPv4Gateway", dst.IPv4Net)
 	}
-	if dst.IPv6Net != nil && gw.IPv6Gateway == nil {
+	if dst.IPv6Net != nil && gw.IPv6 == nil {
 		return fmt.Errorf(
 			"destination's IPv6 network is non-nil (%s) but gatewayIPs contains nil IPv6Gateway", dst.IPv6Net)
 	}
@@ -227,7 +227,7 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 		return fmt.Errorf("failed to set master for router tunnel in routing subnet: %w", err)
 	}
 
-	if gw.IPv6Gateway != nil {
+	if gw.IPv6 != nil {
 		// Create a route in the application VRF to reach the router subnet using
 		// the router tunnel as the outgoing interface.
 		ipv6DefaultRoute := &netlink.Route{
@@ -235,7 +235,7 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 				IP:   net.IPv6zero,
 				Mask: net.CIDRMask(0, 128),
 			},
-			Gw:        gw.IPv6Gateway,
+			Gw:        gw.IPv6,
 			Table:     int(r.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
@@ -246,13 +246,13 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 		}
 	}
 
-	if gw.IPv4Gateway != nil {
+	if gw.IPv4 != nil {
 		ipv4DefaultRoute := &netlink.Route{
 			Dst: &net.IPNet{
 				IP:   net.IPv4zero,
 				Mask: net.CIDRMask(0, 32),
 			},
-			Gw:        gw.IPv4Gateway,
+			Gw:        gw.IPv4,
 			Table:     int(r.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
@@ -273,10 +273,10 @@ func (r *RoutingSubnet) GetNetwork() netutils.DualStackNetwork {
 	}
 }
 
-func (r *RoutingSubnet) GetGateway() netutils.DualStackGateway {
-	return netutils.DualStackGateway{
-		IPv4Gateway: nil,
-		IPv6Gateway: r.Gateway,
+func (r *RoutingSubnet) GetGateway() netutils.DualStackAddress {
+	return netutils.DualStackAddress{
+		IPv4: nil,
+		IPv6: r.Gateway,
 	}
 }
 

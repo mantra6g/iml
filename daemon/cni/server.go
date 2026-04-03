@@ -223,8 +223,8 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 		ClusterCIDRs: netutils.DualStackNetwork{
 			IPv6Net: &p4TargetConfig.ClusterIPv6CIDR,
 		},
-		Gateways: netutils.DualStackGateway{
-			IPv6Gateway: p4TargetConfig.IPv6Gateway,
+		Gateways: netutils.DualStackAddress{
+			IPv6: p4TargetConfig.IPv6Gateway,
 		},
 		BridgeName: p4TargetConfig.Bridge,
 		IfaceName:  p4TargetConfig.IfaceName,

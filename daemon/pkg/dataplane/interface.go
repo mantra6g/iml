@@ -13,7 +13,7 @@ import (
 type AppConfig struct {
 	IPs          netutils.DualStackNetwork
 	ClusterCIDRs netutils.DualStackNetwork
-	Gateways     netutils.DualStackGateway
+	Gateways     netutils.DualStackAddress
 	Bridge       string
 	IfaceName    string
 	MTU          uint32
