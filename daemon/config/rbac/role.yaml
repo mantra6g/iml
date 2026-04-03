@@ -1,0 +1,67 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: daemon-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - get
+- apiGroups:
+  - core.loom.io
+  resources:
+  - applications
+  - networkfunctions
+  - p4targets
+  - servicechains
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - applications/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions/status
+  - p4targets/status
+  - servicechains/status
+  verbs:
+  - get
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes/status
+  verbs:
+  - get
+  - patch
+  - update

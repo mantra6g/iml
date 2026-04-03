@@ -105,7 +105,7 @@ func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *P4TargetReconciler) mapLeaseToRequests(ctx context.Context, obj client.Object) []ctrl.Request {
+func (r *P4TargetReconciler) mapLeaseToRequests(_ context.Context, obj client.Object) []ctrl.Request {
 	lease, ok := obj.(*v1.Lease)
 	if !ok {
 		return nil

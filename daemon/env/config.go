@@ -3,6 +3,7 @@ package env
 import (
 	"context"
 	"fmt"
+	"iml-daemon/pkg/netutils"
 	"net"
 	"os"
 	"path/filepath"
@@ -35,19 +36,14 @@ const MQTT_URL = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
 const P4_CONTROLLER_API_URL = "http://" + P4_CONTROLLER_ADDR
 
 type IMLConfigMap struct {
-	ClusterPoolIPv4CIDR *net.IPNet
-	ClusterPoolIPv6CIDR *net.IPNet
+	ClusterCIDR netutils.DualStackNetwork
 }
 
 type GlobalConfig struct {
 	IMLConfigMap
-	PodCIDR    *net.IPNet
-	NFSubnet   *net.IPNet
-	SIDSubnet  *net.IPNet
-	TunSubnet4 *net.IPNet
-	TunSubnet6 *net.IPNet
-	DecapSID   *net.IPNet
-	NodeID     string
+	PodCIDR  netutils.DualStackNetwork
+	TunCIDR  netutils.DualStackNetwork
+	DecapSID *net.IPNet
 }
 
 // Singleton instance of GlobalConfig
@@ -95,13 +91,18 @@ func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 			return nil, fmt.Errorf("error waiting for CIDRs to be created: %w", err)
 		}
 	}
+	podCIDR, err := netutils.ParseDualStackNetworkFromStrings(loomNode.Spec.PodCIDRs)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing podCIDRs: %w", err)
+	}
+	tunCIDR, err := netutils.ParseDualStackNetworkFromStrings(loomNode.Spec.TunnelCIDRs)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing tunCIDRs: %w", err)
+	}
 	globalConfig = &GlobalConfig{
 		IMLConfigMap: *configMap,
-		PodCIDR:      loomNode.Spec.PodCIDRs,
-		NFSubnet:     loomNode.Spec.P4TargetCIDRs,
-		SIDSubnet:    loomNode.Spec.SidCIDRs,
-		TunSubnet4:   loomNode.Spec.TunnelCIDRs,
-		NodeID:       string(loomNode.UID),
+		PodCIDR:      podCIDR,
+		TunCIDR:      tunCIDR,
 	}
 	return globalConfig, nil
 }
@@ -134,8 +135,10 @@ func readIMLConfigMap() (*IMLConfigMap, error) {
 	}
 
 	return &IMLConfigMap{
-		ClusterPoolIPv4CIDR: ipv4Cidr,
-		ClusterPoolIPv6CIDR: ipv6Cidr,
+		ClusterCIDR: netutils.DualStackNetwork{
+			IPv4Net: ipv4Cidr,
+			IPv6Net: ipv6Cidr,
+		},
 	}, nil
 }
 

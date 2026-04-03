@@ -39,6 +39,8 @@ type Software struct {
 	appMu         sync.Mutex
 	p4Targets     map[types.UID]*P4TargetInstance
 	p4Mu          sync.Mutex
+	nodeConfigs   map[types.UID]*NodeConfig
+	nodeMu        sync.Mutex
 	tunnelManager tunnel.Manager
 	routingSubnet *RoutingSubnet
 	//routerVrf  *netlink.Vrf
@@ -71,6 +73,11 @@ type Subnet interface {
 type P4TargetInstance struct {
 	TargetIPs netutils.DualStackNetwork
 	ifaceName string
+}
+
+type NodeConfig struct {
+	LastResourceVersion string
+	Route               netutils.DualStackRoute
 }
 
 func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager) (dataplane.Dataplane, error) {
@@ -480,15 +487,20 @@ func (d *Software) DeleteP4TargetInstance(containerID string) error {
 }
 
 func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
+	d.nodeMu.Lock()
+	defer d.nodeMu.Unlock()
+	nodeConfig, exists := d.nodeConfigs[node.UID]
+	if !exists {
+		return nil
+	}
+	if nodeConfig.LastResourceVersion >= node.ResourceVersion {
+		return nil
+	}
 	if len(node.Spec.PodCIDRs) == 0 {
 		// Node hasn't got a CIDR yet
 		return nil
 	}
-	err := d.tunnelManager.UpdateNodeTunnels(node)
-	if err != nil {
-		return fmt.Errorf("failed to update node tunnels for node %s: %w", node.Name, err)
-	}
-	tunName, err := d.tunnelManager.GetTunnelInterface(node.UID)
+	tunName, err := d.tunnelManager.GetTunnelInterface(node.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel interface for node %s: %w", node.Name, err)
 	}
@@ -522,22 +534,47 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	if err != nil {
 		return fmt.Errorf("failed to add route for node %s: %w", node.Name, err)
 	}
+	d.nodeConfigs[node.UID] = &NodeConfig{
+		LastResourceVersion: node.ResourceVersion,
+		Route: netutils.DualStackRoute{
+			IPv4Route: netutils.Route{
+				Destination: cidrs.IPv4Net,
+				Gateway:     addrs.IPv4,
+			},
+			IPv6Route: netutils.Route{
+				Destination: cidrs.IPv6Net,
+				Gateway:     addrs.IPv6,
+			},
+		},
+	}
 	return nil
 }
 
-func (d *Software) RemoveNodeRoutes(node *infrav1alpha1.LoomNode) error {
-	d.nodesMu.Lock()
-	defer d.nodesMu.Unlock()
+func (d *Software) RemoveNodeRoutes(node *infrav1alpha1.LoomNode) (err error) {
+	d.nodeMu.Lock()
+	defer d.nodeMu.Unlock()
 
-	nodeConfig, exists := d.nodeTunnels[node.UID]
+	nodeConfig, exists := d.nodeConfigs[node.UID]
 	if !exists {
 		return nil
 	}
-	err := nodeConfig.Teardown()
-	if err != nil {
-		return fmt.Errorf("failed to teardown GRE tunnel for node %s: %w", node.Name, err)
+	defer func() {
+		if err != nil {
+			delete(d.nodeConfigs, node.UID)
+		}
+	}()
+	route := &nodeConfig.Route
+	if route.IsEmpty() {
+		return nil
 	}
-	delete(d.nodeTunnels, node.UID)
+	dst := netutils.DualStackNetwork{
+		IPv4Net: route.IPv4Route.Destination,
+		IPv6Net: route.IPv6Route.Destination,
+	}
+	err = d.routingSubnet.RemoveRoute(dst)
+	if err != nil {
+		return fmt.Errorf("failed to remove route for node %s: %w", node.Name, err)
+	}
 	return nil
 }
 

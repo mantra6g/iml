@@ -197,5 +197,29 @@ func ElementsMatchInAnyOrder[T comparable](p1, p2 []T) bool {
 }
 
 func GetDualStackAddressFromLink(link netlink.Link) (netutils.DualStackAddress, error) {
-
+	result := netutils.DualStackAddress{}
+	netlinkAddrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
+	if err != nil {
+		return result, err
+	}
+	for i := range netlinkAddrs {
+		addr := &netlinkAddrs[i]
+		if addr.IPNet == nil { // filter out MPLS
+			continue
+		}
+		netipaddr, ok := netip.AddrFromSlice(addr.IPNet.IP)
+		if !ok {
+			return result, fmt.Errorf("invalid IP address: %s", addr.IPNet.IP)
+		}
+		if netipaddr.Is4() {
+			result.IPv4 = addr.IPNet.IP
+		}
+		if netipaddr.Is6() {
+			var ula = netip.MustParsePrefix("fc00::/7")
+			if ula.Contains(netipaddr) {
+				result.IPv6 = addr.IPNet.IP
+			}
+		}
+	}
+	return result, nil
 }

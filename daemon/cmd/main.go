@@ -1,12 +1,24 @@
+// +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes/status,verbs=get;update;patch
+
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=nodes/status,verbs=get
+
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get
+// +kubebuilder:rbac:groups=core.loom.io,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=applications/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core.loom.io,resources=servicechains,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=servicechains/status,verbs=get
+// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions/status,verbs=get
+
 package main
 
 import (
 	"context"
 	"iml-daemon/pkg/dataplane/vrf"
 	"iml-daemon/pkg/tunnel/geneve"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	corev1alpha1 "iml-daemon/api/core/v1alpha1"
@@ -36,11 +48,9 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(infrav1alpha1.AddToScheme(scheme))
 	utilruntime.Must(schedulingv1alpha1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
 }
 
 func main() {
@@ -95,6 +105,12 @@ func main() {
 	cniServer, err := cni.NewServer(mgr.GetClient(), dataPlane)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to initialize cni server: %v", err)
+	}
+
+	mainContext := ctrl.SetupSignalHandler()
+	err = mgr.Start(mainContext)
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to start controller manager: %v", err)
 	}
 
 	//// Initialize the registry
@@ -232,11 +248,8 @@ func main() {
 	//	panic("Failed to initialize CNI API: " + err.Error())
 	//}
 
-	// Listen for termination signals (SIGINT, SIGTERM)
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	<-stop // Wait for signal
+	// Wait until main context has finished
+	<-mainContext.Done()
 	logger.InfoLogger().Println("Shutting down services...")
 
 	// Graceful shutdown context with timeout
@@ -244,14 +257,14 @@ func main() {
 	defer cancel()
 
 	// Shutdown services gracefully
-	if err := cniApi.Shutdown(ctx); err != nil {
+	if err = cniServer.Shutdown(ctx); err != nil {
 		logger.ErrorLogger().Printf("CNI API shutdown error: %v", err)
 	}
-	if err := routerService.Shutdown(ctx); err != nil {
-		logger.ErrorLogger().Printf("RouterService shutdown error: %v", err)
+	if err = tunnelMgr.Close(); err != nil {
+		logger.ErrorLogger().Printf("Failed to close tunnel manager: %v", err)
 	}
-	if err := routeCalcService.Shutdown(ctx); err != nil {
-		logger.ErrorLogger().Printf("RouteCalcService shutdown error: %v", err)
+	if err = dataPlane.Close(); err != nil {
+		logger.ErrorLogger().Printf("Failed to close data plane: %v", err)
 	}
 
 	logger.InfoLogger().Println("All services stopped gracefully.")

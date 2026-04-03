@@ -11,7 +11,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/vishvananda/netlink"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -23,9 +22,11 @@ const (
 	MarkCleanupMask           = "0xFFFFFEFF"
 )
 
+type NodeName = string
+
 type TunnelManager struct {
 	tunnelInterface string
-	tunnels         map[types.UID]*Tunnel
+	tunnels         map[NodeName]*Tunnel
 	ip4t            *iptables.IPTables
 	ip6t            *iptables.IPTables
 }
@@ -117,7 +118,7 @@ func NewTunnelManager() (tunnel.Manager, error) {
 
 	return &TunnelManager{
 		tunnelInterface: ifName,
-		tunnels:         make(map[types.UID]*Tunnel),
+		tunnels:         make(map[NodeName]*Tunnel),
 		ip4t:            ip4t,
 		ip6t:            ip6t,
 	}, nil
@@ -135,8 +136,8 @@ func (mgr *TunnelManager) Close() error {
 	if err != nil {
 		return fmt.Errorf("failed to delete interface %s: %v", mgr.tunnelInterface, err)
 	}
-	for _, tunnel := range mgr.tunnels {
-		if err := tunnel.Teardown(); err != nil {
+	for _, tun := range mgr.tunnels {
+		if err := tun.Teardown(); err != nil {
 			return fmt.Errorf("error while tearing down Geneve tunnel: %v", err)
 		}
 	}
@@ -144,33 +145,33 @@ func (mgr *TunnelManager) Close() error {
 }
 
 func (mgr *TunnelManager) UpdateNodeTunnels(node *corev1.Node) error {
-	tunnel, exists := mgr.tunnels[node.UID]
+	tun, exists := mgr.tunnels[node.Name]
 	if !exists {
-		if err := tunnel.UpdateDestinationNode(node); err != nil {
+		if err := tun.UpdateDestinationNode(node); err != nil {
 			return fmt.Errorf("failed to update destination node %s: %v", node.Name, err)
 		}
 		return nil
 	}
-	tunnel, err := NewTunnel(node, mgr.ip4t, mgr.ip6t)
+	tun, err := NewTunnel(node, mgr.ip4t, mgr.ip6t)
 	if err != nil {
 		return fmt.Errorf("failed to create Geneve tunnel for node %s: %v", node.Name, err)
 	}
-	mgr.tunnels[node.UID] = tunnel
+	mgr.tunnels[node.Name] = tun
 	return nil
 }
 
-func (mgr *TunnelManager) DeleteNodeTunnels(nodeID types.UID) error {
-	tunnel, exists := mgr.tunnels[nodeID]
+func (mgr *TunnelManager) DeleteNodeTunnels(nodeName string) error {
+	tun, exists := mgr.tunnels[nodeName]
 	if !exists {
 		return nil // Tunnel already doesn't exist, skip
 	}
-	if err := tunnel.Teardown(); err != nil {
-		return fmt.Errorf("error while tearing down Geneve tunnel for node %s: %v", nodeID, err)
+	if err := tun.Teardown(); err != nil {
+		return fmt.Errorf("error while tearing down Geneve tunnel for node %s: %v", nodeName, err)
 	}
-	delete(mgr.tunnels, nodeID)
+	delete(mgr.tunnels, nodeName)
 	return nil
 }
 
-func (mgr *TunnelManager) GetTunnelInterface(_ types.UID) (string, error) {
+func (mgr *TunnelManager) GetTunnelInterface(_ string) (string, error) {
 	return mgr.tunnelInterface, nil
 }

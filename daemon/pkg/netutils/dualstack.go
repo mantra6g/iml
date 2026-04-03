@@ -33,6 +33,24 @@ func (net *DualStackAddressList) IsEmpty() bool {
 	return len(net.IPv4Addresses) == 0 && len(net.IPv6Addresses) == 0
 }
 
+type DualStackRoute struct {
+	IPv4Route Route `json:"ip4route,omitempty"`
+	IPv6Route Route `json:"ip6route,omitempty"`
+}
+
+func (net *DualStackRoute) IsEmpty() bool {
+	return net.IPv4Route.IsEmpty() && net.IPv6Route.IsEmpty()
+}
+
+type Route struct {
+	Destination *net.IPNet `json:"dst,omitempty"`
+	Gateway     net.IP     `json:"gw,omitempty"`
+}
+
+func (r *Route) IsEmpty() bool {
+	return r.Destination == nil && r.Gateway == nil
+}
+
 func ParseDualStackGatewayFromStrings(gwStrings []string) (DualStackAddress, error) {
 	addrs, err := ParseDualStackAddressFromStrings(gwStrings)
 	if err != nil {

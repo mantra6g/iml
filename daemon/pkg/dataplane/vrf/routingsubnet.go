@@ -266,6 +266,36 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 	return nil
 }
 
+func (r *RoutingSubnet) RemoveRoute(dst netutils.DualStackNetwork) error {
+	if dst.IPv4Net == nil && dst.IPv6Net == nil {
+		return fmt.Errorf(
+			"destination's IPv4Net and IPv6Net are both nil: destination must contain at least one non-nil network")
+	}
+	if dst.IPv4Net != nil {
+		ipv4Route := &netlink.Route{
+			Dst:   dst.IPv4Net,
+			Table: int(r.Vrf.Table),
+		}
+		if err := netlink.RouteDel(ipv4Route); err != nil {
+			logger.DebugLogger().Printf("failed to execute: `ip route del %s table %d`",
+				dst.IPv4Net.String(), r.Vrf.Table)
+			return fmt.Errorf("failed to delete IPv4 route to app subnet in routing VRF: %w", err)
+		}
+	}
+	if dst.IPv6Net != nil {
+		ipv6Route := &netlink.Route{
+			Dst:   dst.IPv6Net,
+			Table: int(r.Vrf.Table),
+		}
+		if err := netlink.RouteDel(ipv6Route); err != nil {
+			logger.DebugLogger().Printf("failed to execute: `ip -6 route del %s table %d`",
+				dst.IPv6Net.String(), r.Vrf.Table)
+			return fmt.Errorf("failed to delete IPv6 route to app subnet in routing VRF: %w", err)
+		}
+	}
+	return nil
+}
+
 func (r *RoutingSubnet) GetNetwork() netutils.DualStackNetwork {
 	return netutils.DualStackNetwork{
 		IPv4Net: nil,

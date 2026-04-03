@@ -35,7 +35,7 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 		logger.InfoLogger().Printf("Deploying network function for container %s\n", cniArgs.ContainerID)
 
 		configRequest := NFConfigRequest{
-			VnfID: cniConf.Args.CNI.NfID,
+			VnfID:       cniConf.Args.CNI.NfID,
 			ContainerID: cniArgs.ContainerID,
 		}
 
@@ -115,8 +115,8 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 			Name: "iml0",
 			MTU:  1500,
 		},
-		PeerName:         netConfig.IfaceName,
-		PeerMTU:          1500,
+		PeerName: netConfig.IfaceName,
+		PeerMTU:  1500,
 	}
 
 	// Change to the container namespace
@@ -144,9 +144,9 @@ func deployApplicationFunction(netConfig *AppConfigResponse, cniArgs *skel.CmdAr
 
 		// Create route to the destination network
 		routeLink := &netlink.Route{
-			Dst: clusterNet,
-			Gw:  gwIP,
-			Scope: netlink.SCOPE_UNIVERSE,
+			Dst:    clusterNet,
+			Gw:     gwIP,
+			Scope:  netlink.SCOPE_UNIVERSE,
 			Family: nl.FAMILY_V6,
 		}
 
@@ -300,9 +300,9 @@ func deployNetworkFunction(netConfig *NFConfigResponse, cniArgs *skel.CmdArgs) (
 		// Create route to the destination network
 		// ip -6 route add <DESTINATION> via <GATEWAY> src <IP>
 		routeLink := &netlink.Route{
-			Dst: clusterNet,
-			Gw:  gwIP,
-			Scope: netlink.SCOPE_UNIVERSE,
+			Dst:    clusterNet,
+			Gw:     gwIP,
+			Scope:  netlink.SCOPE_UNIVERSE,
 			Family: nl.FAMILY_V6,
 		}
 		// Add the route inside the container's network namespace
@@ -583,7 +583,7 @@ func notifyIMLOfNfTeardown(request NfTeardownRequest) error {
 
 func cmdDel(args *skel.CmdArgs) error {
 	logger.InfoLogger().Printf("DEL called for container %s\n", args.ContainerID)
-	
+
 	cniConf := IMLCNIConfig{}
 	if err := json.Unmarshal(args.StdinData, &cniConf); err != nil {
 		logger.ErrorLogger().Printf("Failed to parse CNI configuration: %v\n", err)
@@ -591,21 +591,21 @@ func cmdDel(args *skel.CmdArgs) error {
 	}
 
 	switch cniConf.Args.CNI.AppType {
-		case "network_function":
-			logger.InfoLogger().Printf("Tearing down network function for container %s\n", args.ContainerID)
-			if err := tearDownNetworkFunction(args); err != nil {
-				logger.ErrorLogger().Printf("Failed to tear down network function: %v\n", err)
-				return fmt.Errorf("failed to tear down network function: %w", err)
-			}
-		case "application_function":
-			logger.InfoLogger().Printf("Tearing down application function for container %s\n", args.ContainerID)
-			if err := tearDownApplicationFunction(args); err != nil {
-				logger.ErrorLogger().Printf("Failed to tear down application function: %v\n", err)
-				return fmt.Errorf("failed to tear down application function: %w", err)
-			}
-		default:
-			logger.ErrorLogger().Printf("Unknown app type: %s\n", cniConf.Args.CNI.AppType)
-			return fmt.Errorf("unknown app type: %s", cniConf.Args.CNI.AppType)
+	case "network_function":
+		logger.InfoLogger().Printf("Tearing down network function for container %s\n", args.ContainerID)
+		if err := tearDownNetworkFunction(args); err != nil {
+			logger.ErrorLogger().Printf("Failed to tear down network function: %v\n", err)
+			return fmt.Errorf("failed to tear down network function: %w", err)
+		}
+	case "application_function":
+		logger.InfoLogger().Printf("Tearing down application function for container %s\n", args.ContainerID)
+		if err := tearDownApplicationFunction(args); err != nil {
+			logger.ErrorLogger().Printf("Failed to tear down application function: %v\n", err)
+			return fmt.Errorf("failed to tear down application function: %w", err)
+		}
+	default:
+		logger.ErrorLogger().Printf("Unknown app type: %s\n", cniConf.Args.CNI.AppType)
+		return fmt.Errorf("unknown app type: %s", cniConf.Args.CNI.AppType)
 	}
 	return nil
 }

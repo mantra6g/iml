@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/name: loom-daemon
+    app.kubernetes.io/managed-by: kustomize
+  name: system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: daemon
+  namespace: system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loom-daemon
+      app.kubernetes.io/managed-by: kustomize
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: daemon
+      labels:
+        app.kubernetes.io/name: loom-daemon
+    spec:
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      initContainers:
+        - name: cni-installer
+          image: cni:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /app/imlcni /host/opt/cni/bin/
+              chmod +x /host/opt/cni/bin/imlcni
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+      containers:
+        - name: daemon
+          image: daemon:latest
+          command:
+          - /daemon
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2048Mi
+            limits:
+              cpu: 2000m
+              memory: 4096Mi
+          volumeMounts:
+            - name: iml-config
+              mountPath: /etc/iml/config
+              readOnly: true
+      volumes:
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+        - name: iml-config
+          configMap:
+            name: iml-config
+      serviceAccountName: daemon-sa
