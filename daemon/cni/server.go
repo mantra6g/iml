@@ -3,13 +3,12 @@ package cni
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	corev1alpha1 "iml-daemon/api/core/v1alpha1"
-	"iml-daemon/apps"
-	"iml-daemon/db"
-	"iml-daemon/logger"
-	"iml-daemon/vnfs"
 	"net/http"
+
+	corev1alpha1 "iml-daemon/api/core/v1alpha1"
+	"iml-daemon/logger"
+	"iml-daemon/pkg/dataplane"
+	"iml-daemon/pkg/netutils"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
@@ -19,19 +18,38 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Controller struct {
-	Client client.Client
+var validate *validator.Validate
 
-	repo       db.Registry
-	vnfFactory vnfs.InstanceFactory
-	appFactory apps.InstanceFactory
+type Controller struct {
+	Client    client.Client
+	Dataplane dataplane.Dataplane
 }
 
-const (
-	IMLCniName = "iml-cni"
-)
-
-var validate *validator.Validate
+// Sets up the local API for CNI operations
+//
+// This API will be used by the CNI plugin to register and unregister
+// application and VNF containers.
+func NewServer(k8sClient client.Client, dp dataplane.Dataplane) (*http.Server, error) {
+	// Create a new CNI controller with the services
+	cniController := &Controller{
+		Client:    k8sClient,
+		Dataplane: dp,
+	}
+	validate = validator.New(validator.WithRequiredStructEnabled())
+	router := mux.NewRouter()
+	server := &http.Server{
+		Addr:    "127.0.0.1:7623",
+		Handler: router,
+	}
+	router.HandleFunc("/api/v1/cni/app/register", cniController.handleAppInstanceRegistration).Methods("POST")
+	router.HandleFunc("/api/v1/cni/app/teardown", cniController.handleAppInstanceTeardown).Methods("POST")
+	//router.HandleFunc("/api/v1/cni/vnf/register", cniController.handleVnfInstanceRegistration).Methods("POST")
+	//router.HandleFunc("/api/v1/cni/vnf/teardown", cniController.handleVnfInstanceTeardown).Methods("POST")
+	router.HandleFunc("/api/v1/cni/p4target/register", cniController.handleP4TargetRegistration).Methods("POST")
+	router.HandleFunc("/api/v1/cni/p4target/teardown", cniController.handleP4TargetTeardown).Methods("POST")
+	go server.ListenAndServe()
+	return server, nil
+}
 
 func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter, request *http.Request) {
 	logger.InfoLogger().Println("received app instance registration request")
@@ -93,25 +111,21 @@ func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter,
 		return
 	}
 
-	// Register the container details in the APPLICATION registry. This will
-	// assign the necessary resources and IPs to the container, as well as
-	// create the necessary routes in the nfrouter.
-	// This call is idempotent, so if the container is already registered,
-	// it will simply return the existing details.
-	// If the application ID references a non-existent application, return an error.
-	regResponse, err := c.appFactory.NewLocalInstance(regRequest)
+	instanceConfig, err := c.Dataplane.ConfigureAppInstance(app, instanceConfigDto.ContainerID)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to register app instance: %v", err)
+		logger.ErrorLogger().Printf("failed to allocate IP for application %s/%s: %v",
+			app.Namespace, app.Name, err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	configResponse := &PodNetworkConfig{
-		IPNets:       regResponse.IPNet.String(),
-		ClusterCIDRs: regResponse.ClusterCIDR.String(),
-		Gateways:     regResponse.GatewayIP.String(),
-		IfaceName:    regResponse.IfaceName,
-		BridgeName:   regResponse.BridgeName,
+	configResponse := &NetworkConfig{
+		IPNets:       instanceConfig.IPs,
+		ClusterCIDRs: instanceConfig.ClusterCIDRs,
+		Gateways:     instanceConfig.Gateways,
+		BridgeName:   instanceConfig.Bridge,
+		IfaceName:    instanceConfig.IfaceName,
+		MTU:          instanceConfig.MTU,
 	}
 
 	// Finally, return the container details including the allocated IP.
@@ -142,10 +156,10 @@ func (c *Controller) handleAppInstanceTeardown(response http.ResponseWriter, req
 		return
 	}
 
-	// Teardown the application instance
-	err = c.appFactory.DeleteInstance(teardownDto.ContainerID)
+	err = c.Dataplane.DeleteAppInstance(teardownDto.ContainerID)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to teardown app instance: %v", err)
+		logger.ErrorLogger().Printf("failed to delete app instance with container ID %s: %v",
+			teardownDto.ContainerID, err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -158,7 +172,7 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 	logger.DebugLogger().Println("received p4target registration request")
 
 	// First, parse the request body to get the application details
-	var requestData P4TargetConfigRequest
+	var requestData ContainerizedP4TargetConfigRequest
 	if err := json.NewDecoder(request.Body).Decode(&requestData); err != nil {
 		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
 		http.Error(response, err.Error(), http.StatusBadRequest)
@@ -194,7 +208,35 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 		return
 	}
 
-	// TODO: Assign a range to the P4Target
+	p4TargetConfig, err := c.Dataplane.ConfigureP4TargetInstance(p4target, requestData.P4TargetName)
+	if err != nil {
+		logger.ErrorLogger().Printf("failed to configure P4Target %s/%s: %v",
+			requestData.P4TargetName, requestData.P4TargetName, err)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	configResponse := &NetworkConfig{
+		IPNets: netutils.DualStackNetwork{
+			IPv6Net: &p4TargetConfig.IPv6Net,
+		},
+		ClusterCIDRs: netutils.DualStackNetwork{
+			IPv6Net: &p4TargetConfig.ClusterIPv6CIDR,
+		},
+		Gateways: netutils.DualStackGateway{
+			IPv6Gateway: p4TargetConfig.IPv6Gateway,
+		},
+		BridgeName: p4TargetConfig.Bridge,
+		IfaceName:  p4TargetConfig.IfaceName,
+		MTU:        9000,
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
+		logger.ErrorLogger().Printf("failed to encode response: %v", err)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (c *Controller) handleP4TargetTeardown(response http.ResponseWriter, request *http.Request) {
@@ -216,134 +258,14 @@ func (c *Controller) handleP4TargetTeardown(response http.ResponseWriter, reques
 		return
 	}
 
-	// Teardown the application instance
-	err = c.appFactory.DeleteInstance(teardownDto.ContainerID)
+	err = c.Dataplane.DeleteP4TargetInstance(teardownDto.ContainerID)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to teardown app instance: %v", err)
+		logger.ErrorLogger().Printf("failed to delete P4Target with container ID %s: %v",
+			teardownDto.ContainerID, err)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
-}
-
-func (c *Controller) handleVnfInstanceRegistration(response http.ResponseWriter, request *http.Request) {
-	logger.InfoLogger().Println("received VNF instance registration request")
-
-	// First, parse the request body to get the VNF details
-	var instanceConfigDto VnfInstanceConfigRequest
-	if err := json.NewDecoder(request.Body).Decode(&instanceConfigDto); err != nil {
-		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate the request
-	err := validate.Struct(instanceConfigDto)
-	if err != nil {
-		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Create the registration request
-	registrationRequest := &vnfs.RegistrationRequest{
-		VnfID:       instanceConfigDto.VnfID,
-		ContainerID: instanceConfigDto.ContainerID,
-	}
-
-	// This call is idempotent, so if the VNF is already registered,
-	// it will simply return the existing details.
-	// If the VNF ID references a non-existent VNF, return an error.
-	regResponse, err := c.vnfFactory.NewLocalInstance(registrationRequest)
-	if err != nil {
-		logger.ErrorLogger().Printf("failed to register VNF instance: %v", err)
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	sidList := make([]string, len(regResponse.SIDs))
-	for i, sid := range regResponse.SIDs {
-		sidList[i] = sid.String()
-	}
-	configResponse := &VnfInstanceConfigResponse{
-		IPNet:       regResponse.IPNet.String(),
-		SIDs:        sidList,
-		IfaceName:   regResponse.IfaceName,
-		ClusterCIDR: regResponse.ClusterCIDR.String(),
-		GatewayIP:   regResponse.GatewayIP.String(),
-		BridgeName:  regResponse.BridgeName,
-	}
-
-	// Finally, return the VNF details including the allocated IP.
-	response.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
-		logger.ErrorLogger().Printf("failed to encode response: %v", err)
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-func (c *Controller) handleVnfInstanceTeardown(response http.ResponseWriter, request *http.Request) {
-	logger.InfoLogger().Println("received VNF instance teardown request")
-
-	// First, parse the request body to get the container ID
-	var teardownDto VnfInstanceTeardownRequest
-	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
-		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate the request
-	err := validate.Struct(teardownDto)
-	if err != nil {
-		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Teardown the VNF instance
-	err = c.vnfFactory.TeardownVnfInstance(teardownDto.ContainerID)
-	if err != nil {
-		logger.ErrorLogger().Printf("failed to teardown VNF instance: %v", err)
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(http.StatusOK)
-}
-
-// Sets up the local API for CNI operations
-//
-// This API will be used by the CNI plugin to register and unregister
-// application and VNF containers.
-func InitializeCNIApi(appFactory apps.InstanceFactory, vnfFactory vnfs.InstanceFactory, repo db.Registry) (*http.Server, error) {
-	// Validate the services
-	if appFactory == nil || vnfFactory == nil || repo == nil {
-		return nil, fmt.Errorf("appFactory, vnfFactory, and repo cannot be nil")
-	}
-
-	// Create a new CNI controller with the services
-	cniController := &Controller{
-		appFactory: appFactory,
-		vnfFactory: vnfFactory,
-		repo:       repo,
-	}
-	validate = validator.New(validator.WithRequiredStructEnabled())
-	router := mux.NewRouter()
-	server := &http.Server{
-		Addr:    "127.0.0.1:7623",
-		Handler: router,
-	}
-	router.HandleFunc("/api/v1/cni/app/register", cniController.handleAppInstanceRegistration).Methods("POST")
-	router.HandleFunc("/api/v1/cni/app/teardown", cniController.handleAppInstanceTeardown).Methods("POST")
-	//router.HandleFunc("/api/v1/cni/vnf/register", cniController.handleVnfInstanceRegistration).Methods("POST")
-	//router.HandleFunc("/api/v1/cni/vnf/teardown", cniController.handleVnfInstanceTeardown).Methods("POST")
-	router.HandleFunc("/api/v1/cni/p4target/register", cniController.handleP4TargetRegistration).Methods("POST")
-	router.HandleFunc("/api/v1/cni/p4target/teardown", cniController.handleP4TargetTeardown).Methods("POST")
-	go server.ListenAndServe()
-	return server, nil
 }

@@ -57,6 +57,9 @@ type LoomNodeSpec struct {
 type LoomNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// TransportIPs specifies the IPs that the networking plugin should use to create the tunnels between nodes.
+	TransportIPs []string `json:"transportIPs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

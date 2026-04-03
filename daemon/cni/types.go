@@ -1,5 +1,7 @@
 package cni
 
+import "iml-daemon/pkg/netutils"
+
 /**************************************************************
 *********************** CNI Requests **************************
 **************************************************************/
@@ -7,28 +9,35 @@ package cni
 // =========== Applications ===========
 
 type AppInstanceConfigRequest struct {
+	ContainerID  string `json:"container_id"`
 	PodName      string `json:"pod_name"`
 	PodNamespace string `json:"pod_namespace"`
 	AppName      string `json:"app_name"`
 	AppNamespace string `json:"app_namespace"`
 }
 
-type PodNetworkConfig struct {
-	IPNets       []string `json:"ip_nets"`
-	ClusterCIDRs []string `json:"cluster_cidrs"`
-	Gateways     []string `json:"gateways"`
-	IfaceName    string   `json:"iface_name"`
-	BridgeName   string   `json:"bridge_name"`
+type NetworkConfig struct {
+	IPNets       netutils.DualStackNetwork `json:"ip_nets"`
+	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
+	Gateways     netutils.DualStackGateway `json:"gateways"`
+	IfaceName    string                    `json:"iface_name"`
+	BridgeName   string                    `json:"bridge_name"`
+	MTU          uint32                    `json:"mtu"`
 }
 
 type AppInstanceTeardownRequest struct {
 	ContainerID string `json:"container_id" validate:"required"`
 }
 
-// ========== VNFs ===========
+// ========== P4Targets ===========
 
-type P4TargetConfigRequest struct {
+type ContainerizedP4TargetConfigRequest struct {
+	ContainerID  string `json:"container_id" validate:"required"`
 	P4TargetName string `json:"p4target_name" validate:"required"`
+}
+
+type ContainerizedP4TargetTeardownRequest struct {
+	ContainerID string `json:"container_id" validate:"required"`
 }
 
 type VnfInstanceConfigRequest struct {

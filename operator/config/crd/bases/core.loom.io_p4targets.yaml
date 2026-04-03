@@ -39,6 +39,16 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
+              driverIPs:
+                description: DriverIPs are the in-cluster IPs assigned to the programmable
+                  target's driver.
+                items:
+                  type: string
+                type: array
+              nfCIDR:
+                description: NfCIDR is the range assigned to the network functions
+                  running on this target.
+                type: string
               taints:
                 description: |-
                   Taints represents the taints applied to the P4 target, which can affect
@@ -58,6 +68,12 @@ spec:
                   - effect
                   - key
                   type: object
+                type: array
+              targetIPs:
+                description: TargetIPs are the IPs assigned to the programmable target.
+                  They can be either in-cluster or public-facing IPs.
+                items:
+                  type: string
                 type: array
               unschedulable:
                 description: Unschedulable indicates whether the P4 target is unschedulable

@@ -71,6 +71,18 @@ type P4TargetSpec struct {
 	// Unschedulable indicates whether the P4 target is unschedulable for new network functions.
 	// +optional
 	Unschedulable bool `json:"unschedulable,omitempty"`
+
+	// TargetIPs are the IPs assigned to the programmable target. They can be either in-cluster or public-facing IPs.
+	// +optional
+	TargetIPs []string `json:"targetIPs,omitempty"`
+
+	// DriverIPs are the in-cluster IPs assigned to the programmable target's driver.
+	// +optional
+	DriverIPs []string `json:"driverIPs,omitempty"`
+
+	// NfCIDR is the range assigned to the network functions running on this target.
+	// +optional
+	NfCIDR string `json:"nfCIDR,omitempty"`
 }
 
 // Taints that can be applied to P4Targets to indicate their state or

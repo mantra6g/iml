@@ -35,18 +35,19 @@ const MQTT_URL = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
 const P4_CONTROLLER_API_URL = "http://" + P4_CONTROLLER_ADDR
 
 type IMLConfigMap struct {
-	ClusterPoolIPv4CIDR net.IPNet
-	ClusterPoolIPv6CIDR net.IPNet
+	ClusterPoolIPv4CIDR *net.IPNet
+	ClusterPoolIPv6CIDR *net.IPNet
 }
 
 type GlobalConfig struct {
 	IMLConfigMap
-	PodCIDR   *net.IPNet
-	NFSubnet  *net.IPNet
-	SIDSubnet *net.IPNet
-	TunSubnet *net.IPNet
-	DecapSID  *net.IPNet
-	NodeID    string
+	PodCIDR    *net.IPNet
+	NFSubnet   *net.IPNet
+	SIDSubnet  *net.IPNet
+	TunSubnet4 *net.IPNet
+	TunSubnet6 *net.IPNet
+	DecapSID   *net.IPNet
+	NodeID     string
 }
 
 // Singleton instance of GlobalConfig
@@ -59,17 +60,17 @@ func Config() (*GlobalConfig, error) {
 	return nil, fmt.Errorf("global config not initialized")
 }
 
-func SetUpNode(k8sClient client.Client) error {
+func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return fmt.Errorf("error getting hostname: %w", err)
+		return nil, fmt.Errorf("error getting hostname: %w", err)
 	}
 	if hostname == "" {
-		return fmt.Errorf("hostname is empty")
+		return nil, fmt.Errorf("hostname is empty")
 	}
 	configMap, err := readIMLConfigMap()
 	if err != nil {
-		return fmt.Errorf("error reading configmap: %w", err)
+		return nil, fmt.Errorf("error reading configmap: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), KubernetesAPICallTimeout)
 	defer cancel()
@@ -78,20 +79,20 @@ func SetUpNode(k8sClient client.Client) error {
 	err = k8sClient.Get(ctx, client.ObjectKey{Name: hostname}, loomNode)
 	// Discard every other error except NotFound
 	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("error getting loomNode: %w", err)
+		return nil, fmt.Errorf("error getting loomNode: %w", err)
 	}
 	// If the error is NotFound, then we need to create the LoomNode resource
 	if errors.IsNotFound(err) {
 		loomNode, err = createLoomNode(ctx, k8sClient, hostname)
 		if err != nil {
-			return fmt.Errorf("error creating loomNode: %w", err)
+			return nil, fmt.Errorf("error creating loomNode: %w", err)
 		}
 	}
 	// If the loomNode exists but no CIDRs were assigned yet, wait until they are assigned
 	if len(loomNode.Spec.PodCIDRs) == 0 {
 		err = waitForCIDRs(ctx, k8sClient, hostname)
 		if err != nil {
-			return fmt.Errorf("error waiting for CIDRs to be created: %w", err)
+			return nil, fmt.Errorf("error waiting for CIDRs to be created: %w", err)
 		}
 	}
 	globalConfig = &GlobalConfig{
@@ -99,9 +100,10 @@ func SetUpNode(k8sClient client.Client) error {
 		PodCIDR:      loomNode.Spec.PodCIDRs,
 		NFSubnet:     loomNode.Spec.P4TargetCIDRs,
 		SIDSubnet:    loomNode.Spec.SidCIDRs,
-		TunSubnet:    loomNode.Spec.TunnelCIDRs,
+		TunSubnet4:   loomNode.Spec.TunnelCIDRs,
 		NodeID:       string(loomNode.UID),
 	}
+	return globalConfig, nil
 }
 
 func readIMLConfigMap() (*IMLConfigMap, error) {
@@ -132,8 +134,8 @@ func readIMLConfigMap() (*IMLConfigMap, error) {
 	}
 
 	return &IMLConfigMap{
-		ClusterPoolIPv4CIDR: *ipv4Cidr,
-		ClusterPoolIPv6CIDR: *ipv6Cidr,
+		ClusterPoolIPv4CIDR: ipv4Cidr,
+		ClusterPoolIPv6CIDR: ipv6Cidr,
 	}, nil
 }
 
