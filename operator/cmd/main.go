@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	corecontroller "loom/internal/controller/core/networkfunctionconfig"
 	"os"
 	"path/filepath"
 
@@ -53,7 +54,6 @@ import (
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	corecontroller "loom/internal/controller/core"
 	"loom/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )

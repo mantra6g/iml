@@ -1,9 +1,8 @@
 package vrf
 
 import (
+	"context"
 	"fmt"
-	"iml-daemon/pkg/netutils"
-	"iml-daemon/pkg/tunnel"
 	"net"
 	"os"
 	"sync"
@@ -14,9 +13,12 @@ import (
 	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
 	vrfutil "iml-daemon/pkg/dataplane/vrf/util"
+	"iml-daemon/pkg/tunnel"
+	netutils "iml-daemon/pkg/utils/net"
 
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -35,15 +37,16 @@ const (
 )
 
 type Software struct {
-	appSubnets    map[types.UID][]AppSubnet
+	appSubnets    map[client.ObjectKey][]AppSubnet
 	appMu         sync.Mutex
-	p4Targets     map[types.UID]*P4TargetInstance
+	p4Targets     map[client.ObjectKey]*P4TargetInstance
 	p4Mu          sync.Mutex
-	nodeConfigs   map[types.UID]*NodeConfig
+	nodeConfigs   map[client.ObjectKey]*NodeConfig
 	nodeMu        sync.Mutex
 	tunnelManager tunnel.Manager
 	routingSubnet *RoutingSubnet
 	//routerVrf  *netlink.Vrf
+	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
 
 	appNet6Allocator *dataplane.Subnet6Allocator
 	appNet4Allocator *dataplane.Subnet4Allocator
@@ -52,7 +55,8 @@ type Software struct {
 	tunNet4Allocator *dataplane.Subnet4Allocator
 	tableAllocator   *dataplane.TableAllocator
 
-	cfg *env.GlobalConfig
+	cfg    *env.GlobalConfig
+	Client client.Client
 }
 
 type StackType = string
@@ -80,21 +84,21 @@ type NodeConfig struct {
 	Route               netutils.DualStackRoute
 }
 
-func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager) (dataplane.Dataplane, error) {
+func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager, k8sClient client.Client) (dataplane.Dataplane, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("global config is nil")
 	}
-	if cfg.ClusterPoolIPv6CIDR == nil {
+	if cfg.ClusterCIDR.IPv6Net == nil {
 		return nil, fmt.Errorf("cluster IPv6 Range cannot nil")
 	}
 
-	net6Allocator, err := dataplane.NewSubnet6Allocator(cfg.ClusterPoolIPv6CIDR, 64)
+	net6Allocator, err := dataplane.NewSubnet6Allocator(cfg.ClusterCIDR.IPv6Net, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create IPv6 subnet allocator: %w", err)
 	}
 	var net4Allocator *dataplane.Subnet4Allocator
-	if cfg.ClusterPoolIPv4CIDR != nil {
-		net4Allocator, err = dataplane.NewSubnet4Allocator(cfg.ClusterPoolIPv4CIDR, 64)
+	if cfg.ClusterCIDR.IPv4Net != nil {
+		net4Allocator, err = dataplane.NewSubnet4Allocator(cfg.ClusterCIDR.IPv4Net, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create application subnet allocator: %w", err)
 		}
@@ -103,13 +107,13 @@ func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager) (dataplane
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet's IP allocator: %w", err)
 	}
-	tunNet6Allocator, err := dataplane.NewSubnet6Allocator(cfg.TunSubnet6, 126)
+	tunNet6Allocator, err := dataplane.NewSubnet6Allocator(cfg.TunCIDR.IPv6Net, 126)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
 	}
 	var tunNet4Allocator *dataplane.Subnet4Allocator
-	if cfg.TunSubnet4 != nil {
-		tunNet4Allocator, err = dataplane.NewSubnet4Allocator(cfg.TunSubnet4, 30)
+	if cfg.TunCIDR.IPv4Net != nil {
+		tunNet4Allocator, err = dataplane.NewSubnet4Allocator(cfg.TunCIDR.IPv4Net, 30)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
 		}
@@ -146,16 +150,19 @@ func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager) (dataplane
 	cfg.DecapSID = rtrSubnet.DecapSID
 
 	return &Software{
-		appNet4Allocator: net4Allocator,
-		appNet6Allocator: net6Allocator,
-		tunNet6Allocator: tunNet6Allocator,
-		tunNet4Allocator: tunNet4Allocator,
-		tableAllocator:   tableAllocator,
-		routingSubnet:    rtrSubnet,
-		appSubnets:       make(map[types.UID][]AppSubnet),
-		p4Targets:        make(map[types.UID]*P4TargetInstance),
-		tunnelManager:    tunnelManager,
-		cfg:              cfg,
+		appNet4Allocator:   net4Allocator,
+		appNet6Allocator:   net6Allocator,
+		tunNet6Allocator:   tunNet6Allocator,
+		tunNet4Allocator:   tunNet4Allocator,
+		tableAllocator:     tableAllocator,
+		routingSubnet:      rtrSubnet,
+		appSubnets:         make(map[client.ObjectKey][]AppSubnet),
+		p4Targets:          make(map[client.ObjectKey]*P4TargetInstance),
+		nodeConfigs:        make(map[client.ObjectKey]*NodeConfig),
+		serviceChainRoutes: make(map[client.ObjectKey][]dataplane.SRv6Route),
+		tunnelManager:      tunnelManager,
+		cfg:                cfg,
+		Client:             k8sClient,
 	}, nil
 }
 
@@ -174,44 +181,110 @@ func (d *Software) Close() error {
 	return nil
 }
 
-func (d *Software) AddRoute(srcAppID types.UID, dstNet net.IPNet, sids []net.IP) error {
-	d.appMu.Lock()
-	defer d.appMu.Unlock()
-
-	subnets, exists := d.appSubnets[srcAppID]
-	if !exists {
-		return fmt.Errorf("application subnet for group %s does not exist", srcAppID)
+func (d *Software) AddServiceChainRoutes(chain *corev1alpha1.ServiceChain, routes []dataplane.SRv6Route) error {
+	if d.serviceChainRoutes[client.ObjectKeyFromObject(chain)] == nil {
+		d.serviceChainRoutes[client.ObjectKeyFromObject(chain)] = make([]dataplane.SRv6Route, 0)
 	}
-
-	for i := range subnets {
-		err := subnets[i].AddSRv6Route(dstNet, sids)
-		if err != nil {
-			return err
+	for _, route := range routes {
+		sourceAppSubnets, exists := d.appSubnets[route.SourceApp]
+		if !exists {
+			return fmt.Errorf("source app subnet %s does not exist", route.SourceApp)
 		}
+		if len(sourceAppSubnets) == 0 {
+			return fmt.Errorf("source app subnet %s has no subnets in use", route.SourceApp)
+		}
+		for i := range sourceAppSubnets {
+			subnet := &sourceAppSubnets[i]
+			err := subnet.AddSRv6Route(route.DestNet, route.FunctionIPs)
+			if err != nil {
+				return fmt.Errorf("failed to add SRv6 route to subnet %s: %w", route.DestNet, err)
+			}
+		}
+		d.serviceChainRoutes[client.ObjectKeyFromObject(chain)] = append(d.serviceChainRoutes[client.ObjectKeyFromObject(chain)], route)
 	}
 	return nil
 }
 
-func (d *Software) RemoveRoute(srcAppID types.UID, dstNet net.IPNet) error {
-	d.appMu.Lock()
-	defer d.appMu.Unlock()
-
-	subnets, exists := d.appSubnets[srcAppID]
+func (d *Software) ListServiceChainRoutes(chain *corev1alpha1.ServiceChain) ([]dataplane.SRv6Route, error) {
+	chainRoutes, exists := d.serviceChainRoutes[client.ObjectKeyFromObject(chain)]
 	if !exists {
-		return fmt.Errorf("application subnet for group %s does not exist", srcAppID)
+		return []dataplane.SRv6Route{}, nil
 	}
+	return chainRoutes, nil
+}
 
-	for i := range subnets {
-		err := subnets[i].DeleteSRv6Route(dstNet)
+func (d *Software) DeleteServiceChainRoute(chain client.ObjectKey, route dataplane.SRv6Route) error {
+	if d.serviceChainRoutes[chain] == nil {
+		return nil
+	}
+	sourceAppSubnets, exists := d.appSubnets[route.SourceApp]
+	if !exists {
+		return nil
+	}
+	for i := range sourceAppSubnets {
+		subnet := &sourceAppSubnets[i]
+		err := subnet.DeleteSRv6Route(route.DestNet)
+		if err != nil {
+			return fmt.Errorf("failed to add SRv6 route to subnet %s: %w", route.DestNet, err)
+		}
+	}
+	d.serviceChainRoutes[chain] = append(d.serviceChainRoutes[chain], route)
+	return nil
+}
+
+func (d *Software) DeleteAllServiceChainRoutes(chain client.ObjectKey) error {
+	chainRoutes, exists := d.serviceChainRoutes[chain]
+	if !exists {
+		return nil
+	}
+	for _, route := range chainRoutes {
+		err := d.DeleteServiceChainRoute(chain, route)
 		if err != nil {
 			return err
 		}
 	}
+	delete(d.serviceChainRoutes, chain)
 	return nil
 }
+
+//func (d *Software) AddRoute(srcAppID types.UID, dstNet net.IPNet, sids []net.IP) error {
+//	d.appMu.Lock()
+//	defer d.appMu.Unlock()
+//
+//	subnets, exists := d.appSubnets[srcAppID]
+//	if !exists {
+//		return fmt.Errorf("application subnet for group %s does not exist", srcAppID)
+//	}
+//
+//	for i := range subnets {
+//		err := subnets[i].AddSRv6Route(dstNet, sids)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
+
+//func (d *Software) RemoveRoute(srcAppID types.UID, dstNet net.IPNet) error {
+//	d.appMu.Lock()
+//	defer d.appMu.Unlock()
+//
+//	subnets, exists := d.appSubnets[srcAppID]
+//	if !exists {
+//		return fmt.Errorf("application subnet for group %s does not exist", srcAppID)
+//	}
+//
+//	for i := range subnets {
+//		err := subnets[i].DeleteSRv6Route(dstNet)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
 
 // Creates a subnet into the dataplane and returns the configured bridge name.
-func (d *Software) addApplicationSubnet(appUID types.UID) (subnet *AppSubnet, err error) {
+func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *AppSubnet, err error) {
 	var appNet4, appNet6 *net.IPNet
 	if d.appNet4Allocator != nil {
 		appNet4, err = d.appNet4Allocator.Allocate()
@@ -258,13 +331,38 @@ func (d *Software) addApplicationSubnet(appUID types.UID) (subnet *AppSubnet, er
 		return nil, fmt.Errorf("failed to install routes towards routing subnet in app subnet: %w", err)
 	}
 
-	existingSubnets, ok := d.appSubnets[appUID]
+	existingSubnets, ok := d.appSubnets[appID]
 	if !ok {
-		d.appSubnets[appUID] = []AppSubnet{*subnet}
+		d.appSubnets[appID] = []AppSubnet{*subnet}
 	} else {
-		d.appSubnets[appUID] = append(existingSubnets, *subnet)
+		d.appSubnets[appID] = append(existingSubnets, *subnet)
+	}
+	err = d.addSubnetToAppStatus(appID, appNet4, appNet6)
+	if err != nil {
+		return subnet, fmt.Errorf("failed to update application status with subnet info: %w", err)
 	}
 	return subnet, nil
+}
+
+func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net.IPNet, appNet6 *net.IPNet) error {
+	var app = &corev1alpha1.Application{}
+	err := d.Client.Get(context.Background(), appID, app)
+	if err != nil {
+		return fmt.Errorf("failed to get application: %w", err)
+	}
+	original := app.DeepCopy()
+	if app.Status.Subnets[d.cfg.NodeName] == nil {
+		app.Status.Subnets[d.cfg.NodeName] = make([]corev1alpha1.DualStackNetwork, 0)
+	}
+	app.Status.Subnets[d.cfg.NodeName] = append(app.Status.Subnets[d.cfg.NodeName], corev1alpha1.DualStackNetwork{
+		IPv4Net: appNet4,
+		IPv6Net: appNet6,
+	})
+	err = d.Client.Patch(context.Background(), app, client.MergeFrom(original))
+	if err != nil {
+		return fmt.Errorf("failed to patch application: %w", err)
+	}
+	return nil
 }
 
 func (d *Software) configureTunnelBetweenSubnets(
@@ -395,18 +493,18 @@ func (d *Software) configureTunnelBetweenSubnets(
 }
 
 func (d *Software) ConfigureAppInstance(
-	app *corev1alpha1.Application, containerID string,
+	app *corev1alpha1.Application, _ string,
 ) (*dataplane.AppConfig, error) {
 	d.appMu.Lock()
 	defer d.appMu.Unlock()
 
-	subnets, exists := d.appSubnets[app.UID]
+	subnets, exists := d.appSubnets[client.ObjectKeyFromObject(app)]
 	if !exists {
 		subnets = []AppSubnet{}
 	}
 	subnet, err := getFirstSubnetWithAvailableIPs(subnets)
 	if !exists || err != nil {
-		subnet, err = d.addApplicationSubnet(app.UID)
+		subnet, err = d.addApplicationSubnet(client.ObjectKeyFromObject(app))
 		if err != nil {
 			return nil, fmt.Errorf("failed to add subnet: %w", err)
 		}
@@ -423,8 +521,8 @@ func (d *Software) ConfigureAppInstance(
 	return &dataplane.AppConfig{
 		IPs: ips,
 		ClusterCIDRs: netutils.DualStackNetwork{
-			IPv4Net: d.cfg.ClusterPoolIPv4CIDR,
-			IPv6Net: d.cfg.ClusterPoolIPv6CIDR,
+			IPv4Net: d.cfg.ClusterCIDR.IPv4Net,
+			IPv6Net: d.cfg.ClusterCIDR.IPv6Net,
 		},
 		Gateways:  subnet.GatewayIPs,
 		Bridge:    subnet.Bridge.Name,
@@ -433,22 +531,22 @@ func (d *Software) ConfigureAppInstance(
 	}, nil
 }
 
-func (d *Software) DeleteAppInstance(containerID string) error {
+func (d *Software) DeleteAppInstance(_ string) error {
 	// Nothing to do here for now
 	return nil
 }
 
 func (d *Software) ConfigureP4TargetInstance(
-	target *corev1alpha1.P4Target, containerID string,
+	target *corev1alpha1.P4Target, _ string,
 ) (*dataplane.P4TargetConfig, error) {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	p4TargetConfig, exists := d.p4Targets[target.UID]
+	p4TargetConfig, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
 	if exists {
 		return &dataplane.P4TargetConfig{
 			IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
-			ClusterIPv6CIDR: *d.cfg.ClusterPoolIPv6CIDR,
+			ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
 			IPv6Gateway:     d.routingSubnet.Gateway,
 			Bridge:          d.routingSubnet.Bridge.Name,
 			MTU:             DefaultMTU,
@@ -466,14 +564,14 @@ func (d *Software) ConfigureP4TargetInstance(
 		return nil, fmt.Errorf("failed to generate interface name: %w", err)
 	}
 
-	d.p4Targets[target.UID] = &P4TargetInstance{
+	d.p4Targets[client.ObjectKeyFromObject(target)] = &P4TargetInstance{
 		TargetIPs: ips,
 		ifaceName: ifaceName,
 	}
 
 	return &dataplane.P4TargetConfig{
 		IPv6Net:         *ips.IPv6Net,
-		ClusterIPv6CIDR: *d.cfg.ClusterPoolIPv6CIDR,
+		ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
 		IPv6Gateway:     d.routingSubnet.Gateway,
 		Bridge:          d.routingSubnet.Bridge.Name,
 		MTU:             DefaultMTU,
@@ -481,7 +579,7 @@ func (d *Software) ConfigureP4TargetInstance(
 	}, nil
 }
 
-func (d *Software) DeleteP4TargetInstance(containerID string) error {
+func (d *Software) DeleteP4TargetInstance(_ string) error {
 	// Nothing to do here by now
 	return nil
 }
@@ -489,7 +587,7 @@ func (d *Software) DeleteP4TargetInstance(containerID string) error {
 func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	d.nodeMu.Lock()
 	defer d.nodeMu.Unlock()
-	nodeConfig, exists := d.nodeConfigs[node.UID]
+	nodeConfig, exists := d.nodeConfigs[client.ObjectKeyFromObject(node)]
 	if !exists {
 		return nil
 	}
@@ -534,7 +632,7 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	if err != nil {
 		return fmt.Errorf("failed to add route for node %s: %w", node.Name, err)
 	}
-	d.nodeConfigs[node.UID] = &NodeConfig{
+	d.nodeConfigs[client.ObjectKeyFromObject(node)] = &NodeConfig{
 		LastResourceVersion: node.ResourceVersion,
 		Route: netutils.DualStackRoute{
 			IPv4Route: netutils.Route{
@@ -550,17 +648,17 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	return nil
 }
 
-func (d *Software) RemoveNodeRoutes(node *infrav1alpha1.LoomNode) (err error) {
+func (d *Software) RemoveNodeRoutes(node client.ObjectKey) (err error) {
 	d.nodeMu.Lock()
 	defer d.nodeMu.Unlock()
 
-	nodeConfig, exists := d.nodeConfigs[node.UID]
+	nodeConfig, exists := d.nodeConfigs[node]
 	if !exists {
 		return nil
 	}
 	defer func() {
 		if err != nil {
-			delete(d.nodeConfigs, node.UID)
+			delete(d.nodeConfigs, node)
 		}
 	}()
 	route := &nodeConfig.Route
@@ -582,7 +680,7 @@ func (d *Software) UpdateAppRoutes(app *corev1alpha1.Application) error {
 	return nil
 }
 
-func (d *Software) RemoveAppRoutes(app *corev1alpha1.Application) error {
+func (d *Software) RemoveAppRoutes(app client.ObjectKey) error {
 	return nil
 }
 
@@ -590,7 +688,7 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	targetInstance, exists := d.p4Targets[target.UID]
+	targetInstance, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
 	if !exists {
 		// Either a P4Target that wasn't configured yet, or it belongs to another node.
 		// TODO: This verification does not work for Hardware-based P4Targets that don't belong to any node.
@@ -616,7 +714,7 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	return nil
 }
 
-func (d *Software) RemoveP4TargetRoutes(target *corev1alpha1.P4Target) error {
+func (d *Software) RemoveP4TargetRoutes(target client.ObjectKey) error {
 	return nil
 }
 

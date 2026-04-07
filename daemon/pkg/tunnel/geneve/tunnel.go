@@ -2,8 +2,9 @@ package geneve
 
 import (
 	"fmt"
+
 	vrfutils "iml-daemon/pkg/dataplane/vrf/util"
-	"iml-daemon/pkg/netutils"
+	netutils "iml-daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	corev1 "k8s.io/api/core/v1"

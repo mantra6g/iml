@@ -4,9 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"iml-daemon/pkg/netutils"
 	"net"
 	"net/netip"
+
+	netutils "iml-daemon/pkg/utils/net"
 
 	"github.com/vishvananda/netlink"
 )

@@ -2,10 +2,11 @@ package vrf
 
 import (
 	"fmt"
+	"net"
+
 	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
-	"iml-daemon/pkg/netutils"
-	"net"
+	netutils "iml-daemon/pkg/utils/net"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"

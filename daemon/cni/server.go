@@ -8,7 +8,7 @@ import (
 	corev1alpha1 "iml-daemon/api/core/v1alpha1"
 	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
-	"iml-daemon/pkg/netutils"
+	netutils "iml-daemon/pkg/utils/net"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"

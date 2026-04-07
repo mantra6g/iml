@@ -1,6 +1,8 @@
 package cni
 
-import "iml-daemon/pkg/netutils"
+import (
+	netutils "iml-daemon/pkg/utils/net"
+)
 
 /**************************************************************
 *********************** CNI Requests **************************

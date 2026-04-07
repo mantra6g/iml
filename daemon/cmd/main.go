@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	p4tinformer "iml-daemon/controllers/p4targets"
 	"iml-daemon/pkg/dataplane/vrf"
 	"iml-daemon/pkg/tunnel/geneve"
 	"time"
@@ -28,7 +29,6 @@ import (
 	"iml-daemon/env"
 	nodeinformer "iml-daemon/informers/loomnodes"
 	nfinformer "iml-daemon/informers/networkfunctions"
-	p4tinformer "iml-daemon/informers/p4targets"
 	scinformer "iml-daemon/informers/servicechains"
 	"iml-daemon/logger"
 

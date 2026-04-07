@@ -115,6 +115,9 @@ type P4TargetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// NodeName is the name of the Kubernetes node that the P4 target is associated with, if any.
+	NodeName string `json:"nodeName,omitempty"`
+
 	// Capacity represents the total resources of the P4 target
 	Capacity corev1.ResourceList `json:"capacity,omitempty"`
 

@@ -3,7 +3,6 @@ package env
 import (
 	"context"
 	"fmt"
-	"iml-daemon/pkg/netutils"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,9 +10,11 @@ import (
 	"time"
 
 	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
+	netutils "iml-daemon/pkg/utils/net"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,6 +45,8 @@ type GlobalConfig struct {
 	PodCIDR  netutils.DualStackNetwork
 	TunCIDR  netutils.DualStackNetwork
 	DecapSID *net.IPNet
+	NodeID   types.UID
+	NodeName string
 }
 
 // Singleton instance of GlobalConfig
@@ -103,6 +106,8 @@ func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 		IMLConfigMap: *configMap,
 		PodCIDR:      podCIDR,
 		TunCIDR:      tunCIDR,
+		NodeID:       loomNode.UID,
+		NodeName:     hostname,
 	}
 	return globalConfig, nil
 }
@@ -148,10 +153,8 @@ func createLoomNode(ctx context.Context, k8sClient client.Client, nodeName strin
 			Name: nodeName,
 		},
 		Spec: infrav1alpha1.LoomNodeSpec{
-			PodCIDRs:      make([]string, 0),
-			SidCIDRs:      make([]string, 0),
-			P4TargetCIDRs: make([]string, 0),
-			TunnelCIDRs:   make([]string, 0),
+			PodCIDRs:    make([]string, 0),
+			TunnelCIDRs: make([]string, 0),
 		},
 	}
 	err := k8sClient.Create(ctx, loomNode)

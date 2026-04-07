@@ -127,6 +127,10 @@ spec:
                   - type
                   type: object
                 type: array
+              nodeName:
+                description: NodeName is the name of the Kubernetes node that the
+                  P4 target is associated with, if any.
+                type: string
             type: object
         required:
         - spec

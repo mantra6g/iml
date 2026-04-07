@@ -5,10 +5,17 @@ import (
 
 	corev1alpha1 "iml-daemon/api/core/v1alpha1"
 	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
-	"iml-daemon/pkg/netutils"
+	netutils "iml-daemon/pkg/utils/net"
 
-	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type SRv6Route struct {
+	SourceApp      client.ObjectKey
+	DestinationApp client.ObjectKey
+	DestNet        netutils.DualStackNetwork
+	FunctionIPs    []net.IP
+}
 
 type AppConfig struct {
 	IPs          netutils.DualStackNetwork
@@ -38,14 +45,17 @@ type Dataplane interface {
 	DeleteP4TargetInstance(containerID string) error
 
 	UpdateAppRoutes(app *corev1alpha1.Application) error
-	RemoveAppRoutes(app *corev1alpha1.Application) error
+	RemoveAppRoutes(app client.ObjectKey) error
 
 	UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error
-	RemoveP4TargetRoutes(target *corev1alpha1.P4Target) error
+	RemoveP4TargetRoutes(target client.ObjectKey) error
 
 	UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error
-	RemoveNodeRoutes(node *infrav1alpha1.LoomNode) error
+	RemoveNodeRoutes(node client.ObjectKey) error
 
-	AddRoute(srcAppID types.UID, dstNet net.IPNet, sids []net.IP) error
-	RemoveRoute(srcAppID types.UID, dstNet net.IPNet) error
+	AddServiceChainRoutes(service *corev1alpha1.ServiceChain, routes []SRv6Route) error
+	ListServiceChainRoutes(service *corev1alpha1.ServiceChain) ([]SRv6Route, error)
+	DeleteAllServiceChainRoutes(service client.ObjectKey) error
+	//AddRoute(srcAppID types.UID, dstNet net.IPNet, sids []net.IP) error
+	//RemoveRoute(srcAppID types.UID, dstNet net.IPNet) error
 }

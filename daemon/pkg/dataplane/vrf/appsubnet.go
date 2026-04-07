@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
-	vrfutil "iml-daemon/pkg/dataplane/vrf/util"
-	"iml-daemon/pkg/netutils"
 	"net"
+
+	vrfutil "iml-daemon/pkg/dataplane/vrf/util"
+	netutils "iml-daemon/pkg/utils/net"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
@@ -322,31 +323,66 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 	return nil
 }
 
-func (s *AppSubnet) AddSRv6Route(dst net.IPNet, sids []net.IP) error {
-	// ip route add <dstNet> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
-	route := &netlink.Route{
-		Dst:   &dst,
-		Table: int(s.Vrf.Table),
-		Encap: &netlink.SEG6Encap{
-			Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
-			Segments: sids,
-		},
-		LinkIndex: s.Tunnel.Attrs().Index,
+func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP) error {
+	if dst.IsEmpty() {
+		return fmt.Errorf("destination's IPv4Net and IPv6Net are both nil")
 	}
-	if err := netlink.RouteAdd(route); err != nil {
-		return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.String(), sids, err)
+	if dst.IPv4Net != nil {
+		// ip route add <dstNet4> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
+		route := &netlink.Route{
+			Dst:   dst.IPv4Net,
+			Table: int(s.Vrf.Table),
+			Encap: &netlink.SEG6Encap{
+				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
+				Segments: sids,
+			},
+			LinkIndex: s.Tunnel.Attrs().Index,
+		}
+		if err := netlink.RouteAdd(route); err != nil {
+			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv4Net.String(), sids, err)
+		}
+	}
+	if dst.IPv6Net != nil {
+		// same as above but in IPv6
+		route := &netlink.Route{
+			Dst:   dst.IPv6Net,
+			Table: int(s.Vrf.Table),
+			Encap: &netlink.SEG6Encap{
+				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
+				Segments: sids,
+			},
+			LinkIndex: s.Tunnel.Attrs().Index,
+		}
+		if err := netlink.RouteAdd(route); err != nil {
+			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv6Net.String(), sids, err)
+		}
 	}
 	return nil
 }
 
-func (s *AppSubnet) DeleteSRv6Route(dst net.IPNet) error {
-	route := &netlink.Route{
-		Dst:   &dst,
-		Table: int(s.Vrf.Table),
+func (s *AppSubnet) DeleteSRv6Route(dst netutils.DualStackNetwork) error {
+	if dst.IsEmpty() {
+		return fmt.Errorf("destination's IPv4Net and IPv6Net are both nil")
 	}
-	err := netlink.RouteDel(route)
-	if err != nil {
-		return fmt.Errorf("failed to delete SRv6 route to %s: %w", dst.String(), err)
+	if dst.IPv4Net != nil {
+		route := &netlink.Route{
+			Dst:   dst.IPv4Net,
+			Table: int(s.Vrf.Table),
+		}
+		err := netlink.RouteDel(route)
+		if err != nil {
+			return fmt.Errorf("failed to delete SRv6 route to %s: %w", dst.IPv4Net.String(), err)
+		}
+	}
+	if dst.IPv6Net != nil {
+		route := &netlink.Route{
+			Dst:   dst.IPv6Net,
+			Table: int(s.Vrf.Table),
+		}
+		err := netlink.RouteDel(route)
+		if err != nil {
+			return fmt.Errorf("failed to delete SRv6 route to %s: %w", dst.IPv6Net.String(), err)
+		}
 	}
 	return nil
 }
