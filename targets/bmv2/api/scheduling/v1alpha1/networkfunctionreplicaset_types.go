@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1alpha1 "loom/api/core/v1alpha1"
+	corev1alpha1 "bmv2-driver/api/core/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
