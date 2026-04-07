@@ -6,15 +6,15 @@ spec:
   restartPolicy: Always
   containers:
   - name: bmv2-driver
-    image: driver:local
+    image: bmv2-driver:local
     imagePullPolicy: Never
   - name: bmv2-switch
     image: p4lang/behavioral-model:latest
     imagePullPolicy: IfNotPresent
     command: ["simple_switch_grpc"]
     args:
-      - "--device-id"
-      - "1"
-      - "--grpc-server-addr"
-      - "127.0.0.1:9559"
+      - "--no-p4"
       - "--log-console"
+      - "--"
+      - "--grpc-server-addr=0.0.0.0:9559"
+      - "--cpu-port=255"

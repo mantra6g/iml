@@ -11,8 +11,8 @@ import (
 )
 
 func main() {
-	// TODO: Change the port to the correct one for the switch.
-	switchAddr := "127.0.0.1:8888"
+	// Use the localhost address and the default port for P4Runtime
+	switchAddr := "127.0.0.1:9559"
 
 	// Set up a connection to the switch.
 	conn, err := grpc.NewClient(switchAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -29,7 +29,6 @@ func main() {
 	// Set a program in the switch.
 	// https://p4lang.github.io/p4runtime/spec/main/P4Runtime-Spec.html#sec-p4-fwd-pipe-config
 	_, err = c.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
-		DeviceId: 1,
 		// Verify program and program the switch if the program is valid.
 		Action: v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
 		// Actual program details.
