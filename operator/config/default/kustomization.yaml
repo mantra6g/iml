@@ -34,6 +34,7 @@ resources:
 #- ../network-policy
 # [UPDATES] Exposes a service for updates on apps/nfs/chains definitions.
 - updates_service.yaml
+- iml_configmap.yaml
 
 # Uncomment the patches line if you enable Metrics
 patches:

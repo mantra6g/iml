@@ -17,7 +17,6 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: Application
@@ -39,7 +38,6 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: ServiceChain
@@ -78,5 +76,21 @@ resources:
   group: infra
   kind: BMv2Target
   path: loom/api/infra/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: loom.io
+  group: infra
+  kind: LoomNode
+  path: loom/api/infra/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: loom.io
+  group: core
+  kind: NetworkFunctionConfig
+  path: loom/api/core/v1alpha1
   version: v1alpha1
 version: "3"

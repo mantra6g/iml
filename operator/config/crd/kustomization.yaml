@@ -9,6 +9,8 @@ resources:
 - bases/scheduling.loom.io_networkfunctionreplicasets.yaml
 - bases/core.loom.io_networkfunctions.yaml
 - bases/infra.loom.io_bmv2targets.yaml
+- bases/infra.loom.io_loomnodes.yaml
+- bases/core.loom.io_networkfunctionconfigs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
