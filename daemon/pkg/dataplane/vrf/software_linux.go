@@ -21,6 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// +kubebuilder:rbac:groups=core.loom.io,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=applications/status,verbs=get;update;patch
+
 const (
 	// RoutingVRFName is the name of the VRF that will be used to interconnect the different Application subnets
 	RoutingVRFName = "router-vrf"

@@ -36,6 +36,9 @@ const API_URL = "http://" + IML_ADDR + ":" + API_PORT
 const MQTT_URL = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
 const P4_CONTROLLER_API_URL = "http://" + P4_CONTROLLER_ADDR
 
+// +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes/status,verbs=get;update;patch
+
 type IMLConfigMap struct {
 	ClusterCIDR netutils.DualStackNetwork
 }
@@ -51,13 +54,6 @@ type GlobalConfig struct {
 
 // Singleton instance of GlobalConfig
 var globalConfig *GlobalConfig
-
-func Config() (*GlobalConfig, error) {
-	if globalConfig != nil {
-		return globalConfig, nil
-	}
-	return nil, fmt.Errorf("global config not initialized")
-}
 
 func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 	hostname, err := os.Hostname()

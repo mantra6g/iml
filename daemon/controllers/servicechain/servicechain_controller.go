@@ -51,8 +51,8 @@ type Reconciler struct {
 	Dataplane dataplane.Dataplane
 }
 
-// +kubebuilder:rbac:groups=core.loom.io,resources=servicechains,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core.loom.io,resources=servicechains/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core.loom.io,resources=servicechains,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=servicechains/status,verbs=get
 // +kubebuilder:rbac:groups=core.loom.io,resources=applications,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core.loom.io,resources=applications/status,verbs=get
 // +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions,verbs=get;list;watch
