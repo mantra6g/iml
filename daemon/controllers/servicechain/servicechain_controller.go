@@ -159,10 +159,12 @@ func (r *Reconciler) calculateSRv6Routes(ctx context.Context, serviceChain *core
 	routes := make([]dataplane.SRv6Route, 0)
 	for _, dstSubnets := range dstApp.Status.Subnets {
 		for _, subnet := range dstSubnets {
+			_, ipv4Net, _ := net.ParseCIDR(subnet.IPv4Net)
+			_, ipv6Net, _ := net.ParseCIDR(subnet.IPv6Net)
 			routes = append(routes, dataplane.SRv6Route{
 				SourceApp:      client.ObjectKeyFromObject(srcApp),
 				DestinationApp: client.ObjectKeyFromObject(dstApp),
-				DestNet:        netutils.DualStackNetwork{IPv4Net: subnet.IPv4Net, IPv6Net: subnet.IPv6Net},
+				DestNet:        netutils.DualStackNetwork{IPv4Net: ipv4Net, IPv6Net: ipv6Net},
 				FunctionIPs:    segments,
 			})
 		}

@@ -358,8 +358,8 @@ func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net
 		app.Status.Subnets[d.cfg.NodeName] = make([]corev1alpha1.DualStackNetwork, 0)
 	}
 	app.Status.Subnets[d.cfg.NodeName] = append(app.Status.Subnets[d.cfg.NodeName], corev1alpha1.DualStackNetwork{
-		IPv4Net: appNet4,
-		IPv6Net: appNet6,
+		IPv4Net: appNet4.String(),
+		IPv6Net: appNet6.String(),
 	})
 	err = d.Client.Patch(context.Background(), app, client.MergeFrom(original))
 	if err != nil {
@@ -698,11 +698,11 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 		//  Refactor the code to properly handle this case.
 		return nil
 	}
-	if len(target.Spec.TargetIPs) == 0 || len(target.Spec.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
+	if len(target.Status.TargetIPs) == 0 || len(target.Status.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
 		// We don't have enough information about the object yet to update its routes.
 		return nil
 	}
-	targetAddrs, err := vrfutil.ParseDualStackGatewayFromStrings(target.Spec.TargetIPs)
+	targetAddrs, err := vrfutil.ParseDualStackGatewayFromStrings(target.Status.TargetIPs)
 	if err != nil {
 		return fmt.Errorf("failed to parse target IPs for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 	}
