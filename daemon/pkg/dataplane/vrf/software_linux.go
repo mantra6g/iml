@@ -597,7 +597,7 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	if nodeConfig.LastResourceVersion >= node.ResourceVersion {
 		return nil
 	}
-	if len(node.Spec.PodCIDRs) == 0 {
+	if len(node.Spec.NodeCIDRs) == 0 {
 		// Node hasn't got a CIDR yet
 		return nil
 	}
@@ -613,7 +613,7 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	if err != nil {
 		return fmt.Errorf("failed to set master for tunnel interface for node %s: %w", node.Name, err)
 	}
-	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(node.Spec.PodCIDRs)
+	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(node.Spec.NodeCIDRs)
 	if err != nil {
 		return fmt.Errorf("failed to parse CIDRs for node %s: %w", node.Name, err)
 	}

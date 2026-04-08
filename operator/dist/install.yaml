@@ -46,14 +46,22 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of Application
-            properties:
-              override_id:
-                description: Instead of letting the system generate an ID, use this
-                  field to override it
-                type: string
             type: object
           status:
             description: status defines the observed state of Application
+            properties:
+              subnets:
+                additionalProperties:
+                  items:
+                    properties:
+                      inet4:
+                        type: string
+                      inet6:
+                        type: string
+                    type: object
+                  type: array
+                description: Subnets is a list of subnet assignments per node
+                type: object
             type: object
         required:
         - spec
@@ -106,6 +114,37 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of BMv2Target
+            properties:
+              resources:
+                description: Resources defines the compute resource requirements for
+                  the BMv2 target.
+                properties:
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed for the target.
+                      The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required for the target.
+                      The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+                    type: object
+                required:
+                - limits
+                - requests
+                type: object
             type: object
           status:
             description: status defines the observed state of BMv2Target
@@ -131,6 +170,130 @@ spec:
               observedGeneration:
                 format: int64
                 type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: loomnodes.infra.loom.io
+spec:
+  group: infra.loom.io
+  names:
+    kind: LoomNode
+    listKind: LoomNodeList
+    plural: loomnodes
+    singular: loomnode
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: LoomNode is the Schema for the loomnodes API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of LoomNode
+            properties:
+              nodeCIDRs:
+                description: |-
+                  NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
+                  This is used by the CNI plugin to determine which IPs to assign to pods scheduled on this node.
+                  When left empty, the controller will automatically allocate a CIDR block for this node
+                  from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
+                items:
+                  type: string
+                type: array
+              tunnelCIDRs:
+                description: TunnelCIDRs are similar to NodeCIDRs but used for tunnels
+                  in this node.
+                items:
+                  type: string
+                type: array
+            type: object
+          status:
+            description: status defines the observed state of LoomNode
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: networkfunctionconfigs.core.loom.io
+spec:
+  group: core.loom.io
+  names:
+    kind: NetworkFunctionConfig
+    listKind: NetworkFunctionConfigList
+    plural: networkfunctionconfigs
+    singular: networkfunctionconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NetworkFunctionConfig is the Schema for the networkfunctionconfigs
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of NetworkFunctionConfig
+            properties:
+              foo:
+                description: foo is an example field of NetworkFunctionConfig. Edit
+                  networkfunctionconfig_types.go to remove/update
+                type: string
+            type: object
+          status:
+            description: status defines the observed state of NetworkFunctionConfig
             type: object
         required:
         - spec
@@ -194,7 +357,7 @@ spec:
                 description: Replicas is the number of desired replicas of the network
                   function
                 format: int32
-                minimum: 1
+                minimum: 0
                 type: integer
               selector:
                 description: |-
@@ -291,10 +454,11 @@ spec:
                   will be created
                 properties:
                   metadata:
+                    description: Standard object's metadata.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   spec:
-                    description: NetworkFunctionSpec defines the desired state of
-                      NetworkFunction
+                    description: Specification of the desired behavior of the pod.
                     properties:
                       controlPlane:
                         description: |-
@@ -1502,7 +1666,6 @@ spec:
                         type: object
                     required:
                     - p4File
-                    - targetselector
                     type: object
                 type: object
             required:
@@ -1694,10 +1857,11 @@ spec:
                 description: Template describes the NetworkFunction that will be created
                 properties:
                   metadata:
+                    description: Standard object's metadata.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   spec:
-                    description: NetworkFunctionSpec defines the desired state of
-                      NetworkFunction
+                    description: Specification of the desired behavior of the pod.
                     properties:
                       controlPlane:
                         description: |-
@@ -2905,7 +3069,6 @@ spec:
                         type: object
                     required:
                     - p4File
-                    - targetselector
                     type: object
                 type: object
             required:
@@ -4216,11 +4379,14 @@ spec:
                 type: object
             required:
             - p4File
-            - targetselector
             type: object
           status:
             description: status defines the observed state of NetworkFunction
             properties:
+              assignedIP:
+                description: AssignedIP is the IP address assigned to the NetworkFunction,
+                  used for routing traffic to it.
+                type: string
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the
@@ -4280,14 +4446,7 @@ spec:
     singular: p4target
   scope: Cluster
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.ready
-      name: READY
-      type: string
-    - jsonPath: .metadata.creationTimestamp
-      name: AGE
-      type: date
-    name: v1alpha1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API
@@ -4312,6 +4471,10 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
+              nfCIDR:
+                description: NfCIDR is the range assigned to the network functions
+                  running on this target.
+                type: string
               taints:
                 description: |-
                   Taints represents the taints applied to the P4 target, which can affect
@@ -4336,8 +4499,6 @@ spec:
                 description: Unschedulable indicates whether the P4 target is unschedulable
                   for new network functions.
                 type: boolean
-            required:
-            - taints
             type: object
           status:
             description: status defines the observed state of P4Target
@@ -4385,6 +4546,22 @@ spec:
                   - status
                   - type
                   type: object
+                type: array
+              driverIPs:
+                description: DriverIPs are the detected IPs that were assigned to
+                  the programmable target's driver.
+                items:
+                  type: string
+                type: array
+              nodeName:
+                description: NodeName is the name of the Kubernetes node that the
+                  P4 target is associated with, if any.
+                type: string
+              targetIPs:
+                description: TargetIPs are the detected IPs of the programmable target.
+                  They can be either in-cluster or public-facing IPs.
+                items:
+                  type: string
                 type: array
             type: object
         required:
@@ -4516,16 +4693,6 @@ spec:
             type: object
           status:
             description: status defines the observed state of ServiceChain
-            properties:
-              dst_app_uid:
-                description: UID of the destinatination application.
-                type: string
-              src_app_uid:
-                description: UID of the source application.
-                type: string
-            required:
-            - dst_app_uid
-            - src_app_uid
             type: object
         required:
         - spec
@@ -4724,6 +4891,77 @@ rules:
   - core.loom.io
   resources:
   - networkfunctions/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-core-networkfunctionconfig-admin-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs
+  verbs:
+  - '*'
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-core-networkfunctionconfig-editor-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-core-networkfunctionconfig-viewer-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs/status
   verbs:
   - get
 ---
@@ -4943,6 +5181,77 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-infra-loomnode-admin-role
+rules:
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes
+  verbs:
+  - '*'
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-infra-loomnode-editor-role
+rules:
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-infra-loomnode-viewer-role
+rules:
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: loom-manager-role
 rules:
 - apiGroups:
@@ -4980,10 +5289,8 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - applications
   - networkfunctions
   - p4targets
-  - servicechains
   verbs:
   - create
   - delete
@@ -4995,19 +5302,15 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - applications/finalizers
   - networkfunctions/finalizers
   - p4targets/finalizers
-  - servicechains/finalizers
   verbs:
   - update
 - apiGroups:
   - core.loom.io
   resources:
-  - applications/status
   - networkfunctions/status
   - p4targets/status
-  - servicechains/status
   verbs:
   - get
   - patch
@@ -5016,6 +5319,7 @@ rules:
   - infra.loom.io
   resources:
   - bmv2targets
+  - loomnodes
   verbs:
   - create
   - delete
@@ -5028,12 +5332,14 @@ rules:
   - infra.loom.io
   resources:
   - bmv2targets/finalizers
+  - loomnodes/finalizers
   verbs:
   - update
 - apiGroups:
   - infra.loom.io
   resources:
   - bmv2targets/status
+  - loomnodes/status
   verbs:
   - get
   - patch
@@ -5041,8 +5347,8 @@ rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
+  - networkfunctiondeployments
   - networkfunctionreplicasets
-  - networkfunctions
   verbs:
   - create
   - delete
@@ -5054,15 +5360,15 @@ rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
+  - networkfunctiondeployments/finalizers
   - networkfunctionreplicasets/finalizers
-  - networkfunctions/finalizers
   verbs:
   - update
 - apiGroups:
   - scheduling.loom.io
   resources:
+  - networkfunctiondeployments/status
   - networkfunctionreplicasets/status
-  - networkfunctions/status
   verbs:
   - get
   - patch
@@ -5285,6 +5591,17 @@ subjects:
   namespace: loom-system
 ---
 apiVersion: v1
+data:
+  cluster-pool-ipv4-cidr: 10.0.0.0/8
+  cluster-pool-ipv4-mask-size: "24"
+  cluster-pool-ipv6-cidr: fd00::/8
+  cluster-pool-ipv6-mask-size: "64"
+kind: ConfigMap
+metadata:
+  name: loom-iml-config
+  namespace: loom-system
+---
+apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -5326,6 +5643,23 @@ spec:
     app.kubernetes.io/name: loom-operator
     control-plane: controller-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-webhook-service
+  namespace: loom-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/name: loom-operator
+    control-plane: controller-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5354,9 +5688,10 @@ spec:
         - --metrics-bind-address=:8443
         - --leader-elect
         - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: tomasagata/loom-operator:latest
+        image: loom-operator:latest
         livenessProbe:
           httpGet:
             path: /healthz
@@ -5364,7 +5699,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
-        ports: []
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -5384,11 +5722,124 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: true
-        volumeMounts: []
+        volumeMounts:
+        - mountPath: /etc/iml/config
+          name: iml-config
+          readOnly: true
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: loom-controller-manager
       terminationGracePeriodSeconds: 10
-      volumes: []
+      volumes:
+      - configMap:
+          name: loom-iml-config
+        name: iml-config
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-metrics-certs
+  namespace: loom-system
+spec:
+  dnsNames:
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: loom-selfsigned-issuer
+  secretName: metrics-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-serving-cert
+  namespace: loom-system
+spec:
+  dnsNames:
+  - loom-webhook-service.loom-system.svc
+  - loom-webhook-service.loom-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: loom-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-operator
+  name: loom-selfsigned-issuer
+  namespace: loom-system
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: loom-system/loom-serving-cert
+  name: loom-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: loom-webhook-service
+      namespace: loom-system
+      path: /mutate-scheduling-loom-io-v1alpha1-networkfunctiondeployment
+  failurePolicy: Fail
+  name: mnetworkfunctiondeployment-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - scheduling.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctiondeployments
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: loom-system/loom-serving-cert
+  name: loom-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: loom-webhook-service
+      namespace: loom-system
+      path: /validate-scheduling-loom-io-v1alpha1-networkfunctiondeployment
+  failurePolicy: Fail
+  name: vnetworkfunctiondeployment-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - scheduling.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctiondeployments
+  sideEffects: None

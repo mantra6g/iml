@@ -26,9 +26,6 @@ import (
 
 const P4TargetLeaseNamespace = "p4target-leases"
 
-const TARGET_LABEL = "core.loom.io/target"
-const P4TARGET_FINALIZER_LABEL = "p4target.loom.io/finalizer"
-
 const P4TargetArchitectureLabel = "p4target.loom.io/arch"
 const P4TargetNameLabel = "p4target.loom.io/name"
 
@@ -72,14 +69,6 @@ type P4TargetSpec struct {
 	// +optional
 	Unschedulable bool `json:"unschedulable,omitempty"`
 
-	// TargetIPs are the IPs assigned to the programmable target. They can be either in-cluster or public-facing IPs.
-	// +optional
-	TargetIPs []string `json:"targetIPs,omitempty"`
-
-	// DriverIPs are the in-cluster IPs assigned to the programmable target's driver.
-	// +optional
-	DriverIPs []string `json:"driverIPs,omitempty"`
-
 	// NfCIDR is the range assigned to the network functions running on this target.
 	// +optional
 	NfCIDR string `json:"nfCIDR,omitempty"`
@@ -117,6 +106,12 @@ type P4TargetStatus struct {
 
 	// NodeName is the name of the Kubernetes node that the P4 target is associated with, if any.
 	NodeName string `json:"nodeName,omitempty"`
+
+	// TargetIPs are the detected IPs of the programmable target. They can be either in-cluster or public-facing IPs.
+	TargetIPs []string `json:"targetIPs,omitempty"`
+
+	// DriverIPs are the detected IPs that were assigned to the programmable target's driver.
+	DriverIPs []string `json:"driverIPs,omitempty"`
 
 	// Capacity represents the total resources of the P4 target
 	Capacity corev1.ResourceList `json:"capacity,omitempty"`

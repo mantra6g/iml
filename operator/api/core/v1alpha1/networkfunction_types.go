@@ -154,6 +154,9 @@ type NetworkFunctionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// AssignedIP is the IP address assigned to the NetworkFunction, used for routing traffic to it.
+	AssignedIP string `json:"assignedIP,omitempty"`
+
 	// ObservedGeneration is the most recent generation observed for this NetworkFunction
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 

@@ -17,8 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"net"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,8 +26,8 @@ import (
 const APPLICATION_FINALIZER_LABEL = "application.loom.io/finalizer"
 
 type DualStackNetwork struct {
-	IPv4Net *net.IPNet `json:"inet4,omitempty"`
-	IPv6Net *net.IPNet `json:"inet6,omitempty"`
+	IPv4Net string `json:"inet4,omitempty"`
+	IPv6Net string `json:"inet6,omitempty"`
 }
 
 // ApplicationSpec defines the desired state of Application

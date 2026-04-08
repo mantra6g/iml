@@ -30,25 +30,14 @@ type LoomNodeSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// PodCIDRs specifies the CIDR blocks used for pod IPs on this node.
+	// NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
 	// This is used by the CNI plugin to determine which IPs to assign to pods scheduled on this node.
 	// When left empty, the controller will automatically allocate a CIDR block for this node
 	// from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
 	// +optional
-	PodCIDRs []string `json:"podCIDRs,omitempty"`
+	NodeCIDRs []string `json:"nodeCIDRs,omitempty"`
 
-	// SidCIDRs specifies the CIDR blocks used for segment identifiers (SID) on this node.
-	// This is used by the CNI plugin to determine which SIDs to assign to pods scheduled on this node.
-	// When left empty, the controller will automatically allocate a CIDR block for this node
-	// from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
-	// +optional
-	SidCIDRs []string `json:"sidCIDRs,omitempty"`
-
-	// P4TargetCIDRs are similar to PodCIDRs but used for P4Targets in this node.
-	// +optional
-	P4TargetCIDRs []string `json:"p4TargetCIDRs,omitempty"`
-
-	// TunnelCIDRs are similar to PodCIDRs but used for tunnels in this node.
+	// TunnelCIDRs are similar to NodeCIDRs but used for tunnels in this node.
 	// +optional
 	TunnelCIDRs []string `json:"tunnelCIDRs,omitempty"`
 }
@@ -57,9 +46,6 @@ type LoomNodeSpec struct {
 type LoomNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// TransportIPs specifies the IPs that the networking plugin should use to create the tunnels between nodes.
-	TransportIPs []string `json:"transportIPs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

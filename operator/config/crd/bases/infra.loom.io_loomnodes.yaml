@@ -39,32 +39,17 @@ spec:
           spec:
             description: spec defines the desired state of LoomNode
             properties:
-              p4TargetCIDRs:
-                description: P4TargetCIDRs are similar to PodCIDRs but used for P4Targets
-                  in this node.
-                items:
-                  type: string
-                type: array
-              podCIDRs:
+              nodeCIDRs:
                 description: |-
-                  PodCIDRs specifies the CIDR blocks used for pod IPs on this node.
+                  NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
                   This is used by the CNI plugin to determine which IPs to assign to pods scheduled on this node.
                   When left empty, the controller will automatically allocate a CIDR block for this node
                   from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
                 items:
                   type: string
                 type: array
-              sidCIDRs:
-                description: |-
-                  SidCIDRs specifies the CIDR blocks used for segment identifiers (SID) on this node.
-                  This is used by the CNI plugin to determine which SIDs to assign to pods scheduled on this node.
-                  When left empty, the controller will automatically allocate a CIDR block for this node
-                  from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
-                items:
-                  type: string
-                type: array
               tunnelCIDRs:
-                description: TunnelCIDRs are similar to PodCIDRs but used for tunnels
+                description: TunnelCIDRs are similar to NodeCIDRs but used for tunnels
                   in this node.
                 items:
                   type: string
@@ -72,13 +57,6 @@ spec:
             type: object
           status:
             description: status defines the observed state of LoomNode
-            properties:
-              transportIPs:
-                description: TransportIPs specifies the IPs that the networking plugin
-                  should use to create the tunnels between nodes.
-                items:
-                  type: string
-                type: array
             type: object
         required:
         - spec

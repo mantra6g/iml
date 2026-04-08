@@ -7,13 +7,16 @@ domain: loom.io
 layout:
 - go.kubebuilder.io/v4
 multigroup: true
+plugins:
+  helm.kubebuilder.io/v2-alpha:
+    manifests: dist/install.yaml
+    output: dist
 projectName: loom-operator
 repo: loom
 resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: Application
@@ -35,7 +38,6 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: ServiceChain
@@ -86,7 +88,6 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: NetworkFunctionConfig

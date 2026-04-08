@@ -39,12 +39,6 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
-              driverIPs:
-                description: DriverIPs are the in-cluster IPs assigned to the programmable
-                  target's driver.
-                items:
-                  type: string
-                type: array
               nfCIDR:
                 description: NfCIDR is the range assigned to the network functions
                   running on this target.
@@ -68,12 +62,6 @@ spec:
                   - effect
                   - key
                   type: object
-                type: array
-              targetIPs:
-                description: TargetIPs are the IPs assigned to the programmable target.
-                  They can be either in-cluster or public-facing IPs.
-                items:
-                  type: string
                 type: array
               unschedulable:
                 description: Unschedulable indicates whether the P4 target is unschedulable
@@ -127,10 +115,22 @@ spec:
                   - type
                   type: object
                 type: array
+              driverIPs:
+                description: DriverIPs are the detected IPs that were assigned to
+                  the programmable target's driver.
+                items:
+                  type: string
+                type: array
               nodeName:
                 description: NodeName is the name of the Kubernetes node that the
                   P4 target is associated with, if any.
                 type: string
+              targetIPs:
+                description: TargetIPs are the detected IPs of the programmable target.
+                  They can be either in-cluster or public-facing IPs.
+                items:
+                  type: string
+                type: array
             type: object
         required:
         - spec

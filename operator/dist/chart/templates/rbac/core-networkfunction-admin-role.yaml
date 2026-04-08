@@ -1,0 +1,24 @@
+{{- if .Values.rbacHelpers.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "loom-operator.name" . }}-operator
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "loom-operator.resourceName" (dict "suffix" "core-networkfunction-admin-role" "context" $) }}
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions
+  verbs:
+  - '*'
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctions/status
+  verbs:
+  - get
+{{- end }}

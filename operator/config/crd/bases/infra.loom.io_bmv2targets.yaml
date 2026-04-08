@@ -42,6 +42,37 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of BMv2Target
+            properties:
+              resources:
+                description: Resources defines the compute resource requirements for
+                  the BMv2 target.
+                properties:
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed for the target.
+                      The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required for the target.
+                      The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+                    type: object
+                required:
+                - limits
+                - requests
+                type: object
             type: object
           status:
             description: status defines the observed state of BMv2Target

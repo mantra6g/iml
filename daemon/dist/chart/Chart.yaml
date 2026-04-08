@@ -1,0 +1,8 @@
+apiVersion: v2
+name: loom-daemon
+description: DaemonSet for IML's network plugin
+type: application
+
+version: 0.0.1
+appVersion: "0.0.1"
+

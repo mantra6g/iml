@@ -76,13 +76,13 @@ func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 		}
 	}
 	// If the loomNode exists but no CIDRs were assigned yet, wait until they are assigned
-	if len(loomNode.Spec.PodCIDRs) == 0 {
+	if len(loomNode.Spec.NodeCIDRs) == 0 {
 		err = waitForCIDRs(ctx, k8sClient, hostname)
 		if err != nil {
 			return nil, fmt.Errorf("error waiting for CIDRs to be created: %w", err)
 		}
 	}
-	podCIDR, err := netutils.ParseDualStackNetworkFromStrings(loomNode.Spec.PodCIDRs)
+	podCIDR, err := netutils.ParseDualStackNetworkFromStrings(loomNode.Spec.NodeCIDRs)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing podCIDRs: %w", err)
 	}
@@ -141,7 +141,7 @@ func createLoomNode(ctx context.Context, k8sClient client.Client, nodeName strin
 			Name: nodeName,
 		},
 		Spec: infrav1alpha1.LoomNodeSpec{
-			PodCIDRs:    make([]string, 0),
+			NodeCIDRs:   make([]string, 0),
 			TunnelCIDRs: make([]string, 0),
 		},
 	}

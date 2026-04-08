@@ -33,35 +33,44 @@ theme:
 
 nav:
   - Home: index.md
+  - Project Overview: project-overview.md
   - Getting Started:
     - Installation: getting-started/installation.md
     - Registering and deploying your Applications: getting-started/registering-and-deploying-applications.md
     - Creating your first Programmable Target: getting-started/creating-your-first-programmable-target.md
-    - Deploying a Network Function: getting-started/deploying-a-network-function.md
+    - Deploying a Network Function: getting-started/creating-a-network-function.md
     - Putting everything together with a Service Chain: getting-started/first-service-chain-walkthrough.md
-  - Guides:
-    - Developing dynamic Network Functions: guides/overview.md
-    - Application and Programmable Target setup: guides/application-and-programmable-target-setup.md
-    - Network Function development: guides/network-function-development.md
+    - Configuring the Network Functions: getting-started/configuring-the-nfs.md
+#  - Guides:
+#    - Developing dynamic Network Functions: guides/overview.md
+#    - Application and Programmable Target setup: guides/application-and-programmable-target-setup.md
+#    - Network Function development: guides/network-function-development.md
   - Architecture:
     - Overview: architecture/overview.md
-    - P4Target Abstraction: architecture/p4target-abstraction.md
-    - Target Agents: architecture/target-agents.md
-    - Network Function Development Services: architecture/network-function-development-services.md
-    - IML Networking Plugin: architecture/iml-networking-plugin.md
+    - Network function scheduling system: architecture/nf-scheduling-system.md
+    - P4Target addon system: architecture/p4target-addon-system.md
+    - IML's networking plugin: architecture/iml-networking-plugin.md
   - API:
     - Overview: api/overview.md
     - Applications: api/applications.md
     - Network Functions: api/network-functions.md
-    - Service Chains: api/service-chains.md
     - P4Targets: api/p4targets.md
+    - Service Chains: api/service-chains.md
+    - Network Function Deployment: api/network-function-deployment.md
+    - Network Function ReplicaSet: api/network-function-replicaset.md
+    - Network Function Config: api/network-function-config.md
     - BMv2Target: api/bmv2target.md
+    - LoomNode: api/loom-node.md
   - Contributing: contributing/contributing.md
 
 markdown_extensions:
   - pymdownx.highlight
-  - pymdownx.superfences
   - tables
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
 plugins:
   - search

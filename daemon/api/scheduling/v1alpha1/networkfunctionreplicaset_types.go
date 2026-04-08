@@ -22,8 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const REPLICA_SET_FINALIZER_LABEL = "scheduling.loom.io/networkFunctionReplicaSet-finalizer"
-
 type ReplicaSetConditionType string
 
 // These are valid conditions of a replica set.

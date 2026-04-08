@@ -19,7 +19,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	corecontroller "loom/internal/controller/core/networkfunctionconfig"
 	"os"
 	"path/filepath"
 
@@ -42,10 +41,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"loom/internal/controller/core/application"
 	"loom/internal/controller/core/networkfunction"
 	"loom/internal/controller/core/p4target"
-	"loom/internal/controller/core/servicechain"
 	"loom/internal/controller/infra/bmv2target"
 	"loom/internal/controller/infra/loomnode"
 	"loom/internal/controller/scheduling/networkfunctiondeployment"
@@ -226,25 +223,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&application.ApplicationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Application")
-		os.Exit(1)
-	}
 	if err := (&networkfunctiondeployment.NetworkFunctionDeploymentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionDeployment")
-		os.Exit(1)
-	}
-	if err := (&servicechain.ServiceChainReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)
 	}
 	if err := (&p4target.P4TargetReconciler{
@@ -289,13 +272,6 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoomNode")
-		os.Exit(1)
-	}
-	if err := (&corecontroller.NetworkFunctionConfigReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "NetworkFunctionConfig")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
