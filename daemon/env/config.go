@@ -28,14 +28,6 @@ const (
 	DefaultIMLConfigMapPath = "/etc/iml/config"
 )
 
-const P4_CONTROLLER_ADDR = "iml-p4-controller.loom-system.svc.cluster.local"
-const IML_ADDR = "iml-updates-service.loom-system.svc.cluster.local"
-const API_PORT = "1810"
-const MQTT_PORT = "1816"
-const API_URL = "http://" + IML_ADDR + ":" + API_PORT
-const MQTT_URL = "mqtt://" + IML_ADDR + ":" + MQTT_PORT
-const P4_CONTROLLER_API_URL = "http://" + P4_CONTROLLER_ADDR
-
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes/status,verbs=get;update;patch
 
