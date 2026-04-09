@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"imlcni/logger"
+	types2 "imlcni/types"
 	"net/http"
 	"os"
 
@@ -22,24 +23,24 @@ import (
 func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 	logger.InfoLogger().Printf("ADD called for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 	logger.DebugLogger().Printf("CNI Args: %+v\n", cniArgs)
-	cniConf := IMLCNIConfig{}
+	cniConf := types2.IMLCNIConfig{}
 	if err := json.Unmarshal(cniArgs.StdinData, &cniConf); err != nil {
 		logger.ErrorLogger().Printf("Failed to parse CNI configuration: %v\n", err)
 		return fmt.Errorf("failed to parse network config: %w", err)
 	}
 
 	args := os.Getenv("CNI_ARGS")
-	k8sArgs := &K8sArgs{}
+	k8sArgs := &types2.K8sArgs{}
 	if err := types.LoadArgs(args, k8sArgs); err != nil {
 		return err
 	}
 
 	var result types.Result
 	switch cniConf.Args.CNI.AppType {
-	case P4TargetType:
+	case types2.P4TargetType:
 		logger.InfoLogger().Printf("Deploying programmable target config for container %s\n", cniArgs.ContainerID)
 
-		configRequest := ContainerizedP4TargetConfigRequest{
+		configRequest := types2.ContainerizedP4TargetConfigRequest{
 			ContainerID:  cniArgs.ContainerID,
 			P4TargetName: cniConf.Args.CNI.TargetName,
 		}
@@ -60,10 +61,10 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 			return fmt.Errorf("failed to deploy programmable target: %w", err)
 		}
 
-	case ApplicationType:
+	case types2.ApplicationType:
 		logger.InfoLogger().Printf("Deploying application function for container %s\n", cniArgs.ContainerID)
 
-		configRequest := AppInstanceConfigRequest{
+		configRequest := types2.AppInstanceConfigRequest{
 			ContainerID:  cniArgs.ContainerID,
 			PodName:      string(k8sArgs.PodName),
 			PodNamespace: string(k8sArgs.PodNamespace),
@@ -90,7 +91,7 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 	return types.PrintResult(result, cniConf.CNIVersion)
 }
 
-func DeployNetworkConfiguration(netConfig *NetworkConfig, cniArgs *skel.CmdArgs) (types.Result, error) {
+func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.CmdArgs) (types.Result, error) {
 	logger.DebugLogger().Printf("Deploying application with config: %+v\n", netConfig)
 
 	if netConfig.IPNets.IsEmpty() {
@@ -240,7 +241,7 @@ func DeployNetworkConfiguration(netConfig *NetworkConfig, cniArgs *skel.CmdArgs)
 	return result, nil
 }
 
-func getAppConfigFromIML(payload AppInstanceConfigRequest) (*NetworkConfig, error) {
+func getAppConfigFromIML(payload types2.AppInstanceConfigRequest) (*types2.NetworkConfig, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request payload: %w", err)
@@ -258,7 +259,7 @@ func getAppConfigFromIML(payload AppInstanceConfigRequest) (*NetworkConfig, erro
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("received non-2XX response: %s", resp.Status)
 	}
-	var configResponse NetworkConfig
+	var configResponse types2.NetworkConfig
 	if err = json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -266,7 +267,7 @@ func getAppConfigFromIML(payload AppInstanceConfigRequest) (*NetworkConfig, erro
 	return &configResponse, nil
 }
 
-func getP4TargetConfigFromIML(configRequest ContainerizedP4TargetConfigRequest) (*NetworkConfig, error) {
+func getP4TargetConfigFromIML(configRequest types2.ContainerizedP4TargetConfigRequest) (*types2.NetworkConfig, error) {
 	data, err := json.Marshal(configRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request payload: %w", err)
@@ -284,7 +285,7 @@ func getP4TargetConfigFromIML(configRequest ContainerizedP4TargetConfigRequest) 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("received non-2XX response: %s", resp.Status)
 	}
-	var configResponse NetworkConfig
+	var configResponse types2.NetworkConfig
 	if err = json.NewDecoder(resp.Body).Decode(&configResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -295,7 +296,7 @@ func tearDownP4Target(cniArgs *skel.CmdArgs) error {
 	logger.InfoLogger().Printf("Tearing down p4target for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 
 	// Notify IML of the network function teardown
-	configRequest := ContainerizedP4TargetTeardownRequest{
+	configRequest := types2.ContainerizedP4TargetTeardownRequest{
 		ContainerID: cniArgs.ContainerID,
 	}
 	err := notifyIMLOfP4TargetTeardown(configRequest)
@@ -335,7 +336,7 @@ func tearDownApplication(cniArgs *skel.CmdArgs) error {
 	logger.InfoLogger().Printf("Tearing down application function for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 
 	// Notify IML of the application function teardown
-	configRequest := AppInstanceTeardownRequest{
+	configRequest := types2.AppInstanceTeardownRequest{
 		ContainerID: cniArgs.ContainerID,
 	}
 	err := notifyIMLOfAppTeardown(configRequest)
@@ -372,7 +373,7 @@ func tearDownApplication(cniArgs *skel.CmdArgs) error {
 	return err
 }
 
-func notifyIMLOfAppTeardown(request AppInstanceTeardownRequest) error {
+func notifyIMLOfAppTeardown(request types2.AppInstanceTeardownRequest) error {
 	data, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request payload: %w", err)
@@ -393,7 +394,7 @@ func notifyIMLOfAppTeardown(request AppInstanceTeardownRequest) error {
 	return nil
 }
 
-func notifyIMLOfP4TargetTeardown(request ContainerizedP4TargetTeardownRequest) error {
+func notifyIMLOfP4TargetTeardown(request types2.ContainerizedP4TargetTeardownRequest) error {
 	data, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request payload: %w", err)
@@ -417,7 +418,7 @@ func notifyIMLOfP4TargetTeardown(request ContainerizedP4TargetTeardownRequest) e
 func cmdDel(args *skel.CmdArgs) error {
 	logger.InfoLogger().Printf("DEL called for container %s\n", args.ContainerID)
 
-	cniConf := IMLCNIConfig{}
+	cniConf := types2.IMLCNIConfig{}
 	if err := json.Unmarshal(args.StdinData, &cniConf); err != nil {
 		logger.ErrorLogger().Printf("Failed to parse CNI configuration: %v\n", err)
 		return fmt.Errorf("failed to parse network config: %w", err)

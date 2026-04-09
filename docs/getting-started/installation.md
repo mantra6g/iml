@@ -77,10 +77,7 @@ helm repo add jetstack https://charts.jetstack.io
 helm repo update
 
 # Install cert-manager with CRDs
-helm install cert-manager jetstack/cert-manager \
-  --namespace cert-manager \
-  --create-namespace \
-  --set installCRDs=true
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
 
 # Wait for cert-manager to be ready
 kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
@@ -123,7 +120,7 @@ Then, apply the kubectl manifests:
 ```bash
 kubectl apply -f operator/dist/install.yaml
 kubectl apply -f cni/dist/install.yaml
-kubectl apply -f go-daemon/dist/install.yaml
+kubectl apply -f daemon/dist/install.yaml
 ```
 
 Verify that the components are running:

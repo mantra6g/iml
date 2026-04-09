@@ -11,11 +11,13 @@ kind: DaemonSet
 metadata:
   name: daemon
   namespace: system
+  labels:
+    app.kubernetes.io/name: loom-daemon
+    app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: loom-daemon
-      app.kubernetes.io/managed-by: kustomize
   template:
     metadata:
       annotations:
@@ -32,8 +34,8 @@ spec:
             - /bin/sh
             - -c
             - |
-              cp /app/imlcni /host/opt/cni/bin/
-              chmod +x /host/opt/cni/bin/imlcni
+              cp /loomcni /host/opt/cni/bin/
+              chmod +x /host/opt/cni/bin/loomcni
           securityContext:
             privileged: true
           volumeMounts:
@@ -48,11 +50,11 @@ spec:
             privileged: true
           resources:
             requests:
-              cpu: 1000m
-              memory: 2048Mi
+              cpu: 500m
+              memory: 512Mi
             limits:
-              cpu: 2000m
-              memory: 4096Mi
+              cpu: 1000m
+              memory: 1024Mi
           volumeMounts:
             - name: iml-config
               mountPath: /etc/iml/config
@@ -63,5 +65,5 @@ spec:
             path: /opt/cni/bin
         - name: iml-config
           configMap:
-            name: iml-config
+            name: loom-iml-config
       serviceAccountName: daemon-sa

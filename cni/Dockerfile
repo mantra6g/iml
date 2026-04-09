@@ -14,6 +14,8 @@ RUN go mod download
 # Copy the go source
 COPY cmd/main.go cmd/main.go
 COPY logger/ logger/
+COPY utils/ utils/
+COPY types/ types/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
@@ -24,9 +26,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o lo
 
 # Use distroless as minimal base image to package the cni binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.19
 WORKDIR /
 COPY --from=builder /workspace/loomcni .
-USER 65532:65532
+#USER 65532:65532
 
 ENTRYPOINT ["/loomcni"]

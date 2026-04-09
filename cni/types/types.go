@@ -1,4 +1,4 @@
-package main
+package types
 
 import (
 	netutils "imlcni/utils/net"

@@ -5,7 +5,7 @@ kind: Kustomization
 images:
 - name: cni
   newName: cni
-  newTag: latest
+  newTag: local
 - name: daemon
   newName: daemon
-  newTag: latest
+  newTag: local

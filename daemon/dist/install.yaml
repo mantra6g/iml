@@ -101,12 +101,14 @@ subjects:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: loom-daemon
   name: loom-daemon
   namespace: loom-system
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/managed-by: kustomize
       app.kubernetes.io/name: loom-daemon
   template:
     metadata:
@@ -118,15 +120,15 @@ spec:
       containers:
       - command:
         - /daemon
-        image: daemon:latest
+        image: daemon:local
         name: daemon
         resources:
           limits:
-            cpu: 2000m
-            memory: 4096Mi
-          requests:
             cpu: 1000m
-            memory: 2048Mi
+            memory: 1024Mi
+          requests:
+            cpu: 500m
+            memory: 512Mi
         securityContext:
           privileged: true
         volumeMounts:
@@ -140,9 +142,9 @@ spec:
         - /bin/sh
         - -c
         - |
-          cp /app/imlcni /host/opt/cni/bin/
-          chmod +x /host/opt/cni/bin/imlcni
-        image: cni:latest
+          cp /loomcni /host/opt/cni/bin/
+          chmod +x /host/opt/cni/bin/loomcni
+        image: cni:local
         name: cni-installer
         securityContext:
           privileged: true
@@ -155,7 +157,7 @@ spec:
           path: /opt/cni/bin
         name: cni-bin
       - configMap:
-          name: iml-config
+          name: loom-iml-config
         name: iml-config
 ---
 apiVersion: k8s.cni.cncf.io/v1
@@ -167,5 +169,8 @@ spec:
   config: |
     {
       "cniVersion": "0.4.0",
-      "type": "loom"
+      "type": "loom",
+      "cni-args": {
+        "app_type": "application"
+      }
     }
