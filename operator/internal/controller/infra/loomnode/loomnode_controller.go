@@ -32,9 +32,11 @@ import (
 // LoomNodeReconciler reconciles a LoomNode object
 type LoomNodeReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	IPv4Allocator *ipam.PrefixAllocator
-	IPv6Allocator *ipam.PrefixAllocator
+	Scheme                *runtime.Scheme
+	NodeCIDRv4Allocator   *ipam.PrefixAllocator
+	NodeCIDRv6Allocator   *ipam.PrefixAllocator
+	TunnelCIDRv4Allocator *ipam.PrefixAllocator
+	TunnelCIDRv6Allocator *ipam.PrefixAllocator
 }
 
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete
@@ -71,7 +73,10 @@ func (r *LoomNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		updatedAssignments = true
 	}
 	if len(loomNode.Spec.TunnelCIDRs) == 0 {
-		// TODO: assign tunnel cidrs
+		if err := r.assignTunnelCIDRs(loomNode); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to assign tunnel CIDRs: %w", err)
+		}
+		updatedAssignments = true
 	}
 
 	if updatedAssignments {
@@ -94,18 +99,36 @@ func (r *LoomNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *LoomNodeReconciler) assignNodeCIDRs(loomNode *infrav1alpha1.LoomNode) error {
 	cidrs := make([]string, 0)
-	if r.IPv4Allocator != nil {
-		ipv4Prefix, err := r.IPv4Allocator.Next()
+	if r.NodeCIDRv4Allocator != nil {
+		ipv4Prefix, err := r.NodeCIDRv4Allocator.Next()
 		if err != nil {
 			return err
 		}
 		cidrs = append(cidrs, ipv4Prefix.String())
 	}
-	ipv6Prefix, err := r.IPv6Allocator.Next()
+	ipv6Prefix, err := r.NodeCIDRv6Allocator.Next()
 	if err != nil {
 		return err
 	}
 	cidrs = append(cidrs, ipv6Prefix.String())
 	loomNode.Spec.NodeCIDRs = cidrs
+	return nil
+}
+
+func (r *LoomNodeReconciler) assignTunnelCIDRs(loomNode *infrav1alpha1.LoomNode) error {
+	cidrs := make([]string, 0)
+	if r.TunnelCIDRv4Allocator != nil {
+		ipv4Prefix, err := r.TunnelCIDRv4Allocator.Next()
+		if err != nil {
+			return err
+		}
+		cidrs = append(cidrs, ipv4Prefix.String())
+	}
+	ipv6Prefix, err := r.TunnelCIDRv6Allocator.Next()
+	if err != nil {
+		return err
+	}
+	cidrs = append(cidrs, ipv6Prefix.String())
+	loomNode.Spec.TunnelCIDRs = cidrs
 	return nil
 }

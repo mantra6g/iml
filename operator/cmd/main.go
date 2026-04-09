@@ -216,6 +216,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	var tunnelCIDRv4Allocator, tunnelCIDRv6Allocator *ipam.PrefixAllocator
+	if ipv4Enabled {
+		tunnelCIDRv4Allocator, err = ipam.NewPrefixAllocator(
+			clusterCIDRConfig.ClusterPoolIPv4CIDR, int(clusterCIDRConfig.ClusterPoolIPv4MaskSize))
+		if err != nil {
+			setupLog.Error(err, "Failed to initialize tunnel IPv4 CIDR allocator")
+			os.Exit(1)
+		}
+	}
+	tunnelCIDRv6Allocator, err = ipam.NewPrefixAllocator(
+		clusterCIDRConfig.ClusterPoolIPv6CIDR, int(clusterCIDRConfig.ClusterPoolIPv6MaskSize))
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize tunnel IPv6 CIDR allocator")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -285,10 +301,12 @@ func main() {
 		}
 	}
 	if err := (&loomnode.LoomNodeReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		IPv4Allocator: clusterCIDRv4Allocator,
-		IPv6Allocator: clusterCIDRv6Allocator,
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		NodeCIDRv4Allocator:   clusterCIDRv4Allocator,
+		NodeCIDRv6Allocator:   clusterCIDRv6Allocator,
+		TunnelCIDRv4Allocator: tunnelCIDRv4Allocator,
+		TunnelCIDRv6Allocator: tunnelCIDRv6Allocator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoomNode")
 		os.Exit(1)

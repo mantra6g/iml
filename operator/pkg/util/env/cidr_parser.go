@@ -17,6 +17,10 @@ type ClusterCIDRConfig struct {
 	ClusterPoolIPv6CIDR     netip.Prefix
 	ClusterPoolIPv4MaskSize int64
 	ClusterPoolIPv6MaskSize int64
+	TunnelPoolIPv4CIDR      netip.Prefix
+	TunnelPoolIPv6CIDR      netip.Prefix
+	TunnelPoolIPv4MaskSize  int64
+	TunnelPoolIPv6MaskSize  int64
 }
 
 func ParseClusterCIDRConfig() (*ClusterCIDRConfig, error) {
@@ -28,46 +32,86 @@ func ParseClusterCIDRConfig() (*ClusterCIDRConfig, error) {
 		return strings.TrimSpace(string(data)), nil
 	}
 
-	ipv4CidrStr, err := get("cluster-pool-ipv4-cidr")
+	clusterPoolIPv4CidrStr, err := get("cluster-pool-ipv4-cidr")
 	if err != nil {
 		return nil, err
 	}
-	ipv4Cidr, err := netip.ParsePrefix(ipv4CidrStr)
-	if err != nil {
-		return nil, err
-	}
-
-	ipv6CidrStr, err := get("cluster-pool-ipv6-cidr")
-	if err != nil {
-		return nil, err
-	}
-	ipv6Cidr, err := netip.ParsePrefix(ipv6CidrStr)
+	clusterPoolIPv4Cidr, err := netip.ParsePrefix(clusterPoolIPv4CidrStr)
 	if err != nil {
 		return nil, err
 	}
 
-	ipv4MaskSizeStr, err := get("cluster-pool-ipv4-mask-size")
+	clusterPoolIPv6CidrStr, err := get("cluster-pool-ipv6-cidr")
 	if err != nil {
 		return nil, err
 	}
-	ipv4MaskSize, err := strconv.ParseInt(ipv4MaskSizeStr, 10, 64)
+	clusterPoolIPv6Cidr, err := netip.ParsePrefix(clusterPoolIPv6CidrStr)
 	if err != nil {
 		return nil, err
 	}
 
-	ipv6MaskSizeStr, err := get("cluster-pool-ipv6-mask-size")
+	clusterPoolIPv4MaskSizeStr, err := get("cluster-pool-ipv4-mask-size")
 	if err != nil {
 		return nil, err
 	}
-	ipv6MaskSize, err := strconv.ParseInt(ipv6MaskSizeStr, 10, 64)
+	clusterPoolIPv4MaskSize, err := strconv.ParseInt(clusterPoolIPv4MaskSizeStr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	clusterPoolIPv6MaskSizeStr, err := get("cluster-pool-ipv6-mask-size")
+	if err != nil {
+		return nil, err
+	}
+	clusterPoolIPv6MaskSize, err := strconv.ParseInt(clusterPoolIPv6MaskSizeStr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	tunnelPoolIPv4CidrStr, err := get("tunnel-pool-ipv4-cidr")
+	if err != nil {
+		return nil, err
+	}
+	tunnelPoolIPv4Cidr, err := netip.ParsePrefix(tunnelPoolIPv4CidrStr)
+	if err != nil {
+		return nil, err
+	}
+
+	tunnelPoolIPv6CidrStr, err := get("tunnel-pool-ipv6-cidr")
+	if err != nil {
+		return nil, err
+	}
+	tunnelPoolIPv6Cidr, err := netip.ParsePrefix(tunnelPoolIPv6CidrStr)
+	if err != nil {
+		return nil, err
+	}
+
+	tunnelPoolIPv4MaskSizeStr, err := get("tunnel-pool-ipv4-mask-size")
+	if err != nil {
+		return nil, err
+	}
+	tunnelPoolIPv4MaskSize, err := strconv.ParseInt(tunnelPoolIPv4MaskSizeStr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	tunnelPoolIPv6MaskSizeStr, err := get("tunnel-pool-ipv6-mask-size")
+	if err != nil {
+		return nil, err
+	}
+	tunnelPoolIPv6MaskSize, err := strconv.ParseInt(tunnelPoolIPv6MaskSizeStr, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ClusterCIDRConfig{
-		ClusterPoolIPv4CIDR:     ipv4Cidr,
-		ClusterPoolIPv6CIDR:     ipv6Cidr,
-		ClusterPoolIPv4MaskSize: ipv4MaskSize,
-		ClusterPoolIPv6MaskSize: ipv6MaskSize,
+		ClusterPoolIPv4CIDR:     clusterPoolIPv4Cidr,
+		ClusterPoolIPv6CIDR:     clusterPoolIPv6Cidr,
+		ClusterPoolIPv4MaskSize: clusterPoolIPv4MaskSize,
+		ClusterPoolIPv6MaskSize: clusterPoolIPv6MaskSize,
+		TunnelPoolIPv4CIDR:      tunnelPoolIPv4Cidr,
+		TunnelPoolIPv6CIDR:      tunnelPoolIPv6Cidr,
+		TunnelPoolIPv4MaskSize:  tunnelPoolIPv4MaskSize,
+		TunnelPoolIPv6MaskSize:  tunnelPoolIPv6MaskSize,
 	}, nil
 }
