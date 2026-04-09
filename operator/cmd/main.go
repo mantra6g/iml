@@ -19,12 +19,14 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"loom/pkg/ipam"
 	"os"
 	"path/filepath"
 
 	webhookschedulingv1alpha1 "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 
 	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
+	envutils "loom/pkg/util/env"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -51,7 +53,6 @@ import (
 	corev1alpha1 "loom/api/core/v1alpha1"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
 	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	"loom/pkg/southapi"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -193,6 +194,28 @@ func main() {
 		})
 	}
 
+	var clusterCIDRv4Allocator, clusterCIDRv6Allocator *ipam.PrefixAllocator
+	clusterCIDRConfig, err := envutils.ParseClusterCIDRConfig()
+	if err != nil {
+		setupLog.Error(err, "Failed to parse cluster CIDR configuration")
+		os.Exit(1)
+	}
+	ipv4Enabled := clusterCIDRConfig.ClusterPoolIPv4CIDR.IsValid()
+	if ipv4Enabled {
+		clusterCIDRv4Allocator, err = ipam.NewPrefixAllocator(
+			clusterCIDRConfig.ClusterPoolIPv4CIDR, int(clusterCIDRConfig.ClusterPoolIPv4MaskSize))
+		if err != nil {
+			setupLog.Error(err, "Failed to initialize cluster IPv4 CIDR allocator")
+			os.Exit(1)
+		}
+	}
+	clusterCIDRv6Allocator, err = ipam.NewPrefixAllocator(
+		clusterCIDRConfig.ClusterPoolIPv6CIDR, int(clusterCIDRConfig.ClusterPoolIPv6MaskSize))
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize cluster IPv6 CIDR allocator")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -214,12 +237,6 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
-
-	_, err = southapi.InitializeSouthboundAPI(ctrl.Log.WithName("south-api"))
-	if err != nil {
-		setupLog.Error(err, "unable to initialize southbound API")
 		os.Exit(1)
 	}
 
@@ -268,8 +285,10 @@ func main() {
 		}
 	}
 	if err := (&loomnode.LoomNodeReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		IPv4Allocator: clusterCIDRv4Allocator,
+		IPv6Allocator: clusterCIDRv6Allocator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoomNode")
 		os.Exit(1)

@@ -18,8 +18,11 @@ package loomnode
 
 import (
 	"context"
+	"fmt"
 	infrav1alpha1 "loom/api/infra/v1alpha1"
+	"loom/pkg/ipam"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,7 +32,9 @@ import (
 // LoomNodeReconciler reconciles a LoomNode object
 type LoomNodeReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	IPv4Allocator *ipam.PrefixAllocator
+	IPv6Allocator *ipam.PrefixAllocator
 }
 
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete
@@ -46,9 +51,35 @@ type LoomNodeReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *LoomNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var loomNode = &infrav1alpha1.LoomNode{}
+	if err := r.Get(ctx, req.NamespacedName, loomNode); apierrors.IsNotFound(err) {
+		// Resource was deleted
+		logger.V(1).Info("loomnode resource not found. Ignoring since object must be deleted")
+		return ctrl.Result{}, nil
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	original := loomNode.DeepCopy()
+	var updatedAssignments = false
+	if len(loomNode.Spec.NodeCIDRs) == 0 {
+		if err := r.assignNodeCIDRs(loomNode); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to assign node CIDRs: %w", err)
+		}
+		updatedAssignments = true
+	}
+	if len(loomNode.Spec.TunnelCIDRs) == 0 {
+		// TODO: assign tunnel cidrs
+	}
+
+	if updatedAssignments {
+		err := r.Patch(ctx, loomNode, client.MergeFrom(original))
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update loomnode with assigned CIDRs: %w", err)
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -59,4 +90,22 @@ func (r *LoomNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&infrav1alpha1.LoomNode{}).
 		Named("infra-loomnode").
 		Complete(r)
+}
+
+func (r *LoomNodeReconciler) assignNodeCIDRs(loomNode *infrav1alpha1.LoomNode) error {
+	cidrs := make([]string, 0)
+	if r.IPv4Allocator != nil {
+		ipv4Prefix, err := r.IPv4Allocator.Next()
+		if err != nil {
+			return err
+		}
+		cidrs = append(cidrs, ipv4Prefix.String())
+	}
+	ipv6Prefix, err := r.IPv6Allocator.Next()
+	if err != nil {
+		return err
+	}
+	cidrs = append(cidrs, ipv6Prefix.String())
+	loomNode.Spec.NodeCIDRs = cidrs
+	return nil
 }
