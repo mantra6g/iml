@@ -78,7 +78,7 @@ kind-delete: ## Delete the local kind cluster.
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: kind-load
-kind-load: docker-build ## Load the cni, daemon and operator images into the local cluster.
+kind-load: ## Load the cni, daemon and operator images into the local cluster.
 	$(KIND) load docker-image ${IMG_CNI} ${IMG_DAEMON} ${IMG_OPERATOR} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
@@ -88,11 +88,11 @@ build-installer: ## Generate a consolidated YAML with CRDs and deployment.
 	$(KUSTOMIZE) . > install.yaml
 
 .PHONY: install
-install: build-installer ## Deploy the BMv2 test pod.
+install: ## Deploy the BMv2 test pod.
 	$(KUBECTL) apply -f install.yaml
 
 .PHONY: uninstall
-uninstall: build-installer ## Remove the BMv2 test pod.
+uninstall: ## Remove the BMv2 test pod.
 	$(KUBECTL) delete -f install.yaml --ignore-not-found
 
 ## Tool Binaries

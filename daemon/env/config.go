@@ -161,6 +161,9 @@ func waitForCIDRs(ctx context.Context, k8sClient client.Client, nodeName string)
 		if errors.IsNotFound(err) {
 			return false, err // Resource was deleted, stop retrying and return error
 		}
+		if len(loomNode.Spec.NodeCIDRs) == 0 || len(loomNode.Spec.TunnelCIDRs) == 0 {
+			return false, nil
+		}
 		return true, nil // stop retrying
 	})
 }

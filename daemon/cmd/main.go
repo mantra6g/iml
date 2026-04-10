@@ -21,6 +21,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -49,10 +50,16 @@ func main() {
 		panic("Failed to start controller manager: " + err.Error())
 	}
 
+	// Create an uncached client for bootstrapping
+	bootstrapClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
+	if err != nil {
+		logger.ErrorLogger().Printf("Failed to start bootstrapping client: %v", err)
+	}
+
 	// Request the NodeManager subnet from IML
 	// This will be used to assign IPs to app containers and VNFs.
 	logger.InfoLogger().Printf("Requesting NodeManager subnet from IML")
-	config, err := env.SetUpNode(mgr.GetClient())
+	config, err := env.SetUpNode(bootstrapClient)
 	if err != nil {
 		logger.ErrorLogger().Printf("Failed to request NodeManager subnet: %v", err)
 		panic("Failed to request NodeManager subnet: " + err.Error())

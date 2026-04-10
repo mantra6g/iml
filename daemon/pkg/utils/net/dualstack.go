@@ -100,7 +100,7 @@ func ParseDualStackNetworkFromStrings(networkStrings []string) (DualStackNetwork
 			"too many network addresses provided: expected at most 2 but got %d", len(networkStrings))
 	}
 	for _, networkString := range networkStrings {
-		prefix, err := netip.ParsePrefix(networkStrings[0])
+		prefix, err := netip.ParsePrefix(networkString)
 		if err != nil {
 			return result, fmt.Errorf("invalid IP address: %s", networkString)
 		}

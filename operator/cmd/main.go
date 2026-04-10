@@ -219,14 +219,14 @@ func main() {
 	var tunnelCIDRv4Allocator, tunnelCIDRv6Allocator *ipam.PrefixAllocator
 	if ipv4Enabled {
 		tunnelCIDRv4Allocator, err = ipam.NewPrefixAllocator(
-			clusterCIDRConfig.ClusterPoolIPv4CIDR, int(clusterCIDRConfig.ClusterPoolIPv4MaskSize))
+			clusterCIDRConfig.TunnelPoolIPv4CIDR, int(clusterCIDRConfig.TunnelPoolIPv4MaskSize))
 		if err != nil {
 			setupLog.Error(err, "Failed to initialize tunnel IPv4 CIDR allocator")
 			os.Exit(1)
 		}
 	}
 	tunnelCIDRv6Allocator, err = ipam.NewPrefixAllocator(
-		clusterCIDRConfig.ClusterPoolIPv6CIDR, int(clusterCIDRConfig.ClusterPoolIPv6MaskSize))
+		clusterCIDRConfig.TunnelPoolIPv6CIDR, int(clusterCIDRConfig.TunnelPoolIPv6MaskSize))
 	if err != nil {
 		setupLog.Error(err, "Failed to initialize tunnel IPv6 CIDR allocator")
 		os.Exit(1)
