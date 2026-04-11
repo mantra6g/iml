@@ -8,9 +8,23 @@ spec:
   - name: bmv2-driver
     image: bmv2-driver:local
     imagePullPolicy: Never
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
   - name: bmv2-switch
     image: p4lang/behavioral-model:latest
     imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
     command: ["simple_switch_grpc"]
     args:
       - "--no-p4"
