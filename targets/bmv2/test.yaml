@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   name: bmv2-test
 spec:
-  restartPolicy: Always
+  restartPolicy: OnFailure
   containers:
   - name: bmv2-driver
     image: bmv2-driver:local

@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
+	"bmv2-driver/api"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -22,8 +25,15 @@ func main() {
 	defer conn.Close()
 	c := v1.NewP4RuntimeClient(conn)
 
-	// Contact the server and print out its response.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// Create driver instance with the client and connection
+	driver := &api.Driver{
+		Client: c,
+		Conn:   conn,
+	}
+
+	// Contact the server and set up forwarding pipeline.
+	// Use a longer timeout for this initial setup
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Set a program in the switch.
@@ -43,6 +53,28 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatalf("could not set a program in the bmv2 switch: %v", err)
+		// Log warning instead of fatal - the switch may not have a program initially
+		log.Printf("Warning: could not set forwarding pipeline config: %v", err)
+	}
+
+	log.Printf("Connected to P4 switch at %s", switchAddr)
+
+	// Set up HTTP server with API routes
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/health", driver.HealthHandler)
+	mux.HandleFunc("/api/tables", driver.ReadTableEntriesHandler)
+	mux.HandleFunc("/api/counters", driver.ReadCountersHandler)
+
+	// Start HTTP server
+	httpAddr := "0.0.0.0:8080"
+	log.Printf("Starting HTTP server on %s", httpAddr)
+
+	server := &http.Server{
+		Addr:    httpAddr,
+		Handler: mux,
+	}
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("server error: %v", err)
 	}
 }
