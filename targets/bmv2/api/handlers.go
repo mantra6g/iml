@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -28,18 +29,22 @@ func (d *Driver) HealthHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(HealthResponse{
+		if err := json.NewEncoder(w).Encode(HealthResponse{
 			Status: "unhealthy",
 			Switch: err.Error(),
-		})
+		}); err != nil {
+			log.Printf("failed to encode health response: %v", err)
+		}
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(HealthResponse{
+	if err := json.NewEncoder(w).Encode(HealthResponse{
 		Status: "healthy",
 		Switch: "connected",
-	})
+	}); err != nil {
+		log.Printf("failed to encode health response: %v", err)
+	}
 }
 
 // ReadTableEntriesHandler retrieves table entries from the switch
@@ -62,7 +67,9 @@ func (d *Driver) ReadTableEntriesHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
 		return
 	}
 
@@ -83,7 +90,9 @@ func (d *Driver) ReadTableEntriesHandler(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(TableEntriesResponse{TableEntries: entries})
+	if err := json.NewEncoder(w).Encode(TableEntriesResponse{TableEntries: entries}); err != nil {
+		log.Printf("failed to encode table entries response: %v", err)
+	}
 }
 
 // ReadCountersHandler retrieves counter data from the switch
@@ -106,7 +115,9 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
 		return
 	}
 
@@ -127,5 +138,7 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(CounterDataResponse{CounterEntries: entries})
+	if err := json.NewEncoder(w).Encode(CounterDataResponse{CounterEntries: entries}); err != nil {
+		log.Printf("failed to encode counter data response: %v", err)
+	}
 }

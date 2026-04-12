@@ -14,12 +14,10 @@ type TableEntriesResponse struct {
 }
 
 // CounterDataResponse represents counter data from the switch
+type CounterDataResponse struct {
+	CounterEntries []*v1.CounterEntry `json:"counter_entries"`
+}
 
-
-
-
-
-
-
-
-}	Error string `json:"error"`type ErrorResponse struct {// ErrorResponse represents an error response}	CounterEntries []*v1.CounterEntry `json:"counter_entries"`type CounterDataResponse struct {
+type ErrorResponse struct {
+	Error string `json:"error"`
+}

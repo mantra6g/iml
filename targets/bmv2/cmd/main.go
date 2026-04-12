@@ -1,14 +1,13 @@
 package main
 
 import (
+	"bmv2-driver/api"
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
-	"bmv2-driver/api"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -22,7 +21,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Printf("failed to close connection: %v", err)
+		}
+	}()
 	c := v1.NewP4RuntimeClient(conn)
 
 	// Create driver instance with the client and connection
