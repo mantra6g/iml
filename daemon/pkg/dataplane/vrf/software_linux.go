@@ -101,7 +101,7 @@ func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager, k8sClient 
 	}
 	var net4Allocator *dataplane.Subnet4Allocator
 	if cfg.ClusterCIDR.IPv4Net != nil {
-		net4Allocator, err = dataplane.NewSubnet4Allocator(cfg.ClusterCIDR.IPv4Net, 64)
+		net4Allocator, err = dataplane.NewSubnet4Allocator(cfg.ClusterCIDR.IPv4Net, 28)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create application subnet allocator: %w", err)
 		}

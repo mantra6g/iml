@@ -67,10 +67,13 @@ kind-create: ## Create and configure a local kind cluster.
 	$(KIND) create cluster --name $(KIND_CLUSTER)
 	$(KUBECTL) wait --for=condition=Ready pod -n kube-system --all --timeout=120s
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
+	sleep 1
 	$(KUBECTL) wait --for=condition=Ready pod -l app=multus -n kube-system --timeout=120s
 	$(KUBECTL) apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+	sleep 1
 	$(KUBECTL) wait --for=condition=Ready pod -l app=flannel -n kube-flannel --timeout=300s
 	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.0/cert-manager.yaml
+	sleep 1
 	$(KUBECTL) wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
 
 .PHONY: kind-delete

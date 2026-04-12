@@ -27,11 +27,12 @@ COPY pkg/ pkg/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o daemon cmd/main.go
 
-# Use distroless as minimal base image to package the cni binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM nginx:alpine
+FROM alpine:3.20
+
+# Install iptables (and legacy for compatibility)
+RUN apk add --no-cache iptables iptables-legacy
+
 WORKDIR /
 COPY --from=builder /workspace/daemon .
-USER 65532:65532
 
 ENTRYPOINT ["/daemon"]
