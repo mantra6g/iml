@@ -26,8 +26,8 @@ spec:
             - /bin/sh
             - -c
             - |
-              cp /loomcni /host/opt/cni/bin/
-              chmod +x /host/opt/cni/bin/loomcni
+              cp /loom /host/opt/cni/bin/
+              chmod +x /host/opt/cni/bin/loom
           securityContext:
             privileged: true
           volumeMounts:

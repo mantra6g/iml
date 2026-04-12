@@ -1,31 +1,42 @@
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-client
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-server
+  namespace: default
+spec: {}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx
+  name: web-server
   namespace: default
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      app: nginx
+      app: web-server
   template:
     metadata:
       labels:
-        app: nginx
+        app: web-server
       annotations:
         k8s.v1.cni.cncf.io/networks: |
           [
             {
-              "name": "iml-cni", 
+              "name": "loom-cni", 
               "cni-args": {
-                "app_type": "application_function",
-                "app_id": "face-feed"
+                "app_name": "web-server",
+                "app_namespace": "default"
               }
             }
           ]
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: oai-01
       containers:
         - name: nginx
           image: nginx:latest
@@ -35,33 +46,28 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mongodb
+  name: web-client
   namespace: default
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      app: mongodb
+      app: web-client
   template:
     metadata:
       labels:
-        app: mongodb
+        app: web-client
       annotations:
         k8s.v1.cni.cncf.io/networks: |
           [
-            { 
-              "name": "iml-cni",
+            {
+              "name": "loom-cni",
               "cni-args": {
-                "app_type": "application_function",
-                "app_id": "dead-beef"
+                "app_name": "web-client",
+                "app_namespace": "default"
               }
             }
           ]
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: oai-01
       containers:
-        - name: mongodb
-          image: mongo:latest
-          ports:
-            - containerPort: 27017
+        - name: web-client
+          image: alpine:3.20

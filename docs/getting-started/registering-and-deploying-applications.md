@@ -36,8 +36,8 @@ metadata:
       [{
         "name": "iml-cni",
         "cni-args": {
-          "appName":      "<application-name>",
-          "appNamespace": "<application-namespace>"
+          "app_name":      "<application-name>",
+          "app_namespace": "<application-namespace>"
         }
       }]
 ```
@@ -65,14 +65,14 @@ spec:
           [{
             "name": "iml-cni",
             "cni-args": {
-              "appName":      "web-client",
-              "appNamespace": "default"
+              "app_name":      "web-client",
+              "app_namespace": "default"
             }
           }]
     spec:
       containers:
       - name: web-client
-        image: curlimages/curl:latest
+        image: alpine:3.20
         command: ["sleep", "infinity"]
 ```
 
@@ -96,8 +96,8 @@ spec:
           [{
             "name": "iml-cni",
             "cni-args": {
-              "appName":      "web-server",
-              "appNamespace": "default"
+              "app_name":      "web-server",
+              "app_namespace": "default"
             }
           }]
     spec:
