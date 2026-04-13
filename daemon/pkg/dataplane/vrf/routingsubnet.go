@@ -166,7 +166,7 @@ func (r *RoutingSubnet) AllocateIPs() (netutils.DualStackNetwork, error) {
 
 func (r *RoutingSubnet) AddRouteToSubnet(dstSubnet Subnet, gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
 	logger := r.Log
-	logger.V(1).Info("Adding subnet route to routing subnet", 
+	logger.V(1).Info("Adding subnet route to routing subnet",
 		"dstSubnet", dstSubnet, "gatewayIPs", gatewayIPs, "tunnelInterfaceName", tunnelInterfaceName)
 
 	if dstSubnet.GetNetwork().IPv4Net == nil && dstSubnet.GetNetwork().IPv6Net == nil {
@@ -204,7 +204,7 @@ func (r *RoutingSubnet) AddRouteToSubnet(dstSubnet Subnet, gatewayIPs netutils.D
 func (r *RoutingSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
 	logger := r.Log
 	logger.V(1).Info("Adding default route to routing subnet", "gatewayIPs", gatewayIPs, "tunnelInterfaceName", tunnelInterfaceName)
-	
+
 	err := r.AddRoute(netutils.DualStackNetwork{
 		IPv4Net: &net.IPNet{
 			IP:   net.IPv4zero,
@@ -246,33 +246,29 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 	if gw.IPv6 != nil {
 		// Create a route in the application VRF to reach the router subnet using
 		// the router tunnel as the outgoing interface.
-		ipv6DefaultRoute := &netlink.Route{
-			Dst: &net.IPNet{
-				IP:   net.IPv6zero,
-				Mask: net.CIDRMask(0, 128),
-			},
+		ipv6Route := &netlink.Route{
+			Dst:       dst.IPv6Net,
 			Gw:        gw.IPv6,
 			Table:     int(r.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
-		if err = netlink.RouteAdd(ipv6DefaultRoute); err != nil {
-			logger.Error(err, "failed to add IPv6 route to app subnet in routing VRF", "dst", dst.IPv6Net.String(), "table", r.Vrf.Table)
+		if err = netlink.RouteAdd(ipv6Route); err != nil {
+			logger.Error(err, "failed to add IPv6 route to app subnet in routing VRF",
+				"dst", dst.IPv6Net.String(), "table", r.Vrf.Table)
 			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
 		}
 	}
 
 	if gw.IPv4 != nil {
-		ipv4DefaultRoute := &netlink.Route{
-			Dst: &net.IPNet{
-				IP:   net.IPv4zero,
-				Mask: net.CIDRMask(0, 32),
-			},
+		ipv4Route := &netlink.Route{
+			Dst:       dst.IPv4Net,
 			Gw:        gw.IPv4,
 			Table:     int(r.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
-		if err = netlink.RouteAdd(ipv4DefaultRoute); err != nil {
-			logger.Error(err, "failed to add IPv4 route to app subnet in routing VRF", "dst", dst.IPv4Net.String(), "table", r.Vrf.Table)
+		if err = netlink.RouteAdd(ipv4Route); err != nil {
+			logger.Error(err, "failed to add IPv4 route to app subnet in routing VRF",
+				"dst", dst.IPv4Net.String(), "table", r.Vrf.Table)
 			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
 		}
 	}

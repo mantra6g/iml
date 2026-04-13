@@ -364,6 +364,9 @@ func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net
 		return fmt.Errorf("failed to get application: %w", err)
 	}
 	original := app.DeepCopy()
+	if app.Status.Subnets == nil {
+		app.Status.Subnets = make(map[string][]corev1alpha1.DualStackNetwork)
+	}
 	if app.Status.Subnets[d.cfg.NodeName] == nil {
 		app.Status.Subnets[d.cfg.NodeName] = make([]corev1alpha1.DualStackNetwork, 0)
 	}
@@ -371,7 +374,7 @@ func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net
 		IPv4Net: appNet4.String(),
 		IPv6Net: appNet6.String(),
 	})
-	err = d.Client.Patch(context.Background(), app, client.MergeFrom(original))
+	err = d.Client.Status().Patch(context.Background(), app, client.MergeFrom(original))
 	if err != nil {
 		return fmt.Errorf("failed to patch application: %w", err)
 	}
@@ -411,14 +414,26 @@ func (d *Software) configureTunnelBetweenSubnets(
 		}
 	}
 
+	tunToRtrName, err = vrfutil.GenerateRandomName("tun", 8)
+	if err != nil {
+		err = fmt.Errorf("failed to generate name for tunnel to router subnet: %w", err)
+	}
+	tunToAppName, err = vrfutil.GenerateRandomName("tun", 8)
+	if err != nil {
+		err = fmt.Errorf("failed to generate name for tunnel to app subnet: %w", err)
+	}
 	tunToRtr := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: fmt.Sprintf("rt-%d", appSubnet.Vrf.Table),
+			Name: tunToRtrName,
 		},
-		PeerName: fmt.Sprintf("app-%d", appSubnet.Vrf.Table),
+		PeerName: tunToAppName,
 	}
 	if err = netlink.LinkAdd(tunToRtr); err != nil {
 		err = fmt.Errorf("failed to add veth pair for application subnet: %w", err)
+		return
+	}
+	if err = netlink.LinkSetMaster(tunToRtr, appSubnet.Vrf); err != nil {
+		err = fmt.Errorf("failed to set vrf in app-to-rtr tunnel: %w", err)
 		return
 	}
 	tunToRtrIPv6, err := tunIP6Allocator.Allocate()
@@ -446,11 +461,15 @@ func (d *Software) configureTunnelBetweenSubnets(
 		err = fmt.Errorf("failed to set up router tunnel in application subnet: %w", err)
 		return
 	}
+	appSubnet.Tunnel = tunToRtr
 
 	tunToApp, err := netlink.LinkByName(tunToRtr.PeerName)
 	if err != nil {
 		err = fmt.Errorf("failed to get app tunnel in application subnet: %w", err)
 		return
+	}
+	if err = netlink.LinkSetMaster(tunToApp, rtrSubnet.Vrf); err != nil {
+		err = fmt.Errorf("failed to set vrf in rt-to-app tunnel: %w", err)
 	}
 	tunToAppIPv6, err := tunIP6Allocator.Allocate()
 	if err != nil {
@@ -475,6 +494,7 @@ func (d *Software) configureTunnelBetweenSubnets(
 		err = fmt.Errorf("failed to set up app tunnel in application subnet: %w", err)
 		return
 	}
+	appSubnet.Tunnel = tunToApp
 
 	//// Get the mac addresses of the tunnels to create link-local addresses
 	//tunToApp, err = netlink.LinkByName(tunToApp.Attrs().Name)
@@ -494,8 +514,6 @@ func (d *Software) configureTunnelBetweenSubnets(
 	//	return fmt.Errorf("failed to get link-local address for app tunnel in application subnet: %w", err)
 	//}
 
-	tunToRtrName = tunToRtr.Attrs().Name
-	tunToAppName = tunToApp.Attrs().Name
 	tunToRtrAddrs.IPv6 = tunToRtrIPv6.IP
 	tunToAppAddrs.IPv6 = tunToAppIPv6.IP
 	if ipv4Enabled {
