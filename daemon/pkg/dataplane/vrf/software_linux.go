@@ -413,9 +413,9 @@ func (d *Software) configureTunnelBetweenSubnets(
 
 	tunToRtr := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: fmt.Sprintf("rt-tun-%d", appSubnet.Vrf.Table),
+			Name: fmt.Sprintf("rt-%d", appSubnet.Vrf.Table),
 		},
-		PeerName: fmt.Sprintf("app-tun-%d", rtrSubnet.Vrf.Table),
+		PeerName: fmt.Sprintf("app-%d", appSubnet.Vrf.Table),
 	}
 	if err = netlink.LinkAdd(tunToRtr); err != nil {
 		err = fmt.Errorf("failed to add veth pair for application subnet: %w", err)
