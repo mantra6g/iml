@@ -10,12 +10,12 @@ import (
 	corev1alpha1 "iml-daemon/api/core/v1alpha1"
 	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
 	"iml-daemon/env"
-	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
 	vrfutil "iml-daemon/pkg/dataplane/vrf/util"
 	"iml-daemon/pkg/tunnel"
 	netutils "iml-daemon/pkg/utils/net"
 
+	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,6 +60,7 @@ type Software struct {
 
 	cfg    *env.GlobalConfig
 	Client client.Client
+	log    logr.Logger
 }
 
 type StackType = string
@@ -87,7 +88,7 @@ type NodeConfig struct {
 	Route               netutils.DualStackRoute
 }
 
-func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager, k8sClient client.Client) (dataplane.Dataplane, error) {
+func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel.Manager, k8sClient client.Client) (dataplane.Dataplane, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("global config is nil")
 	}
@@ -146,7 +147,7 @@ func NewSoftware(cfg *env.GlobalConfig, tunnelManager tunnel.Manager, k8sClient 
 	//if err := os.WriteFile("/proc/sys/net/vrf/strict_mode", []byte("1"), 0644); err != nil {
 	//	logger.ErrorLogger().Printf("Failed to enable VRF strict mode: %s", err)
 	//}
-	rtrSubnet, err := NewRoutingSubnet(routingBaseNet, rtrVrfTable)
+	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingBaseNet, rtrVrfTable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
 	}
@@ -288,6 +289,9 @@ func (d *Software) DeleteAllServiceChainRoutes(chain client.ObjectKey) error {
 
 // Creates a subnet into the dataplane and returns the configured bridge name.
 func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *AppSubnet, err error) {
+	logger := d.log
+	logger.V(1).Info("Adding application subnet", "appID", appID)
+
 	var appNet4, appNet6 *net.IPNet
 	if d.appNet4Allocator != nil {
 		appNet4, err = d.appNet4Allocator.Allocate()
@@ -305,7 +309,8 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate application table: %w", err)
 	}
-	subnet, err = NewAppSubnet(appNet4, appNet6, tableID)
+	loggerName := fmt.Sprintf("app-%s-%s-%d", appID.Namespace, appID.Name, tableID)
+	subnet, err = NewAppSubnet(logger.WithName(loggerName), appNet4, appNet6, tableID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create application subnet: %w", err)
 	}
@@ -313,6 +318,7 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 	// From now on, if any errors happen when configuring this subnet, tear it down
 	defer func() {
 		if err != nil {
+			logger.Error(err, "Failed to add application subnet")
 			subnet.Teardown()
 		}
 	}()
@@ -722,24 +728,25 @@ func (d *Software) RemoveP4TargetRoutes(target client.ObjectKey) error {
 }
 
 func (d *Software) cleanupAppSubnet(subnet *AppSubnet) {
+	logger := d.log
 	if subnet.VethBridgeVRF != nil {
 		if err := netlink.LinkDel(subnet.VethBridgeVRF); err != nil {
-			logger.ErrorLogger().Printf("failed to delete veth %s: %v", subnet.VethBridgeVRF.Attrs().Name, err)
+			logger.Error(err, "failed to delete veth", "veth", subnet.VethBridgeVRF.Attrs().Name)
 		}
 	}
 	if subnet.Bridge != nil {
 		if err := netlink.LinkDel(subnet.Bridge); err != nil {
-			logger.ErrorLogger().Printf("failed to delete bridge %s: %v", subnet.Bridge.Attrs().Name, err)
+			logger.Error(err, "failed to delete bridge", "bridge", subnet.Bridge.Attrs().Name)
 		}
 	}
 	if subnet.Tunnel != nil {
 		if err := netlink.LinkDel(subnet.Tunnel); err != nil {
-			logger.ErrorLogger().Printf("failed to delete tunnel %s: %v", subnet.Tunnel.Attrs().Name, err)
+			logger.Error(err, "failed to delete tunnel", "tunnel", subnet.Tunnel.Attrs().Name)
 		}
 	}
 	if subnet.Vrf != nil {
 		if err := netlink.LinkDel(subnet.Vrf); err != nil {
-			logger.ErrorLogger().Printf("failed to delete VRF %s: %v", subnet.Vrf.Attrs().Name, err)
+			logger.Error(err, "failed to delete VRF", "vrf", subnet.Vrf.Attrs().Name)
 		}
 	}
 }

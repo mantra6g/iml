@@ -2,13 +2,13 @@ package vrf
 
 import (
 	"fmt"
-	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
 	"net"
 
 	vrfutil "iml-daemon/pkg/dataplane/vrf/util"
 	netutils "iml-daemon/pkg/utils/net"
 
+	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -22,13 +22,15 @@ type AppSubnet struct {
 	Tunnel        netlink.Link
 	IPv6Allocator *dataplane.IPv6Allocator
 	IPv4Allocator *dataplane.IPv4Allocator
+	Log  			    logr.Logger
 }
 
-func NewAppSubnet(ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet *AppSubnet, err error) {
+func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet *AppSubnet, err error) {
 	if ip6Net == nil && ip4Net == nil {
 		return nil, fmt.Errorf("ip6Net and ip4Net cant both be nil. Provide at least one of them")
 	}
 	subnet = &AppSubnet{}
+	subnet.Log = logger
 
 	var gatewayIPv4 *net.IPNet
 	var ip4Allocator *dataplane.IPv4Allocator
@@ -146,24 +148,25 @@ func NewAppSubnet(ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet 
 }
 
 func (s *AppSubnet) Teardown() {
+	logger := s.Log
 	if s.VethBridgeVRF != nil {
 		if err := netlink.LinkDel(s.VethBridgeVRF); err != nil {
-			logger.ErrorLogger().Printf("failed to delete veth %s: %v", s.VethBridgeVRF.Attrs().Name, err)
+			logger.Error(err, "failed to delete veth", "name", s.VethBridgeVRF.Attrs().Name)
 		}
 	}
 	if s.Bridge != nil {
 		if err := netlink.LinkDel(s.Bridge); err != nil {
-			logger.ErrorLogger().Printf("failed to delete bridge %s: %v", s.Bridge.Attrs().Name, err)
+			logger.Error(err, "failed to delete bridge", "name", s.Bridge.Attrs().Name)
 		}
 	}
 	if s.Tunnel != nil {
 		if err := netlink.LinkDel(s.Tunnel); err != nil {
-			logger.ErrorLogger().Printf("failed to delete tunnel %s: %v", s.Tunnel.Attrs().Name, err)
+			logger.Error(err, "failed to delete tunnel", "name", s.Tunnel.Attrs().Name)
 		}
 	}
 	if s.Vrf != nil {
 		if err := netlink.LinkDel(s.Vrf); err != nil {
-			logger.ErrorLogger().Printf("failed to delete VRF %s: %v", s.Vrf.Attrs().Name, err)
+			logger.Error(err, "failed to delete VRF", "name", s.Vrf.Attrs().Name)
 		}
 	}
 }
@@ -215,33 +218,37 @@ func (s *AppSubnet) AllocateIPs() (netutils.DualStackNetwork, error) {
 	return netutils.DualStackNetwork{}, fmt.Errorf("unknown stack type: %s", s.GetStack())
 }
 
-func (s *AppSubnet) AddRouteToSubnet(subnet2 Subnet, gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
-	if subnet2.GetNetwork().IPv4Net == nil && subnet2.GetNetwork().IPv6Net == nil {
+func (s *AppSubnet) AddRouteToSubnet(dstSubnet Subnet, gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
+	logger := s.Log
+	logger.V(1).Info("Adding subnet route to application subnet",
+		"dstSubnet", dstSubnet, "gatewayIPs", gatewayIPs, "tunnelInterfaceName", tunnelInterfaceName)
+
+	if dstSubnet.GetNetwork().IPv4Net == nil && dstSubnet.GetNetwork().IPv6Net == nil {
 		return fmt.Errorf(
 			"subnet's IPv4Net and IPv6Net are both nil: subnet must contain at least one non-nil network")
 	}
-	if subnet2.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4 != nil {
+	if dstSubnet.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4 != nil {
 		return fmt.Errorf(
 			"subnet's IPv4Net is nil but gatewayIPs contains non-nil IPv4Gateway: " +
 				"gateway IPs are inconsistent with subnet network")
 	}
-	if subnet2.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6 != nil {
+	if dstSubnet.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6 != nil {
 		return fmt.Errorf(
 			"subnet's IPv6Net is nil but gatewayIPs contains non-nil IPv6Gateway: " +
 				"gateway IPs are inconsistent with subnet network")
 	}
-	if subnet2.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4 == nil {
+	if dstSubnet.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4 == nil {
 		return fmt.Errorf(
 			"subnet2's IPv4Net is non-nil but gatewayIPs contains nil IPv4Gateway: " +
 				"gateway IPs are inconsistent with subnet2 network")
 	}
-	if subnet2.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6 == nil {
+	if dstSubnet.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6 == nil {
 		return fmt.Errorf(
 			"subnet2's IPv6Net is nil but gatewayIPs contains nil IPv6Gateway: " +
 				"gateway IPs are inconsistent with subnet2 network")
 	}
 
-	err := s.AddRoute(subnet2.GetNetwork(), gatewayIPs, tunnelInterfaceName)
+	err := s.AddRoute(dstSubnet.GetNetwork(), gatewayIPs, tunnelInterfaceName)
 	if err != nil {
 		return fmt.Errorf("failed to add route: %w", err)
 	}
@@ -263,6 +270,9 @@ func (s *AppSubnet) AddDefaultRoute(gatewayIPs netutils.DualStackAddress, tunnel
 }
 
 func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStackAddress, outInterface string) error {
+	logger := s.Log
+	logger.V(1).Info("Adding route to application subnet", "dst", dst, "gw", gw, "outInterface", outInterface)
+
 	if dst.IPv4Net == nil && dst.IPv6Net == nil {
 		return fmt.Errorf(
 			"destination's IPv4Net and IPv6Net are both nil: destination must contain at least one non-nil network")
@@ -297,8 +307,8 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 			LinkIndex: outIf.Attrs().Index,
 		}
 		if err = netlink.RouteAdd(ipv6DefaultRoute); err != nil {
-			logger.DebugLogger().Printf("failed to execute: `ip -6 route add ::/0 table %d dev %s`",
-				s.Vrf.Table, outIf.Attrs().Name)
+			logger.Error(err, "failed to execute route add",
+				"dst", ipv6DefaultRoute.Dst, "gw", ipv6DefaultRoute.Gw, "table", ipv6DefaultRoute.Table, "dev", outIf.Attrs().Name)
 			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
 		}
 	}
@@ -314,8 +324,8 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 			LinkIndex: outIf.Attrs().Index,
 		}
 		if err = netlink.RouteAdd(ipv4DefaultRoute); err != nil {
-			logger.DebugLogger().Printf("failed to execute: `ip route add 0.0.0.0/0 table %d dev %s`",
-				s.Vrf.Table, outIf.Attrs().Name)
+			logger.Error(err, "failed to execute route add",
+				"dst", ipv4DefaultRoute.Dst, "gw", ipv4DefaultRoute.Gw, "table", ipv4DefaultRoute.Table, "dev", outIf.Attrs().Name)
 			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
 		}
 	}

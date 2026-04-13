@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/c-robinson/iplib/v2 v2.0.5
 	github.com/coreos/go-iptables v0.8.0
+	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/gorilla/mux v1.8.1
 	github.com/vishvananda/netlink v1.3.1
@@ -24,7 +25,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect

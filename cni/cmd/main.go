@@ -66,8 +66,8 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 
 		configRequest := types2.AppInstanceConfigRequest{
 			ContainerID:  cniArgs.ContainerID,
-			PodName:      string(k8sArgs.PodName),
-			PodNamespace: string(k8sArgs.PodNamespace),
+			PodName:      string(k8sArgs.K8S_POD_NAME),
+			PodNamespace: string(k8sArgs.K8S_POD_NAMESPACE),
 			AppName:      cniConf.Args.CNI.AppName,
 			AppNamespace: cniConf.Args.CNI.AppNamespace,
 		}
