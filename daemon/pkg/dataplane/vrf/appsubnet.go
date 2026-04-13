@@ -22,7 +22,7 @@ type AppSubnet struct {
 	Tunnel        netlink.Link
 	IPv6Allocator *dataplane.IPv6Allocator
 	IPv4Allocator *dataplane.IPv4Allocator
-	Log  			    logr.Logger
+	Log           logr.Logger
 }
 
 func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet *AppSubnet, err error) {
@@ -148,6 +148,9 @@ func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tabl
 }
 
 func (s *AppSubnet) Teardown() {
+	if s == nil {
+		return
+	}
 	logger := s.Log
 	if s.VethBridgeVRF != nil {
 		if err := netlink.LinkDel(s.VethBridgeVRF); err != nil {

@@ -327,17 +327,20 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		tunToAppName, tunToAppAddrs,
 		err := d.configureTunnelBetweenSubnets(d.routingSubnet, subnet)
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure routing tunnel: %w", err)
+		err = fmt.Errorf("failed to configure routing tunnel: %w", err)
+		return
 	}
 
 	err = d.routingSubnet.AddRouteToSubnet(subnet, tunToRtrAddrs, tunToAppName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to install routes towards app subnet in routing subnet: %w", err)
+		err = fmt.Errorf("failed to install routes towards app subnet in routing subnet: %w", err)
+		return
 	}
 
 	err = subnet.AddDefaultRoute(tunToAppAddrs, tunToRtrName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to install routes towards routing subnet in app subnet: %w", err)
+		err = fmt.Errorf("failed to install routes towards routing subnet in app subnet: %w", err)
+		return
 	}
 
 	existingSubnets, ok := d.appSubnets[appID]
@@ -348,7 +351,8 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 	}
 	err = d.addSubnetToAppStatus(appID, appNet4, appNet6)
 	if err != nil {
-		return subnet, fmt.Errorf("failed to update application status with subnet info: %w", err)
+		err = fmt.Errorf("failed to update application status with subnet info: %w", err)
+		return
 	}
 	return subnet, nil
 }
