@@ -72,6 +72,19 @@ spec:
             }
           ]
     spec:
+      affinity:
+        podAntiAffinity:
+          # This changed from 'required' to 'preferred'
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - web-server
+                topologyKey: "kubernetes.io/hostname"
       containers:
         - name: web-client
           image: alpine:3.20

@@ -96,13 +96,13 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 		return nil, fmt.Errorf("cluster IPv6 Range cannot nil")
 	}
 
-	net6Allocator, err := dataplane.NewSubnet6Allocator(cfg.ClusterCIDR.IPv6Net, 64)
+	net6Allocator, err := dataplane.NewSubnet6Allocator(cfg.PodCIDR.IPv6Net, 96)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create IPv6 subnet allocator: %w", err)
 	}
 	var net4Allocator *dataplane.Subnet4Allocator
 	if cfg.ClusterCIDR.IPv4Net != nil {
-		net4Allocator, err = dataplane.NewSubnet4Allocator(cfg.ClusterCIDR.IPv4Net, 28)
+		net4Allocator, err = dataplane.NewSubnet4Allocator(cfg.PodCIDR.IPv4Net, 28)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create application subnet allocator: %w", err)
 		}

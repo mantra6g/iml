@@ -30,7 +30,7 @@ type TunnelManager struct {
 	tunnels         map[NodeName]*Tunnel
 	ip4t            *iptables.IPTables
 	ip6t            *iptables.IPTables
-	log 				    logr.Logger
+	log             logr.Logger
 }
 
 func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
@@ -148,7 +148,7 @@ func (mgr *TunnelManager) Close() error {
 
 func (mgr *TunnelManager) UpdateNodeTunnels(node *corev1.Node) error {
 	tun, exists := mgr.tunnels[node.Name]
-	if !exists {
+	if exists {
 		if err := tun.UpdateDestinationNode(node); err != nil {
 			return fmt.Errorf("failed to update destination node %s: %v", node.Name, err)
 		}
