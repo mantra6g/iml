@@ -48,12 +48,6 @@ spec:
                 items:
                   type: string
                 type: array
-              tunnelCIDRs:
-                description: TunnelCIDRs are similar to NodeCIDRs but used for tunnels
-                  in this node.
-                items:
-                  type: string
-                type: array
             type: object
           status:
             description: status defines the observed state of LoomNode

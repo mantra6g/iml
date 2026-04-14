@@ -11,7 +11,7 @@ type DualStackNetwork struct {
 	IPv6Net *net.IPNet `json:"inet6,omitempty"`
 }
 
-func (net *DualStackNetwork) IsEmpty() bool {
+func (net DualStackNetwork) IsEmpty() bool {
 	return net.IPv4Net == nil && net.IPv6Net == nil
 }
 

@@ -164,39 +164,70 @@ func (r *RoutingSubnet) AllocateIPs() (netutils.DualStackNetwork, error) {
 	//return netutils.DualStackNetwork{}, fmt.Errorf("unknown stack type: %s", r.GetStack())
 }
 
-func (r *RoutingSubnet) AddRouteToSubnet(dstSubnet Subnet, gatewayIPs netutils.DualStackAddress, tunnelInterfaceName string) error {
+func (r *RoutingSubnet) AddDefaultRouteViaSubnet(dstSubnet Subnet) error {
 	logger := r.Log
-	logger.V(1).Info("Adding subnet route to routing subnet",
-		"dstSubnet", dstSubnet, "gatewayIPs", gatewayIPs, "tunnelInterfaceName", tunnelInterfaceName)
+	logger.V(1).Info("Adding subnet route to routing subnet", "dstSubnet", dstSubnet)
+	if dstSubnet == nil {
+		return fmt.Errorf("destination subnet cannot be nil")
+	}
+	defaultNetwork := netutils.DualStackNetwork{
+		IPv4Net: &net.IPNet{
+			IP:   net.IPv4zero,
+			Mask: net.CIDRMask(0, 32),
+		},
+		IPv6Net: &net.IPNet{
+			IP:   net.IPv6zero,
+			Mask: net.CIDRMask(0, 128),
+		},
+	}
+	return r.AddRouteViaVRF(defaultNetwork, dstSubnet.GetVRFName())
+}
 
-	if dstSubnet.GetNetwork().IPv4Net == nil && dstSubnet.GetNetwork().IPv6Net == nil {
+func (r *RoutingSubnet) AddRouteToSubnet(dstSubnet Subnet) error {
+	logger := r.Log
+	logger.V(1).Info("Adding subnet route to routing subnet", "dstSubnet", dstSubnet)
+	if dstSubnet == nil {
+		return fmt.Errorf("destination subnet cannot be nil")
+	}
+	dualNet := dstSubnet.GetNetwork()
+	return r.AddRouteViaVRF(dualNet, dstSubnet.GetVRFName())
+}
+
+func (r *RoutingSubnet) AddRouteViaVRF(dst netutils.DualStackNetwork, vrfName string) error {
+	logger := r.Log
+	if dst.IsEmpty() {
 		return fmt.Errorf(
 			"subnet's IPv4Net and IPv6Net are both nil: subnet must contain at least one non-nil network")
 	}
-	if dstSubnet.GetNetwork().IPv4Net == nil && gatewayIPs.IPv4 != nil {
-		return fmt.Errorf(
-			"subnet's IPv4Net is nil but gatewayIPs contains non-nil IPv4Gateway: " +
-				"gateway IPs are inconsistent with subnet network")
-	}
-	if dstSubnet.GetNetwork().IPv6Net == nil && gatewayIPs.IPv6 != nil {
-		return fmt.Errorf(
-			"subnet's IPv6Net is nil but gatewayIPs contains non-nil IPv6Gateway: " +
-				"gateway IPs are inconsistent with subnet network")
-	}
-	if dstSubnet.GetNetwork().IPv4Net != nil && gatewayIPs.IPv4 == nil {
-		return fmt.Errorf(
-			"subnet2's IPv4Net is non-nil but gatewayIPs contains nil IPv4Gateway: " +
-				"gateway IPs are inconsistent with subnet2 network")
-	}
-	if dstSubnet.GetNetwork().IPv6Net != nil && gatewayIPs.IPv6 == nil {
-		return fmt.Errorf(
-			"subnet2's IPv6Net is nil but gatewayIPs contains nil IPv6Gateway: " +
-				"gateway IPs are inconsistent with subnet2 network")
-	}
-
-	err := r.AddRoute(dstSubnet.GetNetwork(), gatewayIPs, tunnelInterfaceName)
+	vrf, err := netlink.LinkByName(vrfName)
 	if err != nil {
-		return fmt.Errorf("failed to add route: %w", err)
+		return fmt.Errorf("failed to get VRF for destination subnet: %w", err)
+	}
+	if dst.IPv6Net != nil {
+		// Create a route in the application VRF to reach the router subnet using
+		// the router tunnel as the outgoing interface.
+		ipv6Route := &netlink.Route{
+			Dst:       dst.IPv6Net,
+			Table:     int(r.Vrf.Table),
+			LinkIndex: vrf.Attrs().Index,
+		}
+		if err = netlink.RouteAdd(ipv6Route); err != nil {
+			logger.Error(err, "failed to add IPv6 route to app subnet in routing VRF",
+				"dst_net", dst.IPv6Net.String(), "table", r.Vrf.Table, "dst_vrf", vrf.Attrs().Name)
+			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
+		}
+	}
+	if dst.IPv4Net != nil {
+		ipv4Route := &netlink.Route{
+			Dst:       dst.IPv4Net,
+			Table:     int(r.Vrf.Table),
+			LinkIndex: vrf.Attrs().Index,
+		}
+		if err = netlink.RouteAdd(ipv4Route); err != nil {
+			logger.Error(err, "failed to add IPv4 route to app subnet in routing VRF",
+				"dst_net", dst.IPv4Net.String(), "table", r.Vrf.Table, "dst_vrf", vrf.Attrs().Name)
+			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
+		}
 	}
 	return nil
 }
@@ -323,4 +354,8 @@ func (r *RoutingSubnet) GetGateway() netutils.DualStackAddress {
 
 func (r *RoutingSubnet) GetStack() StackType {
 	return IPv6Only
+}
+
+func (r *RoutingSubnet) GetVRFName() string {
+	return r.Vrf.Name
 }

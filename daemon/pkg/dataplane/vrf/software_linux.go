@@ -40,22 +40,18 @@ const (
 )
 
 type Software struct {
-	appSubnets    map[client.ObjectKey][]AppSubnet
-	appMu         sync.Mutex
-	p4Targets     map[client.ObjectKey]*P4TargetInstance
-	p4Mu          sync.Mutex
-	nodeConfigs   map[client.ObjectKey]*NodeConfig
-	nodeMu        sync.Mutex
-	tunnelManager tunnel.Manager
-	routingSubnet *RoutingSubnet
-	//routerVrf  *netlink.Vrf
+	appSubnets         map[client.ObjectKey][]AppSubnet
+	appMu              sync.Mutex
+	p4Targets          map[client.ObjectKey]*P4TargetInstance
+	p4Mu               sync.Mutex
+	nodeConfigs        map[client.ObjectKey]*NodeConfig
+	nodeMu             sync.Mutex
+	tunnelManager      tunnel.Manager
+	routingSubnet      *RoutingSubnet
 	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
 
 	appNet6Allocator *dataplane.Subnet6Allocator
 	appNet4Allocator *dataplane.Subnet4Allocator
-	//routingIP6Allocator *dataplane.IPv6Allocator
-	tunNet6Allocator *dataplane.Subnet6Allocator
-	tunNet4Allocator *dataplane.Subnet4Allocator
 	tableAllocator   *dataplane.TableAllocator
 
 	cfg    *env.GlobalConfig
@@ -76,6 +72,7 @@ type Subnet interface {
 	GetNetwork() netutils.DualStackNetwork
 	GetGateway() netutils.DualStackAddress
 	GetStack() StackType
+	GetVRFName() string
 }
 
 type P4TargetInstance struct {
@@ -111,17 +108,6 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet's IP allocator: %w", err)
 	}
-	tunNet6Allocator, err := dataplane.NewSubnet6Allocator(cfg.TunCIDR.IPv6Net, 126)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
-	}
-	var tunNet4Allocator *dataplane.Subnet4Allocator
-	if cfg.TunCIDR.IPv4Net != nil {
-		tunNet4Allocator, err = dataplane.NewSubnet4Allocator(cfg.TunCIDR.IPv4Net, 30)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
-		}
-	}
 	tableAllocator, err := dataplane.NewTableAllocator(1000)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create table allocator: %w", err)
@@ -156,8 +142,6 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	return &Software{
 		appNet4Allocator:   net4Allocator,
 		appNet6Allocator:   net6Allocator,
-		tunNet6Allocator:   tunNet6Allocator,
-		tunNet4Allocator:   tunNet4Allocator,
 		tableAllocator:     tableAllocator,
 		routingSubnet:      rtrSubnet,
 		appSubnets:         make(map[client.ObjectKey][]AppSubnet),
@@ -251,42 +235,6 @@ func (d *Software) DeleteAllServiceChainRoutes(chain client.ObjectKey) error {
 	return nil
 }
 
-//func (d *Software) AddRoute(srcAppID types.UID, dstNet net.IPNet, sids []net.IP) error {
-//	d.appMu.Lock()
-//	defer d.appMu.Unlock()
-//
-//	subnets, exists := d.appSubnets[srcAppID]
-//	if !exists {
-//		return fmt.Errorf("application subnet for group %s does not exist", srcAppID)
-//	}
-//
-//	for i := range subnets {
-//		err := subnets[i].AddSRv6Route(dstNet, sids)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
-
-//func (d *Software) RemoveRoute(srcAppID types.UID, dstNet net.IPNet) error {
-//	d.appMu.Lock()
-//	defer d.appMu.Unlock()
-//
-//	subnets, exists := d.appSubnets[srcAppID]
-//	if !exists {
-//		return fmt.Errorf("application subnet for group %s does not exist", srcAppID)
-//	}
-//
-//	for i := range subnets {
-//		err := subnets[i].DeleteSRv6Route(dstNet)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
-
 // Creates a subnet into the dataplane and returns the configured bridge name.
 func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *AppSubnet, err error) {
 	logger := d.log
@@ -323,26 +271,15 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		}
 	}()
 
-	tunToRtrName, tunToRtrAddrs,
-		tunToAppName, tunToAppAddrs,
-		err := d.configureTunnelBetweenSubnets(d.routingSubnet, subnet)
-	if err != nil {
-		err = fmt.Errorf("failed to configure routing tunnel: %w", err)
-		return
-	}
-
-	err = d.routingSubnet.AddRouteToSubnet(subnet, tunToRtrAddrs, tunToAppName)
+	err = d.routingSubnet.AddRouteToSubnet(subnet)
 	if err != nil {
 		err = fmt.Errorf("failed to install routes towards app subnet in routing subnet: %w", err)
 		return
 	}
-
-	err = subnet.AddDefaultRoute(tunToAppAddrs, tunToRtrName)
+	err = subnet.AddDefaultRouteViaSubnet(d.routingSubnet)
 	if err != nil {
-		err = fmt.Errorf("failed to install routes towards routing subnet in app subnet: %w", err)
-		return
+		err = fmt.Errorf("failed to install default routes towards app subnet in routing subnet: %w", err)
 	}
-
 	existingSubnets, ok := d.appSubnets[appID]
 	if !ok {
 		d.appSubnets[appID] = []AppSubnet{*subnet}
@@ -379,148 +316,6 @@ func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net
 		return fmt.Errorf("failed to patch application: %w", err)
 	}
 	return nil
-}
-
-func (d *Software) configureTunnelBetweenSubnets(
-	rtrSubnet *RoutingSubnet, appSubnet *AppSubnet,
-) (
-	tunToRtrName string, tunToRtrAddrs netutils.DualStackAddress,
-	tunToAppName string, tunToAppAddrs netutils.DualStackAddress,
-	err error,
-) {
-	var ipv4Enabled = d.tunNet4Allocator != nil
-	// Generate a /126 subnet from the tunnel range for the tunnel between router and app subnet
-	tunNet6, err := d.tunNet6Allocator.Allocate()
-	if err != nil {
-		err = fmt.Errorf("failed to allocate tunnel subnet: %w", err)
-		return
-	}
-	tunIP6Allocator, err := dataplane.NewIPv6Allocator(tunNet6)
-	if err != nil {
-		err = fmt.Errorf("failed to create IPv6 allocator for tunnel subnet: %w", err)
-		return
-	}
-	var tunIP4Allocator *dataplane.IPv4Allocator
-	if ipv4Enabled {
-		var tunNet4 *net.IPNet
-		tunNet4, err = d.tunNet4Allocator.Allocate()
-		if err != nil {
-			err = fmt.Errorf("failed to allocate tunnel subnet: %w", err)
-		}
-		tunIP4Allocator, err = dataplane.NewIPv4Allocator(tunNet4)
-		if err != nil {
-			err = fmt.Errorf("failed to create IPv4 allocator for tunnel subnet: %w", err)
-			return
-		}
-	}
-
-	tunToRtrName, err = vrfutil.GenerateRandomName("tun", 8)
-	if err != nil {
-		err = fmt.Errorf("failed to generate name for tunnel to router subnet: %w", err)
-	}
-	tunToAppName, err = vrfutil.GenerateRandomName("tun", 8)
-	if err != nil {
-		err = fmt.Errorf("failed to generate name for tunnel to app subnet: %w", err)
-	}
-	tunToRtr := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: tunToRtrName,
-		},
-		PeerName: tunToAppName,
-	}
-	if err = netlink.LinkAdd(tunToRtr); err != nil {
-		err = fmt.Errorf("failed to add veth pair for application subnet: %w", err)
-		return
-	}
-	if err = netlink.LinkSetMaster(tunToRtr, appSubnet.Vrf); err != nil {
-		err = fmt.Errorf("failed to set vrf in app-to-rtr tunnel: %w", err)
-		return
-	}
-	tunToRtrIPv6, err := tunIP6Allocator.Allocate()
-	if err != nil {
-		err = fmt.Errorf("failed to generate IPv6 address for router tunnel in application subnet: %w", err)
-		return
-	}
-	if err = netlink.AddrAdd(tunToRtr, &netlink.Addr{IPNet: tunToRtrIPv6}); err != nil {
-		err = fmt.Errorf("failed to add IPv6 address to router tunnel in application subnet: %w", err)
-		return
-	}
-	var tunToRtrIPv4 *net.IPNet
-	if ipv4Enabled {
-		tunToRtrIPv4, err = tunIP4Allocator.Allocate()
-		if err != nil {
-			err = fmt.Errorf("failed to generate IPv4 address for router tunnel in application subnet: %w", err)
-			return
-		}
-		if err = netlink.AddrAdd(tunToRtr, &netlink.Addr{IPNet: tunToRtrIPv4}); err != nil {
-			err = fmt.Errorf("failed to add IPv4 address to router tunnel in application subnet: %w", err)
-			return
-		}
-	}
-	if err = netlink.LinkSetUp(tunToRtr); err != nil {
-		err = fmt.Errorf("failed to set up router tunnel in application subnet: %w", err)
-		return
-	}
-	appSubnet.Tunnel = tunToRtr
-
-	tunToApp, err := netlink.LinkByName(tunToRtr.PeerName)
-	if err != nil {
-		err = fmt.Errorf("failed to get app tunnel in application subnet: %w", err)
-		return
-	}
-	if err = netlink.LinkSetMaster(tunToApp, rtrSubnet.Vrf); err != nil {
-		err = fmt.Errorf("failed to set vrf in rt-to-app tunnel: %w", err)
-	}
-	tunToAppIPv6, err := tunIP6Allocator.Allocate()
-	if err != nil {
-		err = fmt.Errorf("failed to generate IPv6 address for app tunnel in application subnet: %w", err)
-		return
-	}
-	if err = netlink.AddrAdd(tunToApp, &netlink.Addr{IPNet: tunToAppIPv6}); err != nil {
-		err = fmt.Errorf("failed to add address to app tunnel in application subnet: %w", err)
-		return
-	}
-	var tunToAppIPv4 *net.IPNet
-	if ipv4Enabled {
-		tunToAppIPv4, err = tunIP4Allocator.Allocate()
-		if err != nil {
-			err = fmt.Errorf("failed to generate IPv4 address for app tunnel in application subnet: %w", err)
-		}
-		if err = netlink.AddrAdd(tunToApp, &netlink.Addr{IPNet: tunToAppIPv4}); err != nil {
-			err = fmt.Errorf("failed to add IPv4 address to app tunnel in application subnet: %w", err)
-		}
-	}
-	if err = netlink.LinkSetUp(tunToApp); err != nil {
-		err = fmt.Errorf("failed to set up app tunnel in application subnet: %w", err)
-		return
-	}
-	appSubnet.Tunnel = tunToApp
-
-	//// Get the mac addresses of the tunnels to create link-local addresses
-	//tunToApp, err = netlink.LinkByName(tunToApp.Attrs().Name)
-	//if err != nil {
-	//	return fmt.Errorf("failed to get app tunnel link in application subnet: %w", err)
-	//}
-	//tunToRtr, err = netlink.LinkByName(tunToRtr.Attrs().Name)
-	//if err != nil {
-	//	return fmt.Errorf("failed to get router tunnel link in application subnet: %w", err)
-	//}
-	//rtTunLLAddr, err := vrfutil.CreateLinkLocalAddrFromMAC(rtTunnelLink.Attrs().HardwareAddr)
-	//if err != nil {
-	//	return fmt.Errorf("failed to get link-local address for router tunnel in application subnet: %w", err)
-	//}
-	//appTunLLAddr, err := vrfutil.CreateLinkLocalAddrFromMAC(appTunnelLink.Attrs().HardwareAddr)
-	//if err != nil {
-	//	return fmt.Errorf("failed to get link-local address for app tunnel in application subnet: %w", err)
-	//}
-
-	tunToRtrAddrs.IPv6 = tunToRtrIPv6.IP
-	tunToAppAddrs.IPv6 = tunToAppIPv6.IP
-	if ipv4Enabled {
-		tunToRtrAddrs.IPv4 = tunToRtrIPv4.IP
-		tunToAppAddrs.IPv4 = tunToAppIPv4.IP
-	}
-	return
 }
 
 func (d *Software) ConfigureAppInstance(
@@ -748,169 +543,6 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 func (d *Software) RemoveP4TargetRoutes(target client.ObjectKey) error {
 	return nil
 }
-
-func (d *Software) cleanupAppSubnet(subnet *AppSubnet) {
-	logger := d.log
-	if subnet.VethBridgeVRF != nil {
-		if err := netlink.LinkDel(subnet.VethBridgeVRF); err != nil {
-			logger.Error(err, "failed to delete veth", "veth", subnet.VethBridgeVRF.Attrs().Name)
-		}
-	}
-	if subnet.Bridge != nil {
-		if err := netlink.LinkDel(subnet.Bridge); err != nil {
-			logger.Error(err, "failed to delete bridge", "bridge", subnet.Bridge.Attrs().Name)
-		}
-	}
-	if subnet.Tunnel != nil {
-		if err := netlink.LinkDel(subnet.Tunnel); err != nil {
-			logger.Error(err, "failed to delete tunnel", "tunnel", subnet.Tunnel.Attrs().Name)
-		}
-	}
-	if subnet.Vrf != nil {
-		if err := netlink.LinkDel(subnet.Vrf); err != nil {
-			logger.Error(err, "failed to delete VRF", "vrf", subnet.Vrf.Attrs().Name)
-		}
-	}
-}
-
-//func (d *Software) cleanupVNFSubnet(subnet *vnfSubnet) {
-//	if subnet.VethBridgeVRF != nil {
-//		if err := netlink.LinkDel(subnet.VethBridgeVRF); err != nil {
-//			logger.ErrorLogger().Printf("failed to delete veth %s: %v", subnet.VethBridgeVRF.Attrs().Name, err)
-//		}
-//	}
-//	if subnet.bridge != nil {
-//		if err := netlink.LinkDel(subnet.bridge); err != nil {
-//			logger.ErrorLogger().Printf("failed to delete bridge %s: %v", subnet.bridge.Attrs().Name, err)
-//		}
-//	}
-//}
-
-//func (*Software) regenerateVNFSubnetNextHops(subnet *vnfSubnet) ([]*netlink.NexthopInfo, error) {
-//	link, err := netlink.LinkByName(subnet.VethBridgeVRF.PeerName)
-//	if err != nil {
-//		logger.ErrorLogger().Printf("failed to get veth %s: %v", subnet.VethBridgeVRF.Attrs().Name, err)
-//		return nil, err
-//	}
-//
-//	var nextHops []*netlink.NexthopInfo
-//	for _, ip := range subnet.Instances {
-//		nextHops = append(nextHops, &netlink.NexthopInfo{
-//			Gw:        ip,
-//			LinkIndex: link.Attrs().Index,
-//		})
-//	}
-//	return nextHops, nil
-//}
-//
-//func (d *Software) updateVNFSubnetSIDRoute(sid *net.IPNet, nextHops []*netlink.NexthopInfo) error {
-//	var route *netlink.Route
-//	routes, err := netlink.RouteListFiltered(nl.FAMILY_V6, &netlink.Route{
-//		Dst:   sid,
-//		Table: int(d.routerVrf.Table),
-//	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE)
-//	logger.DebugLogger().Printf("Existing routes for VNF subnet %s: %v", sid.String(), routes)
-//	if err != nil {
-//		return fmt.Errorf("failed to list routes for VNF subnet %s: %w", sid.String(), err)
-//	}
-//	if len(routes) == 0 {
-//		logger.DebugLogger().Printf("No existing route for VNF subnet %s, creating a new one", sid.String())
-//		// No existing route, create a new one
-//		route = &netlink.Route{
-//			Dst:       sid,
-//			Table:     int(d.routerVrf.Table),
-//			MultiPath: nextHops,
-//		}
-//		logger.DebugLogger().Printf("Creating new route for VNF subnet %s: %v", sid.String(), route)
-//	} else {
-//		logger.DebugLogger().Printf("Found existing route(s) for VNF subnet %s: %v", sid.String(), routes)
-//		logger.DebugLogger().Printf("Updating existing route for VNF subnet %s: %v", sid.String(), routes[0])
-//		// Update existing route
-//		route = &routes[0]
-//		route.MultiPath = nextHops
-//		logger.DebugLogger().Printf("Updated route for VNF subnet %s: %v", sid.String(), route)
-//	}
-//	if err := netlink.RouteReplace(route); err != nil {
-//		return fmt.Errorf("failed to update route for VNF subnet %s: %w", sid.String(), err)
-//	}
-//	return nil
-//}
-
-//func (d *Software) setUpRouterSubnet() error {
-//	routerVrfTable, err := d.tableAllocator.Allocate()
-//	if err != nil {
-//		return fmt.Errorf("failed to allocate router VRF table ID: %w", err)
-//	}
-//	routerVrf := &netlink.Vrf{
-//		LinkAttrs: netlink.LinkAttrs{
-//			Name: "router-vrf",
-//		},
-//		Table: uint32(routerVrfTable),
-//	}
-//	if err := netlink.LinkAdd(routerVrf); err != nil {
-//		return fmt.Errorf("failed to add router VRF: %w", err)
-//	}
-//	if err := netlink.LinkSetUp(routerVrf); err != nil {
-//		return fmt.Errorf("failed to set up router VRF: %w", err)
-//	}
-//
-//	decapIface := &netlink.Dummy{
-//		LinkAttrs: netlink.LinkAttrs{
-//			Name: "decap0",
-//		},
-//	}
-//	if err := netlink.LinkAdd(decapIface); err != nil {
-//		return fmt.Errorf("failed to add decap interface: %w", err)
-//	}
-//	if err := netlink.LinkSetMaster(decapIface, routerVrf); err != nil {
-//		return fmt.Errorf("failed to set master for decap interface: %w", err)
-//	}
-//	if err := netlink.LinkSetUp(decapIface); err != nil {
-//		return fmt.Errorf("failed to set up decap interface: %w", err)
-//	}
-//
-//	decapSid, err := d.routingIP6Allocator.Allocate()
-//	if err != nil {
-//		return fmt.Errorf("failed to allocate decap SID: %w", err)
-//	}
-//	// ip -6 route add <decap sid> table <router vrf table> encap seg6local action End.DT6 table <router vrf table> dev <decap iface>
-//	var flags_end_dt6_encaps [nl.SEG6_LOCAL_MAX]bool
-//	flags_end_dt6_encaps[nl.SEG6_LOCAL_ACTION] = true
-//	flags_end_dt6_encaps[nl.SEG6_LOCAL_TABLE] = true
-//	decapRoute := &netlink.Route{
-//		Dst:   decapSid,
-//		Table: int(routerVrf.Table),
-//		Encap: &netlink.SEG6LocalEncap{
-//			Flags:  flags_end_dt6_encaps,
-//			Action: nl.SEG6_LOCAL_ACTION_END_DT6,
-//			Table:  int(routerVrf.Table),
-//		},
-//		LinkIndex: decapIface.Attrs().Index,
-//	}
-//	if err := netlink.RouteAdd(decapRoute); err != nil {
-//		logger.ErrorLogger().Printf("Failed to execute `ip -6 route add %s table %d encap seg6local action End.DT6 vrftable %d dev %s`: %s", decapSid.String(), routerVrf.Table, routerVrf.Table, decapIface.Attrs().Name, err)
-//		return fmt.Errorf("failed to add decap route: %w", err)
-//	}
-//	d.routerVrf = routerVrf
-//
-//	globalConfig, err := env.Config()
-//	if err != nil {
-//		return fmt.Errorf("failed to get global config: %w", err)
-//	}
-//	globalConfig.DecapSID = decapSid
-//	return nil
-//}
-
-//func (d *Software) tearDownRouterSubnet() {
-//	routerVrf, err := netlink.LinkByName("router-vrf")
-//	if err == nil {
-//		netlink.LinkDel(routerVrf)
-//	}
-//	decapIface, err := netlink.LinkByName("decap0")
-//	if err == nil {
-//		netlink.LinkDel(decapIface)
-//	}
-//}
 
 func getFirstSubnetWithAvailableIPs(subnets []AppSubnet) (*AppSubnet, error) {
 	for _, subnet := range subnets {

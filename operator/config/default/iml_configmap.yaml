@@ -8,7 +8,3 @@ data:
   cluster-pool-ipv4-mask-size: "24"
   cluster-pool-ipv6-cidr: "fd00::/16"
   cluster-pool-ipv6-mask-size: "64"
-  tunnel-pool-ipv4-cidr: "10.124.0.0/16"
-  tunnel-pool-ipv4-mask-size: "24"
-  tunnel-pool-ipv6-cidr: "fd01::/16"
-  tunnel-pool-ipv6-mask-size: "64"
