@@ -19,14 +19,14 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"loom/pkg/ipam"
 	"os"
 	"path/filepath"
 
-	webhookschedulingv1alpha1 "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
+	webhookschedulingv1alpha1 "github.com/mantra6g/iml/operator/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 
-	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
-	envutils "loom/pkg/util/env"
+	rsutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset/util"
+	"github.com/mantra6g/iml/operator/pkg/ipam"
+	envutils "github.com/mantra6g/iml/operator/pkg/util/env"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -43,16 +43,16 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"loom/internal/controller/core/networkfunction"
-	"loom/internal/controller/core/p4target"
-	"loom/internal/controller/infra/bmv2target"
-	"loom/internal/controller/infra/loomnode"
-	"loom/internal/controller/scheduling/networkfunctiondeployment"
-	"loom/internal/controller/scheduling/networkfunctionreplicaset"
+	"github.com/mantra6g/iml/operator/internal/controller/core/networkfunction"
+	"github.com/mantra6g/iml/operator/internal/controller/core/p4target"
+	"github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target"
+	"github.com/mantra6g/iml/operator/internal/controller/infra/loomnode"
+	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment"
+	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	infrav1alpha1 "loom/api/infra/v1alpha1"
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -1,7 +1,7 @@
 package util
 
 import (
-	schedulingv1alpha1 "loom/api/core/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
