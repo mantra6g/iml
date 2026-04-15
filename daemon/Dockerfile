@@ -17,7 +17,6 @@ COPY api/ api/
 COPY cni/ cni/
 COPY controllers/ controllers/
 COPY env/ env/
-COPY logger/ logger/
 COPY pkg/ pkg/
 
 # Build

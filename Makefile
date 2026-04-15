@@ -20,6 +20,10 @@ CONTAINER_TOOL ?= docker
 # KIND_CLUSTER defines the test cluster used to develop locally
 KIND_CLUSTER ?= iml
 
+# KIND_CLUSTER_CONFIG_* are kind yaml files for different cluster configurations.
+KIND_CLUSTER_CONFIG_SINGLE_NODE = hack/kind/single-node.yaml
+KIND_CLUSTER_CONFIG_MULTI_NODE = hack/kind/multi-node.yaml
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -62,18 +66,29 @@ docker-push: ## Push docker image with the cni, daemon and operator.
 	$(MAKE) -C daemon docker-push IMG=${IMG_DAEMON} IMG_CNI=${IMG_CNI}
 	$(MAKE) -C operator docker-push IMG=${IMG_OPERATOR}
 
-.PHONY: kind-create
-kind-create: ## Create and configure a local kind cluster.
-	$(KIND) create cluster --name $(KIND_CLUSTER)
+.PHONY: kind-create-multi
+kind-create: ## Create and configure a local kind cluster with a control-plane and a worker node.
+	$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CLUSTER_CONFIG_SINGLE_NODE)
+	$(KUBECTL) taint nodes $(KIND_CLUSTER)-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
+	sleep 3
 	$(KUBECTL) wait --for=condition=Ready pod -n kube-system --all --timeout=120s
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
-	sleep 1
+	sleep 3
 	$(KUBECTL) wait --for=condition=Ready pod -l app=multus -n kube-system --timeout=120s
-	$(KUBECTL) apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-	sleep 1
-	$(KUBECTL) wait --for=condition=Ready pod -l app=flannel -n kube-flannel --timeout=300s
 	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.0/cert-manager.yaml
-	sleep 1
+	sleep 3
+	$(KUBECTL) wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+
+.PHONY: kind-create
+kind-create: ## Create and configure a local kind cluster with a single control-plane node.
+	$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CLUSTER_CONFIG_SINGLE_NODE)
+	sleep 3
+	$(KUBECTL) wait --for=condition=Ready pod -n kube-system --all --timeout=120s
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
+	sleep 3
+	$(KUBECTL) wait --for=condition=Ready pod -l app=multus -n kube-system --timeout=120s
+	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.0/cert-manager.yaml
+	sleep 3
 	$(KUBECTL) wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
 
 .PHONY: kind-delete

@@ -6,34 +6,40 @@ import (
 	"net/http"
 
 	corev1alpha1 "iml-daemon/api/core/v1alpha1"
-	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane"
 	netutils "iml-daemon/pkg/utils/net"
 
+	"github.com/go-logr/logr"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// +kubebuilder:rbac:groups=core.loom.io,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 var validate *validator.Validate
 
 type Controller struct {
 	Client    client.Client
 	Dataplane dataplane.Dataplane
+	Log       logr.Logger
 }
 
 // Sets up the local API for CNI operations
 //
 // This API will be used by the CNI plugin to register and unregister
 // application and VNF containers.
-func NewServer(k8sClient client.Client, dp dataplane.Dataplane) (*http.Server, error) {
+func NewServer(logger logr.Logger, k8sClient client.Client, dp dataplane.Dataplane) (*http.Server, error) {
 	// Create a new CNI controller with the services
 	cniController := &Controller{
 		Client:    k8sClient,
 		Dataplane: dp,
+		Log:       logger,
 	}
 	validate = validator.New(validator.WithRequiredStructEnabled())
 	router := mux.NewRouter()
@@ -52,12 +58,13 @@ func NewServer(k8sClient client.Client, dp dataplane.Dataplane) (*http.Server, e
 }
 
 func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter, request *http.Request) {
-	logger.InfoLogger().Println("received app instance registration request")
+	logger := c.Log
+	logger.V(1).Info("received app instance registration request")
 
 	// First, parse the request body to get the application details
 	var instanceConfigDto AppInstanceConfigRequest
 	if err := json.NewDecoder(request.Body).Decode(&instanceConfigDto); err != nil {
-		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
+		logger.Error(err, "failed to decode request body")
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -66,55 +73,48 @@ func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter,
 	err := validate.Struct(instanceConfigDto)
 	if err != nil {
 		errors := err.(validator.ValidationErrors)
-		logger.ErrorLogger().Printf("failed request validation with errors: %v", errors)
+		logger.Error(err, "failed request validation with errors", "errors", errors)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      instanceConfigDto.PodName,
-			Namespace: instanceConfigDto.PodNamespace,
-		},
+	pod := &corev1.Pod{}
+	podKey := types.NamespacedName{
+		Name:      instanceConfigDto.PodName,
+		Namespace: instanceConfigDto.PodNamespace,
 	}
-	err = c.Client.Get(context.Background(), client.ObjectKeyFromObject(pod), pod)
+	err = c.Client.Get(context.Background(), podKey, pod)
 	if apierrors.IsNotFound(err) {
-		logger.ErrorLogger().Printf("Pod %s/%s not found",
-			instanceConfigDto.PodNamespace, instanceConfigDto.PodName)
+		logger.Error(err, "Pod not found", "namespace", instanceConfigDto.PodNamespace, "name", instanceConfigDto.PodName)
 		http.Error(response, err.Error(), http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to get Pod %s/%s: %v",
-			instanceConfigDto.PodNamespace, instanceConfigDto.PodName, err)
+		logger.Error(err, "failed to get Pod", "namespace", instanceConfigDto.PodNamespace, "name", instanceConfigDto.PodName)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	app := &corev1alpha1.Application{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      instanceConfigDto.AppName,
-			Namespace: instanceConfigDto.AppNamespace,
-		},
+	app := &corev1alpha1.Application{}
+	appKey := types.NamespacedName{
+		Name:      instanceConfigDto.AppName,
+		Namespace: instanceConfigDto.AppNamespace,
 	}
-	err = c.Client.Get(context.Background(), client.ObjectKeyFromObject(app), app)
+	err = c.Client.Get(context.Background(), appKey, app)
 	if apierrors.IsNotFound(err) {
-		logger.ErrorLogger().Printf("Application %s/%s not found",
-			instanceConfigDto.AppName, instanceConfigDto.AppNamespace)
+		logger.Error(err, "Application not found", "namespace", instanceConfigDto.AppNamespace, "name", instanceConfigDto.AppName)
 		http.Error(response, err.Error(), http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to get application for Pod %s/%s: %v",
-			instanceConfigDto.PodNamespace, instanceConfigDto.PodName, err)
+		logger.Error(err, "failed to get application for Pod", "namespace", instanceConfigDto.PodNamespace, "name", instanceConfigDto.PodName)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	instanceConfig, err := c.Dataplane.ConfigureAppInstance(app, instanceConfigDto.ContainerID)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to allocate IP for application %s/%s: %v",
-			app.Namespace, app.Name, err)
+		logger.Error(err, "failed to allocate IP for application", "namespace", app.Namespace, "name", app.Name)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -131,19 +131,20 @@ func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter,
 	// Finally, return the container details including the allocated IP.
 	response.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
-		logger.ErrorLogger().Printf("failed to encode response: %v", err)
+		logger.Error(err, "failed to encode response")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
 func (c *Controller) handleAppInstanceTeardown(response http.ResponseWriter, request *http.Request) {
-	logger.InfoLogger().Println("received app instance teardown request")
+	logger := c.Log
+	logger.V(1).Info("received app instance teardown request")
 
 	// First, parse the request body to get the container ID
 	var teardownDto AppInstanceTeardownRequest
 	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
-		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
+		logger.Error(err, "failed to decode request body")
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -151,15 +152,14 @@ func (c *Controller) handleAppInstanceTeardown(response http.ResponseWriter, req
 	// Validate the request
 	err := validate.Struct(teardownDto)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
+		logger.Error(err, "failed request validation with errors")
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = c.Dataplane.DeleteAppInstance(teardownDto.ContainerID)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to delete app instance with container ID %s: %v",
-			teardownDto.ContainerID, err)
+		logger.Error(err, "failed to delete app instance with container ID", "container_id", teardownDto.ContainerID)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -169,12 +169,13 @@ func (c *Controller) handleAppInstanceTeardown(response http.ResponseWriter, req
 }
 
 func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, request *http.Request) {
-	logger.DebugLogger().Println("received p4target registration request")
+	logger := c.Log
+	logger.V(1).Info("received p4target registration request")
 
 	// First, parse the request body to get the application details
 	var requestData ContainerizedP4TargetConfigRequest
 	if err := json.NewDecoder(request.Body).Decode(&requestData); err != nil {
-		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
+		logger.Error(err, "failed to decode request body")
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -183,35 +184,31 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 	err := validate.Struct(requestData)
 	if err != nil {
 		errors := err.(validator.ValidationErrors)
-		logger.ErrorLogger().Printf("failed request validation with errors: %v", errors)
+		logger.Error(err, "failed request validation with errors", "errors", errors)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	p4target := &corev1alpha1.P4Target{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      requestData.P4TargetName,
-			Namespace: requestData.P4TargetName,
-		},
+	p4target := &corev1alpha1.P4Target{}
+	p4targetKey := types.NamespacedName{
+		Name:      requestData.P4TargetName,
+		Namespace: requestData.P4TargetName,
 	}
-	err = c.Client.Get(context.Background(), client.ObjectKeyFromObject(p4target), p4target)
+	err = c.Client.Get(context.Background(), p4targetKey, p4target)
 	if apierrors.IsNotFound(err) {
-		logger.ErrorLogger().Printf("P4Target %s/%s not found",
-			requestData.P4TargetName, requestData.P4TargetName)
+		logger.Error(err, "P4Target not found", "namespace", requestData.P4TargetName, "name", requestData.P4TargetName)
 		http.Error(response, err.Error(), http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to get P4Target %s/%s: %v",
-			requestData.P4TargetName, requestData.P4TargetName, err)
+		logger.Error(err, "failed to get P4Target", "namespace", requestData.P4TargetName, "name", requestData.P4TargetName)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	p4TargetConfig, err := c.Dataplane.ConfigureP4TargetInstance(p4target, requestData.P4TargetName)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to configure P4Target %s/%s: %v",
-			requestData.P4TargetName, requestData.P4TargetName, err)
+		logger.Error(err, "failed to configure P4Target", "namespace", requestData.P4TargetName, "name", requestData.P4TargetName)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -233,19 +230,20 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 
 	response.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(response).Encode(configResponse); err != nil {
-		logger.ErrorLogger().Printf("failed to encode response: %v", err)
+		logger.Error(err, "failed to encode response")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
 func (c *Controller) handleP4TargetTeardown(response http.ResponseWriter, request *http.Request) {
-	logger.InfoLogger().Println("received p4target teardown request")
+	logger := c.Log
+	logger.V(1).Info("received p4target teardown request")
 
 	// First, parse the request body to get the container ID
 	var teardownDto AppInstanceTeardownRequest
 	if err := json.NewDecoder(request.Body).Decode(&teardownDto); err != nil {
-		logger.ErrorLogger().Printf("failed to decode request body: %v", err)
+		logger.Error(err, "failed to decode request body")
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -253,15 +251,14 @@ func (c *Controller) handleP4TargetTeardown(response http.ResponseWriter, reques
 	// Validate the request
 	err := validate.Struct(teardownDto)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed request validation with errors: %v", err)
+		logger.Error(err, "failed request validation with errors")
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = c.Dataplane.DeleteP4TargetInstance(teardownDto.ContainerID)
 	if err != nil {
-		logger.ErrorLogger().Printf("failed to delete P4Target with container ID %s: %v",
-			teardownDto.ContainerID, err)
+		logger.Error(err, "failed to delete P4Target with container ID", "container_id", teardownDto.ContainerID)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
 	"time"
 
 	corev1alpha1 "iml-daemon/api/core/v1alpha1"
@@ -14,7 +15,6 @@ import (
 	p4tcontroller "iml-daemon/controllers/p4target"
 	sccontroller "iml-daemon/controllers/servicechain"
 	"iml-daemon/env"
-	"iml-daemon/logger"
 	"iml-daemon/pkg/dataplane/vrf"
 	"iml-daemon/pkg/tunnel/geneve"
 
@@ -61,34 +61,42 @@ func main() {
 		LeaderElection: false,
 	})
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to start controller manager: %v", err)
-		panic("Failed to start controller manager: " + err.Error())
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
 	}
 
 	// Create an uncached client for bootstrapping
 	bootstrapClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to start bootstrapping client: %v", err)
+		setupLog.Error(err, "unable to create bootstrapping client")
+		os.Exit(1)
 	}
 
 	// Request the NodeManager subnet from IML
 	// This will be used to assign IPs to app containers and VNFs.
-	logger.InfoLogger().Printf("Requesting NodeManager subnet from IML")
+	setupLog.Info("Requesting NodeManager subnet from IML")
 	config, err := env.SetUpNode(bootstrapClient)
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to request NodeManager subnet: %v", err)
-		panic("Failed to request NodeManager subnet: " + err.Error())
+		setupLog.Error(err, "unable to request NodeManager subnet")
+		os.Exit(1)
 	}
 
-	tunnelMgr, err := geneve.NewTunnelManager()
+	tunnelMgr, err := geneve.NewTunnelManager(ctrl.Log.WithName("gnv-tunnel-manager"))
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to create tunnel manager: %v", err)
+		setupLog.Error(err, "unable to create tunnel manager")
+		os.Exit(1)
 	}
 
-	dataPlane, err := vrf.NewSoftware(config, tunnelMgr, mgr.GetClient())
+	dataPlane, err := vrf.NewSoftware(ctrl.Log.WithName("vrf-dataplane"), config, tunnelMgr, mgr.GetClient())
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize VRF dataplane: %v", err)
-		panic("Failed to initialize VRF dataplane: " + err.Error())
+		setupLog.Error(err, "unable to initialize VRF dataplane")
+		os.Exit(1)
+	}
+
+	cniServer, err := cni.NewServer(ctrl.Log.WithName("cni-server"), mgr.GetClient(), dataPlane)
+	if err != nil {
+		setupLog.Error(err, "unable to initialize cni server")
+		os.Exit(1)
 	}
 
 	// Set up informers
@@ -99,7 +107,8 @@ func main() {
 		TunnelManager: tunnelMgr,
 	}).SetupWithManager(mgr)
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to set up node controller: %v", err)
+		setupLog.Error(err, "unable to set up node controller")
+		os.Exit(1)
 	}
 	err = (&sccontroller.Reconciler{
 		Client:    mgr.GetClient(),
@@ -108,7 +117,8 @@ func main() {
 		Dataplane: dataPlane,
 	}).SetupWithManager(mgr)
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to set up service chain controller: %v", err)
+		setupLog.Error(err, "unable to set up service chain controller")
+		os.Exit(1)
 	}
 	err = (&p4tcontroller.Reconciler{
 		Client:    mgr.GetClient(),
@@ -116,7 +126,8 @@ func main() {
 		Dataplane: dataPlane,
 	}).SetupWithManager(mgr)
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to set up p4target controller: %v", err)
+		setupLog.Error(err, "unable to set up p4target controller")
+		os.Exit(1)
 	}
 	err = (&loomnodecontroller.Reconciler{
 		Client:    mgr.GetClient(),
@@ -125,23 +136,20 @@ func main() {
 		Dataplane: dataPlane,
 	}).SetupWithManager(mgr)
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to set up loom node controller: %v", err)
-	}
-
-	cniServer, err := cni.NewServer(mgr.GetClient(), dataPlane)
-	if err != nil {
-		logger.ErrorLogger().Printf("Failed to initialize cni server: %v", err)
+		setupLog.Error(err, "unable to set up loom node controller")
+		os.Exit(1)
 	}
 
 	mainContext := ctrl.SetupSignalHandler()
 	err = mgr.Start(mainContext)
 	if err != nil {
-		logger.ErrorLogger().Printf("Failed to start controller manager: %v", err)
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
 	}
 
 	// Wait until main context has finished
 	<-mainContext.Done()
-	logger.InfoLogger().Println("Shutting down services...")
+	setupLog.Info("Shutting down services...")
 
 	// Graceful shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
@@ -149,14 +157,14 @@ func main() {
 
 	// Shutdown services gracefully
 	if err = cniServer.Shutdown(ctx); err != nil {
-		logger.ErrorLogger().Printf("CNI API shutdown error: %v", err)
+		setupLog.Error(err, "CNI API shutdown error")
 	}
 	if err = tunnelMgr.Close(); err != nil {
-		logger.ErrorLogger().Printf("Failed to close tunnel manager: %v", err)
+		setupLog.Error(err, "Failed to close tunnel manager")
 	}
 	if err = dataPlane.Close(); err != nil {
-		logger.ErrorLogger().Printf("Failed to close data plane: %v", err)
+		setupLog.Error(err, "Failed to close data plane")
 	}
 
-	logger.InfoLogger().Println("All services stopped gracefully.")
+	setupLog.Info("All services stopped gracefully.")
 }

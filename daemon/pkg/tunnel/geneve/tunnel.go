@@ -11,10 +11,9 @@ import (
 )
 
 type Tunnel struct {
-	chainName   string
-	lastVersion string
-	ip4t        *iptables.IPTables
-	ip6t        *iptables.IPTables
+	chainName string
+	ip4t      *iptables.IPTables
+	ip6t      *iptables.IPTables
 }
 
 func NewTunnel(
@@ -60,14 +59,6 @@ func NewTunnel(
 }
 
 func (t *Tunnel) UpdateDestinationNode(node *corev1.Node) (err error) {
-	if t.lastVersion >= node.ResourceVersion {
-		return // skip
-	}
-	defer func() {
-		if err == nil {
-			t.lastVersion = node.ResourceVersion
-		}
-	}()
 	possibleAddrs := listAllInternalAndExternalIPAddresses(node)
 	addr, err := netutils.ParseDualStackAddressListFromStrings(possibleAddrs)
 	if err != nil {

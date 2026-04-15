@@ -27,8 +27,8 @@ type IMLCNIConfig struct {
 
 type K8sArgs struct {
 	types.CommonArgs
-	PodName      types.UnmarshallableString
-	PodNamespace types.UnmarshallableString
+	K8S_POD_NAME      types.UnmarshallableString
+	K8S_POD_NAMESPACE types.UnmarshallableString
 }
 
 /**************************************************************

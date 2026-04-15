@@ -3,12 +3,13 @@ package geneve
 import (
 	"errors"
 	"fmt"
-	"iml-daemon/pkg/tunnel"
 	"strconv"
 
 	vrfutils "iml-daemon/pkg/dataplane/vrf/util"
+	"iml-daemon/pkg/tunnel"
 
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -29,9 +30,10 @@ type TunnelManager struct {
 	tunnels         map[NodeName]*Tunnel
 	ip4t            *iptables.IPTables
 	ip6t            *iptables.IPTables
+	log             logr.Logger
 }
 
-func NewTunnelManager() (tunnel.Manager, error) {
+func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
 	ifName, err := vrfutils.GenerateRandomName("imltun", 4)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tunnel interface name: %v", err)
@@ -146,7 +148,7 @@ func (mgr *TunnelManager) Close() error {
 
 func (mgr *TunnelManager) UpdateNodeTunnels(node *corev1.Node) error {
 	tun, exists := mgr.tunnels[node.Name]
-	if !exists {
+	if exists {
 		if err := tun.UpdateDestinationNode(node); err != nil {
 			return fmt.Errorf("failed to update destination node %s: %v", node.Name, err)
 		}

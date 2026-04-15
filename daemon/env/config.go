@@ -38,7 +38,6 @@ type IMLConfigMap struct {
 type GlobalConfig struct {
 	IMLConfigMap
 	PodCIDR  netutils.DualStackNetwork
-	TunCIDR  netutils.DualStackNetwork
 	DecapSID *net.IPNet
 	NodeID   types.UID
 	NodeName string
@@ -86,14 +85,9 @@ func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing podCIDRs: %w", err)
 	}
-	tunCIDR, err := netutils.ParseDualStackNetworkFromStrings(loomNode.Spec.TunnelCIDRs)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing tunCIDRs: %w", err)
-	}
 	globalConfig = &GlobalConfig{
 		IMLConfigMap: *configMap,
 		PodCIDR:      podCIDR,
-		TunCIDR:      tunCIDR,
 		NodeID:       loomNode.UID,
 		NodeName:     hostname,
 	}
@@ -141,8 +135,7 @@ func createLoomNode(ctx context.Context, k8sClient client.Client, nodeName strin
 			Name: nodeName,
 		},
 		Spec: infrav1alpha1.LoomNodeSpec{
-			NodeCIDRs:   make([]string, 0),
-			TunnelCIDRs: make([]string, 0),
+			NodeCIDRs: make([]string, 0),
 		},
 	}
 	err := k8sClient.Create(ctx, loomNode)
@@ -161,7 +154,7 @@ func waitForCIDRs(ctx context.Context, k8sClient client.Client, nodeName string)
 		if errors.IsNotFound(err) {
 			return false, err // Resource was deleted, stop retrying and return error
 		}
-		if len(loomNode.Spec.NodeCIDRs) == 0 || len(loomNode.Spec.TunnelCIDRs) == 0 {
+		if len(loomNode.Spec.NodeCIDRs) == 0 {
 			return false, nil
 		}
 		return true, nil // stop retrying

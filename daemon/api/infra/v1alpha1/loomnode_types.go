@@ -36,10 +36,6 @@ type LoomNodeSpec struct {
 	// from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
 	// +optional
 	NodeCIDRs []string `json:"nodeCIDRs,omitempty"`
-
-	// TunnelCIDRs are similar to NodeCIDRs but used for tunnels in this node.
-	// +optional
-	TunnelCIDRs []string `json:"tunnelCIDRs,omitempty"`
 }
 
 // LoomNodeStatus defines the observed state of LoomNode.

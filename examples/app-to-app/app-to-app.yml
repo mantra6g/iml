@@ -29,8 +29,10 @@ spec:
         k8s.v1.cni.cncf.io/networks: |
           [
             {
-              "name": "loom-cni", 
+              "name": "loom-cni",
+              "namespace": "loom-system",
               "cni-args": {
+                "app_type": "application",
                 "app_name": "web-server",
                 "app_namespace": "default"
               }
@@ -61,13 +63,29 @@ spec:
           [
             {
               "name": "loom-cni",
+              "namespace": "loom-system",
               "cni-args": {
+                "app_type": "application",
                 "app_name": "web-client",
                 "app_namespace": "default"
               }
             }
           ]
     spec:
+      affinity:
+        podAntiAffinity:
+          # This changed from 'required' to 'preferred'
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - web-server
+                topologyKey: "kubernetes.io/hostname"
       containers:
         - name: web-client
           image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]

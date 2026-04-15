@@ -66,8 +66,8 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 
 		configRequest := types2.AppInstanceConfigRequest{
 			ContainerID:  cniArgs.ContainerID,
-			PodName:      string(k8sArgs.PodName),
-			PodNamespace: string(k8sArgs.PodNamespace),
+			PodName:      string(k8sArgs.K8S_POD_NAME),
+			PodNamespace: string(k8sArgs.K8S_POD_NAMESPACE),
 			AppName:      cniConf.Args.CNI.AppName,
 			AppNamespace: cniConf.Args.CNI.AppNamespace,
 		}
@@ -425,13 +425,13 @@ func cmdDel(args *skel.CmdArgs) error {
 	}
 
 	switch cniConf.Args.CNI.AppType {
-	case "network_function":
+	case types2.P4TargetType:
 		logger.InfoLogger().Printf("Tearing down network function for container %s\n", args.ContainerID)
 		if err := tearDownP4Target(args); err != nil {
 			logger.ErrorLogger().Printf("Failed to tear down network function: %v\n", err)
 			return fmt.Errorf("failed to tear down network function: %w", err)
 		}
-	case "application_function":
+	case types2.ApplicationType:
 		logger.InfoLogger().Printf("Tearing down application function for container %s\n", args.ContainerID)
 		if err := tearDownApplication(args); err != nil {
 			logger.ErrorLogger().Printf("Failed to tear down application function: %v\n", err)
