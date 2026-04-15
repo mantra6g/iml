@@ -67,7 +67,7 @@ docker-push: ## Push docker image with the cni, daemon and operator.
 	$(MAKE) -C operator docker-push IMG=${IMG_OPERATOR}
 
 .PHONY: kind-create-multi
-kind-create: ## Create and configure a local kind cluster with a control-plane and a worker node.
+kind-create-multi: ## Create and configure a local kind cluster with a control-plane and a worker node.
 	$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CLUSTER_CONFIG_SINGLE_NODE)
 	$(KUBECTL) taint nodes $(KIND_CLUSTER)-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
 	sleep 3
