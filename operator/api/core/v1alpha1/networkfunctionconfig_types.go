@@ -23,6 +23,45 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type TableConfig struct {
+	// Name of the table
+	// +required
+	Name string `json:"name"`
+	// Entries to be added to the table
+	// +optional
+	Entries []TableEntry `json:"entries"`
+}
+
+type TableEntry struct {
+	// MatchFields is a list of fields to match against for this entry.
+	// +required
+	MatchFields []TypedValue `json:"matchFields"`
+	// Action is the action to take if the packet matches the MatchFields.
+	// +required
+	Action ActionConfig `json:"action"`
+}
+
+type TypedValue struct {
+	// Name of the field to match
+	// +required
+	Name string `json:"name"`
+	// Value to of the field to match against
+	// +required
+	Value string `json:"value"`
+	// Type of the value
+	// +required
+	Type string `json:"type"`
+}
+
+type ActionConfig struct {
+	// Name of the action to execute
+	// +required
+	Name string `json:"name"`
+	// Parameters is a list of parameters for the action.
+	// +optional
+	Parameters []TypedValue `json:"parameters"`
+}
+
 // NetworkFunctionConfigSpec defines the desired state of NetworkFunctionConfig
 type NetworkFunctionConfigSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -30,9 +69,9 @@ type NetworkFunctionConfigSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of NetworkFunctionConfig. Edit networkfunctionconfig_types.go to remove/update
+	// Tables defines the configurations for each of the tables in the network function
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	Tables []TableConfig `json:"tables"`
 }
 
 // NetworkFunctionConfigStatus defines the observed state of NetworkFunctionConfig.
