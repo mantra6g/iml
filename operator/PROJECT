@@ -12,16 +12,15 @@ plugins:
     manifests: dist/install.yaml
     output: dist
 projectName: loom-operator
-repo: loom
+repo: github.com/mantra6g/iml/operator
 resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: Application
-  path: loom/api/core/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -30,7 +29,7 @@ resources:
   domain: loom.io
   group: scheduling
   kind: NetworkFunctionDeployment
-  path: loom/api/scheduling/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/scheduling/v1alpha1
   version: v1alpha1
   webhooks:
     defaulting: true
@@ -39,11 +38,10 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
   domain: loom.io
   group: core
   kind: ServiceChain
-  path: loom/api/core/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -51,7 +49,7 @@ resources:
   domain: loom.io
   group: core
   kind: P4Target
-  path: loom/api/core/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -60,7 +58,7 @@ resources:
   domain: loom.io
   group: scheduling
   kind: NetworkFunctionReplicaSet
-  path: loom/api/scheduling/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/scheduling/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -69,7 +67,7 @@ resources:
   domain: loom.io
   group: core
   kind: NetworkFunction
-  path: loom/api/core/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -77,6 +75,22 @@ resources:
   domain: loom.io
   group: infra
   kind: BMv2Target
-  path: loom/api/infra/v1alpha1
+  path: github.com/mantra6g/iml/operator/api/infra/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: loom.io
+  group: infra
+  kind: LoomNode
+  path: github.com/mantra6g/iml/operator/api/infra/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: loom.io
+  group: core
+  kind: NetworkFunctionConfig
+  path: github.com/mantra6g/iml/operator/api/core/v1alpha1
   version: v1alpha1
 version: "3"

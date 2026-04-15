@@ -21,7 +21,7 @@ package util
 
 import (
 	"fmt"
-	schedulingv1alpha1 "loom/api/core/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"sync"
 	"sync/atomic"
 	"time"

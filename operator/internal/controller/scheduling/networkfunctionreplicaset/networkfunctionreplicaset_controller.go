@@ -18,7 +18,7 @@ package networkfunctionreplicaset
 
 import (
 	"context"
-	"loom/api/core/v1alpha1"
+	"github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,9 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
-	"loom/pkg/util/ptr"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	rsutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset/util"
+	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 )
 
 const (
@@ -49,7 +49,7 @@ type NetworkFunctionReplicaSetReconciler struct {
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets/finalizers,verbs=update
-// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

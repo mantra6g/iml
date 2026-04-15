@@ -39,6 +39,18 @@ spec:
           spec:
             description: spec defines the desired state of NetworkFunction
             properties:
+              configRef:
+                description: ConfigRef allows specifying a NetworkFunctionConfig resource
+                  to modify table entries
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
               controlPlane:
                 description: |-
                   ControlPlanePod defines the template for the control plane pod
@@ -1238,6 +1250,10 @@ spec:
           status:
             description: status defines the observed state of NetworkFunction
             properties:
+              assignedIP:
+                description: AssignedIP is the IP address assigned to the NetworkFunction,
+                  used for routing traffic to it.
+                type: string
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the

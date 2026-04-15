@@ -39,10 +39,8 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - applications
   - networkfunctions
   - p4targets
-  - servicechains
   verbs:
   - create
   - delete
@@ -54,19 +52,15 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - applications/finalizers
   - networkfunctions/finalizers
   - p4targets/finalizers
-  - servicechains/finalizers
   verbs:
   - update
 - apiGroups:
   - core.loom.io
   resources:
-  - applications/status
   - networkfunctions/status
   - p4targets/status
-  - servicechains/status
   verbs:
   - get
   - patch
@@ -75,6 +69,7 @@ rules:
   - infra.loom.io
   resources:
   - bmv2targets
+  - loomnodes
   verbs:
   - create
   - delete
@@ -87,12 +82,14 @@ rules:
   - infra.loom.io
   resources:
   - bmv2targets/finalizers
+  - loomnodes/finalizers
   verbs:
   - update
 - apiGroups:
   - infra.loom.io
   resources:
   - bmv2targets/status
+  - loomnodes/status
   verbs:
   - get
   - patch
@@ -100,8 +97,8 @@ rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
+  - networkfunctiondeployments
   - networkfunctionreplicasets
-  - networkfunctions
   verbs:
   - create
   - delete
@@ -113,15 +110,15 @@ rules:
 - apiGroups:
   - scheduling.loom.io
   resources:
+  - networkfunctiondeployments/finalizers
   - networkfunctionreplicasets/finalizers
-  - networkfunctions/finalizers
   verbs:
   - update
 - apiGroups:
   - scheduling.loom.io
   resources:
+  - networkfunctiondeployments/status
   - networkfunctionreplicasets/status
-  - networkfunctions/status
   verbs:
   - get
   - patch

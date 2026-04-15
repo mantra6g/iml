@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"hash/fnv"
-	"loom/api/core/v1alpha1"
 	"math"
 	"strconv"
 
@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	"loom/pkg/util/hash"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	"github.com/mantra6g/iml/operator/pkg/util/hash"
 )
 
 const (

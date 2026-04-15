@@ -13,9 +13,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymentutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
-	"loom/pkg/util/ptr"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	deploymentutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment/util"
+	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 )
 
 func (r *NetworkFunctionDeploymentReconciler) sortAndSplitReplicaSets(ctx context.Context,
