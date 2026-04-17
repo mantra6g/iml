@@ -34,30 +34,38 @@ func main() {
 		Conn:   conn,
 	}
 
-	// Contact the server and set up forwarding pipeline.
-	// Use a longer timeout for this initial setup
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+	// Wait for the switch to be ready before proceeding.
 	// Set a program in the switch.
 	// https://p4lang.github.io/p4runtime/spec/main/P4Runtime-Spec.html#sec-p4-fwd-pipe-config
-	_, err = c.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
-		// Verify program and program the switch if the program is valid.
-		Action: v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
-		// Actual program details.
-		Config: &v1.ForwardingPipelineConfig{
-			// Placeholder: P4Info is one of the two files (p4info and json) that result from compiling a p4program.
-			// It contains information about the program such as the tables, actions, and match fields that are defined
-			// in the p4program.
-			P4Info: nil,
-			// Placeholder: P4DeviceConfig is the other file that results from compiling a p4program.
-			// It contains the actual program in a format that the switch can understand.
-			P4DeviceConfig: nil,
-		},
-	})
-	if err != nil {
-		// Log warning instead of fatal - the switch may not have a program initially
-		log.Printf("Warning: could not set forwarding pipeline config: %v", err)
+	const maxRetries = 30
+	const retryInterval = 2 * time.Second
+	var connected bool
+	for i := 0; i < maxRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err = c.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
+			// Verify program and program the switch if the program is valid.
+			Action: v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
+			// Actual program details.
+			Config: &v1.ForwardingPipelineConfig{
+				// Placeholder: P4Info is one of the two files (p4info and json) that result from compiling a p4program.
+				// It contains information about the program such as the tables, actions, and match fields that are defined
+				// in the p4program.
+				P4Info: nil,
+				// Placeholder: P4DeviceConfig is the other file that results from compiling a p4program.
+				// It contains the actual program in a format that the switch can understand.
+				P4DeviceConfig: nil,
+			},
+		})
+		cancel()
+		if err == nil {
+			connected = true
+			break
+		}
+		log.Printf("Switch not ready (attempt %d/%d): %v — retrying in %s", i+1, maxRetries, err, retryInterval)
+		time.Sleep(retryInterval)
+	}
+	if !connected {
+		log.Fatalf("Could not connect to P4 switch at %s after %d attempts", switchAddr, maxRetries)
 	}
 
 	log.Printf("Connected to P4 switch at %s", switchAddr)
