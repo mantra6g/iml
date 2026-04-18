@@ -56,28 +56,67 @@ func ValidateP4Program(program *P4Program) error {
 	return nil
 }
 
-// GetTableMetadata extracts table information
-// Note: Currently returns empty list as P4Info parsing requires additional setup
-// Future enhancement: parse P4Info from bytes or external metadata service
 func GetTableMetadata(program *P4Program) []TableMetadata {
-	if program == nil {
+	if program == nil || program.P4Info == nil {
 		return []TableMetadata{}
 	}
 
-	// TODO: Parse P4Info protobuf bytes to extract table metadata
-	// For now, return empty list. Tables can be queried via /api/tables endpoint
-	return []TableMetadata{}
+	tables := make([]TableMetadata, 0, len(program.P4Info.Tables))
+	for _, t := range program.P4Info.Tables {
+		if t.Preamble == nil {
+			continue
+		}
+		matchKeys := make([]string, 0, len(t.MatchFields))
+		for _, mf := range t.MatchFields {
+			if mf.Name != "" {
+				matchKeys = append(matchKeys, mf.Name)
+			}
+		}
+		actions := make([]string, 0, len(t.ActionRefs))
+		for _, ar := range t.ActionRefs {
+			for _, a := range program.P4Info.Actions {
+				if a.Preamble != nil && a.Preamble.Id == ar.Id {
+					actions = append(actions, a.Preamble.Name)
+					break
+				}
+			}
+		}
+		tables = append(tables, TableMetadata{
+			TableID:   t.Preamble.Id,
+			TableName: t.Preamble.Name,
+			Size:      uint32(t.Size),
+			MatchKeys: matchKeys,
+			Actions:   actions,
+		})
+	}
+	return tables
 }
 
-// GetCounterMetadata extracts counter information
-// Note: Currently returns empty list as P4Info parsing requires additional setup
-// Future enhancement: parse P4Info from bytes or external metadata service
 func GetCounterMetadata(program *P4Program) []CounterMetadata {
-	if program == nil {
+	if program == nil || program.P4Info == nil {
 		return []CounterMetadata{}
 	}
 
-	// TODO: Parse P4Info protobuf bytes to extract counter metadata
-	// For now, return empty list. Counters can be queried via /api/counters endpoint
-	return []CounterMetadata{}
+	counters := make([]CounterMetadata, 0, len(program.P4Info.Counters)+len(program.P4Info.DirectCounters))
+	for _, c := range program.P4Info.Counters {
+		if c.Preamble == nil {
+			continue
+		}
+		counters = append(counters, CounterMetadata{
+			CounterID:   c.Preamble.Id,
+			CounterName: c.Preamble.Name,
+			Unit:        c.Spec.GetUnit().String(),
+		})
+	}
+	for _, c := range program.P4Info.DirectCounters {
+		if c.Preamble == nil {
+			continue
+		}
+		counters = append(counters, CounterMetadata{
+			CounterID:   c.Preamble.Id,
+			CounterName: c.Preamble.Name,
+			Unit:        c.Spec.GetUnit().String(),
+		})
+	}
+	return counters
 }
