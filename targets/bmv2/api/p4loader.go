@@ -4,12 +4,15 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+
+	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
 )
 
 // P4Program represents a compiled P4 program with device config
 type P4Program struct {
-	P4DeviceConfig []byte // BMv2 JSON device config
+	P4DeviceConfig []byte               // BMv2 JSON device config
 	ProgramName    string
+	P4Info         *p4configv1.P4Info   // Parsed P4Info from compilation
 }
 
 // LoadP4ProgramFromFiles loads P4DeviceConfig from file paths

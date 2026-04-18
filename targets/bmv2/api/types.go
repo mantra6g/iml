@@ -24,8 +24,8 @@ type ErrorResponse struct {
 
 // ProgramDeploymentRequest represents a request to deploy a P4 program
 type ProgramDeploymentRequest struct {
-	Program string `json:"program"` // base64-encoded P4Info + P4DeviceConfig
-	DryRun  bool   `json:"dry_run"` // If true, only verify without deployment
+	P4FileURL string `json:"p4_file_url"` // URL to a .p4 source file to download, compile, and deploy
+	DryRun    bool   `json:"dry_run"`     // If true, only verify without committing to the switch
 }
 
 // TableMetadata contains information about a P4 table
@@ -46,19 +46,20 @@ type CounterMetadata struct {
 
 // P4ProgramResponse represents the current deployed P4 program information
 type P4ProgramResponse struct {
-	Status      string             `json:"status"`            // "deployed" or "not_deployed"
-	ProgramName string             `json:"program_name"`      // Name of deployed program
-	Tables      []TableMetadata    `json:"tables"`            // Table metadata
-	Counters    []CounterMetadata  `json:"counters"`          // Counter metadata
-	Error       string             `json:"error,omitempty"`   // Error message if any
+	Status      string            `json:"status"`          // "deployed" or "not_deployed"
+	ProgramName string            `json:"program_name"`    // Name of deployed program
+	Tables      []TableMetadata   `json:"tables"`          // Table metadata
+	Counters    []CounterMetadata `json:"counters"`        // Counter metadata
+	Error       string            `json:"error,omitempty"` // Error message if any
 }
 
 // ProgramDeploymentResponse represents the result of a P4 program deployment
 type ProgramDeploymentResponse struct {
-	Status      string             `json:"status"`      // "deployed", "verified", or "error"
-	ProgramName string             `json:"program_name"`
-	Tables      []TableMetadata    `json:"tables"`
-	Counters    []CounterMetadata  `json:"counters"`
-	Message     string             `json:"message"`
-	Error       string             `json:"error,omitempty"`
+	Status      string            `json:"status"` // "deployed", "verified", or "error"
+	ProgramName string            `json:"program_name"`
+	Tables      []TableMetadata   `json:"tables"`
+	Counters    []CounterMetadata `json:"counters"`
+	Message     string            `json:"message"`
+	Error       string            `json:"error,omitempty"`
 }
+

@@ -25,6 +25,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o dr
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM p4lang/p4c:latest
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libboost-iostreams-dev \
+    libboost-graph-dev \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /
 COPY --from=builder /workspace/driver .
 USER 65532:65532

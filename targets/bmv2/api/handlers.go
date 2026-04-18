@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"time"
 
+	oldproto "github.com/golang/protobuf/proto"
+	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"google.golang.org/grpc"
 )
@@ -17,6 +22,9 @@ type Driver struct {
 	Client         v1.P4RuntimeClient
 	Conn           *grpc.ClientConn
 	CurrentProgram *P4Program
+	DeviceID       uint64
+	ElectionIDHigh uint64
+	ElectionIDLow  uint64
 }
 
 // HealthHandler checks if the switch is reachable
@@ -172,42 +180,127 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, we expect the program to be loaded from files
-	// In a production system, you'd deserialize from base64 or fetch from a repository
-	if d.CurrentProgram == nil {
+	if req.P4FileURL == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "no P4 program provided"}); err != nil {
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "p4_file_url is required"}); err != nil {
 			log.Printf("failed to encode error response: %v", err)
 		}
 		return
 	}
 
-	// Validate the program
-	if err := ValidateP4Program(d.CurrentProgram); err != nil {
+	tmpDir, err := os.MkdirTemp("", "p4compile-*")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to create temp dir: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Download P4 file
+	inputPath := tmpDir + "/input.p4"
+	httpResp, err := http.Get(req.P4FileURL) //nolint:noctx
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("invalid P4 program: %v", err)}); err != nil {
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to download P4 file: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+	defer httpResp.Body.Close()
+
+	f, err := os.Create(inputPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to create input file: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+	if _, err := io.Copy(f, httpResp.Body); err != nil {
+		f.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to write P4 file: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+	f.Close()
+
+	// Compile with p4c
+	p4infoPath := tmpDir + "/p4info.bin"
+	compileCtx, compileCancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer compileCancel()
+
+	cmd := exec.CommandContext(compileCtx, "p4c",
+		"--target", "bmv2",
+		"--arch", "v1model",
+		"--p4runtime-files", p4infoPath,
+		"--p4runtime-format", "binary",
+		"-o", tmpDir,
+		inputPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("p4c compilation failed: %s", string(out))}); err != nil {
 			log.Printf("failed to encode error response: %v", err)
 		}
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
+	jsonBytes, err := os.ReadFile(tmpDir + "/input.json")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read compiled JSON: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
 
-	// Determine the action based on dry_run flag
+	p4infoBytes, err := os.ReadFile(p4infoPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read p4info: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+
+	var p4info p4configv1.P4Info
+	if err := oldproto.Unmarshal(p4infoBytes, &p4info); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to parse p4info: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+
+	// Determine action based on dry_run flag
 	action := v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT
 	if req.DryRun {
 		action = v1.SetForwardingPipelineConfigRequest_VERIFY
 	}
 
-	// Deploy program to switch
-	_, err := d.Client.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
-		Action: action,
+	pushCtx, pushCancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer pushCancel()
+
+	_, err = d.Client.SetForwardingPipelineConfig(pushCtx, &v1.SetForwardingPipelineConfigRequest{
+		DeviceId:   d.DeviceID,
+		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
+		Action:     action,
 		Config: &v1.ForwardingPipelineConfig{
-			P4Info:         nil, // P4Info is optional per P4Runtime spec
-			P4DeviceConfig: d.CurrentProgram.P4DeviceConfig,
+			P4Info:         &p4info,
+			P4DeviceConfig: jsonBytes,
 		},
 	})
 
@@ -225,9 +318,10 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract table and counter metadata
-	tables := GetTableMetadata(d.CurrentProgram)
-	counters := GetCounterMetadata(d.CurrentProgram)
+	program := &P4Program{P4DeviceConfig: jsonBytes, ProgramName: req.P4FileURL, P4Info: &p4info}
+	if !req.DryRun {
+		d.CurrentProgram = program
+	}
 
 	status := "deployed"
 	if req.DryRun {
@@ -237,10 +331,10 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(ProgramDeploymentResponse{
 		Status:      status,
-		ProgramName: d.CurrentProgram.ProgramName,
-		Tables:      tables,
-		Counters:    counters,
-		Message:     fmt.Sprintf("P4 program %s successfully %s", d.CurrentProgram.ProgramName, status),
+		ProgramName: req.P4FileURL,
+		Tables:      GetTableMetadata(program),
+		Counters:    GetCounterMetadata(program),
+		Message:     fmt.Sprintf("P4 program successfully %s", status),
 	}); err != nil {
 		log.Printf("failed to encode deployment response: %v", err)
 	}

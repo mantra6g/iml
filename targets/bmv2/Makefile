@@ -127,8 +127,12 @@ test-exec-switch: ## Execute shell in the BMv2 switch container.
 	$(KUBECTL) exec -it bmv2-test -c bmv2-switch -- /bin/sh
 
 .PHONY: port-forward
-port-forward: ## Forward local port 8080 to the test pod.
-	$(KUBECTL) port-forward pod/bmv2-test 8080:8080
+port-forward: ## Port-forward the bmv2-driver HTTP API to localhost:8080 (background).
+	$(KUBECTL) port-forward pod/bmv2-test 8080:8080 &
+
+.PHONY: port-forward-stop
+port-forward-stop: ## Stop the background port-forward.
+	pkill -f "kubectl port-forward pod/bmv2-test" || true
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the driver.
@@ -140,6 +144,9 @@ docker-load: docker-build kind-load ## Build docker image and load into kind clu
 .PHONY: docker-clean
 docker-clean: ## Remove docker image.
 	$(CONTAINER_TOOL) rmi ${IMG} || true
+
+.PHONY: test-restart
+test-restart: test-down docker-clean docker-build kind-load test-up ## Restart the test pod with a freshly built image.
 
 # PLATFORMS defines the target platforms for the driver image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
