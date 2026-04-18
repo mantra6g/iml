@@ -74,6 +74,15 @@ build: fmt vet ## Build driver binary.
 run: fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
+.PHONY: test
+test: fmt vet ## Run tests.
+	go test -v ./...
+
+.PHONY: clean
+clean: ## Clean build artifacts and binaries.
+	rm -f bin/driver
+	go clean
+
 # If you wish to build the driver image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
@@ -101,9 +110,36 @@ test-up: ## Deploy the BMv2 test pod.
 test-down: ## Remove the BMv2 test pod.
 	$(KUBECTL) delete -f test.yaml --ignore-not-found
 
+.PHONY: test-logs
+test-logs: ## Show logs from the BMv2 test pod.
+	$(KUBECTL) logs bmv2-test -c bmv2-driver -f
+
+.PHONY: test-logs-switch
+test-logs-switch: ## Show logs from the BMv2 switch container.
+	$(KUBECTL) logs bmv2-test -c bmv2-switch -f
+
+.PHONY: test-exec
+test-exec: ## Execute shell in the BMv2 driver container.
+	$(KUBECTL) exec -it bmv2-test -c bmv2-driver -- /bin/sh
+
+.PHONY: test-exec-switch
+test-exec-switch: ## Execute shell in the BMv2 switch container.
+	$(KUBECTL) exec -it bmv2-test -c bmv2-switch -- /bin/sh
+
+.PHONY: port-forward
+port-forward: ## Forward local port 8080 to the test pod.
+	$(KUBECTL) port-forward pod/bmv2-test 8080:8080
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the driver.
 	$(CONTAINER_TOOL) push ${IMG}
+
+.PHONY: docker-load
+docker-load: docker-build kind-load ## Build docker image and load into kind cluster.
+
+.PHONY: docker-clean
+docker-clean: ## Remove docker image.
+	$(CONTAINER_TOOL) rmi ${IMG} || true
 
 # PLATFORMS defines the target platforms for the driver image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -121,6 +157,45 @@ docker-buildx: ## Build and push docker image for the driver for cross-platform 
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm bmv2-driver-builder
 	rm Dockerfile.cross
+
+##@ P4 Programs
+
+P4_PROGRAMS_DIR := p4-programs
+P4_COMPILE_SCRIPT := $(P4_PROGRAMS_DIR)/compile.sh
+
+.PHONY: p4-compile
+p4-compile: ## Compile P4 programs for BMv2.
+	@if [ ! -f "$(P4_COMPILE_SCRIPT)" ]; then \
+		echo "Error: compile.sh not found in $(P4_PROGRAMS_DIR)"; \
+		exit 1; \
+	fi
+	@for p4_file in $(P4_PROGRAMS_DIR)/*.p4; do \
+		if [ -f "$$p4_file" ]; then \
+			echo "Compiling $$p4_file..."; \
+			cd $(P4_PROGRAMS_DIR) && bash compile.sh $$(basename $$p4_file) || exit 1; \
+			cd ...; \
+		fi \
+	done
+
+.PHONY: p4-clean
+p4-clean: ## Clean compiled P4 programs.
+	rm -rf $(P4_PROGRAMS_DIR)/compiled
+	find $(P4_PROGRAMS_DIR) -name "*.p4info.txt" -delete
+	find $(P4_PROGRAMS_DIR) -name "*.json" -delete
+
+.PHONY: p4-all
+p4-all: p4-clean p4-compile ## Clean and recompile all P4 programs.
+
+##@ Deployment
+
+.PHONY: deploy
+deploy: docker-build kind-load test-up ## Build, load image, and deploy test pod.
+
+.PHONY: undeploy
+undeploy: test-down ## Remove test pod.
+
+.PHONY: redeploy
+redeploy: undeploy deploy ## Redeploy test pod.
 
 ##@ Dependencies
 
@@ -157,3 +232,37 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $(1)-$(3) $(1)
 endef
+
+##@ API Testing
+
+API_HOST ?= localhost:8080
+
+.PHONY: api-health
+api-health: ## Test the health endpoint.
+	@echo "Testing /api/health endpoint..."
+	@curl -s http://$(API_HOST)/api/health | jq . || echo "Error: Could not reach health endpoint"
+
+.PHONY: api-tables
+api-tables: ## Retrieve table entries from the switch.
+	@echo "Testing /api/tables endpoint..."
+	@curl -s http://$(API_HOST)/api/tables | jq . || echo "Error: Could not reach tables endpoint"
+
+.PHONY: api-counters
+api-counters: ## Retrieve counter data from the switch.
+	@echo "Testing /api/counters endpoint..."
+	@curl -s http://$(API_HOST)/api/counters | jq . || echo "Error: Could not reach counters endpoint"
+
+.PHONY: api-get-program
+api-get-program: ## Retrieve current P4 program information.
+	@echo "Testing /api/p4/program (GET) endpoint..."
+	@curl -s http://$(API_HOST)/api/p4/program | jq . || echo "Error: Could not reach program endpoint"
+
+.PHONY: api-verify-program
+api-verify-program: ## Verify P4 program without deploying (dry-run).
+	@echo "Testing /api/p4/verify endpoint..."
+	@curl -s -X POST http://$(API_HOST)/api/p4/verify \
+		-H "Content-Type: application/json" \
+		-d '{"program": "", "dry_run": true}' | jq . || echo "Error: Could not reach verify endpoint"
+
+.PHONY: api-all-tests
+api-all-tests: api-health api-tables api-counters api-get-program ## Run all API endpoint tests.

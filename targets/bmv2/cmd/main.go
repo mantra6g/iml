@@ -75,6 +75,8 @@ func main() {
 	mux.HandleFunc("/api/health", driver.HealthHandler)
 	mux.HandleFunc("/api/tables", driver.ReadTableEntriesHandler)
 	mux.HandleFunc("/api/counters", driver.ReadCountersHandler)
+	mux.HandleFunc("/api/p4/program", driver.DeployProgramHandler)
+	mux.HandleFunc("/api/p4/verify", driver.VerifyProgramHandler)
 
 	// Start HTTP server
 	httpAddr := "0.0.0.0:8080"
