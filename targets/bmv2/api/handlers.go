@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
 	oldproto "github.com/golang/protobuf/proto"
 	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
@@ -153,11 +154,164 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DeployProgramHandler deploys a P4 program to the switch (POST) or retrieves current program info (GET)
+// decodeTableEntries decodes a JSON request body into a slice of TableEntry using
+// jsonpb so that protobuf oneof fields (match types, actions) are handled correctly.
+func decodeTableEntries(body io.Reader) ([]*v1.TableEntry, error) {
+	var raw struct {
+		TableEntries []json.RawMessage `json:"table_entries"`
+	}
+	if err := json.NewDecoder(body).Decode(&raw); err != nil {
+		return nil, err
+	}
+	entries := make([]*v1.TableEntry, 0, len(raw.TableEntries))
+	for _, r := range raw.TableEntries {
+		var entry v1.TableEntry
+		if err := jsonpb.UnmarshalString(string(r), &entry); err != nil {
+			return nil, err
+		}
+		entries = append(entries, &entry)
+	}
+	return entries, nil
+}
+
+// TablesHandler dispatches GET (read entries) and POST (install entries) on /api/tables.
+func (d *Driver) TablesHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		d.ReadTableEntriesHandler(w, r)
+	case http.MethodPost:
+		d.InstallTableEntriesHandler(w, r)
+	case http.MethodDelete:
+		d.DeleteTableEntriesHandler(w, r)
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"})
+	}
+}
+
+// DeleteTableEntriesHandler removes specific table entries from the switch via the P4Runtime Write RPC.
+func (d *Driver) DeleteTableEntriesHandler(w http.ResponseWriter, r *http.Request) {
+	entries, err := decodeTableEntries(r.Body)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid request body: " + err.Error()})
+		return
+	}
+	if len(entries) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "table_entries is required and must not be empty"})
+		return
+	}
+
+	updates := make([]*v1.Update, 0, len(entries))
+	for _, entry := range entries {
+		updates = append(updates, &v1.Update{
+			Type:   v1.Update_DELETE,
+			Entity: &v1.Entity{Entity: &v1.Entity_TableEntry{TableEntry: entry}},
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err = d.Client.Write(ctx, &v1.WriteRequest{
+		DeviceId:   d.DeviceID,
+		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
+		Updates:    updates,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to delete table entries: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(TableEntriesOperationResponse{
+		Status: "ok",
+		Count:  len(entries),
+	}); err != nil {
+		log.Printf("failed to encode response: %v", err)
+	}
+}
+
+// InstallTableEntriesHandler installs table entries into the switch via the P4Runtime Write RPC.
+func (d *Driver) InstallTableEntriesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	entries, err := decodeTableEntries(r.Body)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid request body: " + err.Error()})
+		return
+	}
+	if len(entries) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "table_entries is required and must not be empty"})
+		return
+	}
+
+	updates := make([]*v1.Update, 0, len(entries))
+	for _, entry := range entries {
+		updates = append(updates, &v1.Update{
+			Type: v1.Update_INSERT,
+			Entity: &v1.Entity{
+				Entity: &v1.Entity_TableEntry{TableEntry: entry},
+			},
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err = d.Client.Write(ctx, &v1.WriteRequest{
+		DeviceId:   d.DeviceID,
+		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
+		Updates:    updates,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to install table entries: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(TableEntriesOperationResponse{
+		Status: "ok",
+		Count:  len(entries),
+	}); err != nil {
+		log.Printf("failed to encode response: %v", err)
+	}
+}
+
+// DeployProgramHandler deploys a P4 program to the switch (POST), retrieves current program info (GET),
+// or undeploys it (DELETE).
 func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		// Redirect GET requests to GetProgramHandler
 		d.GetProgramHandler(w, r)
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		d.undeployProgram(w, r)
 		return
 	}
 
@@ -337,6 +491,73 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		Message:     fmt.Sprintf("P4 program successfully %s", status),
 	}); err != nil {
 		log.Printf("failed to encode deployment response: %v", err)
+	}
+}
+
+// undeployProgram deletes all table entries from the switch and clears the current program.
+func (d *Driver) undeployProgram(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	// Read all existing table entries.
+	stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+		DeviceId: d.DeviceID,
+		Entities: []*v1.Entity{{
+			Entity: &v1.Entity_TableEntry{TableEntry: &v1.TableEntry{}},
+		}},
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read table entries: " + err.Error()}); err != nil {
+			log.Printf("failed to encode error response: %v", err)
+		}
+		return
+	}
+
+	var deletes []*v1.Update
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		for _, entity := range resp.Entities {
+			if te := entity.GetTableEntry(); te != nil {
+				deletes = append(deletes, &v1.Update{
+					Type:   v1.Update_DELETE,
+					Entity: &v1.Entity{Entity: &v1.Entity_TableEntry{TableEntry: te}},
+				})
+			}
+		}
+	}
+
+	if len(deletes) > 0 {
+		writeCtx, writeCancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer writeCancel()
+		_, err = d.Client.Write(writeCtx, &v1.WriteRequest{
+			DeviceId:   d.DeviceID,
+			ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
+			Updates:    deletes,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to delete table entries: " + err.Error()}); err != nil {
+				log.Printf("failed to encode error response: %v", err)
+			}
+			return
+		}
+	}
+
+	d.CurrentProgram = nil
+
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(ProgramDeploymentResponse{
+		Status:  "undeployed",
+		Message: fmt.Sprintf("removed %d table entries", len(deletes)),
+	}); err != nil {
+		log.Printf("failed to encode response: %v", err)
 	}
 }
 
