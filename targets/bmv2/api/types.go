@@ -96,3 +96,30 @@ type TableEntriesOperationResponse struct {
 	Count   int    `json:"count"`
 }
 
+// RegisterMetadata describes a P4 register array from P4Info.
+type RegisterMetadata struct {
+	RegisterID   uint32 `json:"register_id"`
+	RegisterName string `json:"register_name"`
+	Size         int32  `json:"size"`
+}
+
+// RegisterValue holds the value at a single register index.
+type RegisterValue struct {
+	Index int64  `json:"index"`
+	Value string `json:"value"` // hex-encoded bitstring, e.g. "0x0000000a"
+}
+
+// RegisterArrayResponse represents one register array with all its entries.
+type RegisterArrayResponse struct {
+	RegisterID   uint32          `json:"register_id"`
+	RegisterName string          `json:"register_name"`
+	Size         int32           `json:"size"`
+	Values       []RegisterValue `json:"values"`
+}
+
+// RegistersResponse is the response body for GET /api/registers.
+type RegistersResponse struct {
+	Registers []RegisterArrayResponse `json:"registers"`
+	Error     string                  `json:"error,omitempty"`
+}
+

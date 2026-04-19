@@ -121,6 +121,24 @@ func GetTableMetadata(program *P4Program) []TableMetadata {
 	return tables
 }
 
+func GetRegisterMetadata(program *P4Program) []RegisterMetadata {
+	if program == nil || program.P4Info == nil {
+		return []RegisterMetadata{}
+	}
+	result := make([]RegisterMetadata, 0, len(program.P4Info.Registers))
+	for _, reg := range program.P4Info.Registers {
+		if reg.Preamble == nil {
+			continue
+		}
+		result = append(result, RegisterMetadata{
+			RegisterID:   reg.Preamble.Id,
+			RegisterName: reg.Preamble.Name,
+			Size:         reg.Size,
+		})
+	}
+	return result
+}
+
 func GetCounterMetadata(program *P4Program) []CounterMetadata {
 	if program == nil || program.P4Info == nil {
 		return []CounterMetadata{}

@@ -15,6 +15,8 @@ import (
 	oldproto "github.com/golang/protobuf/proto"
 	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 )
 
@@ -140,7 +142,9 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if response.Entities != nil {
 			for _, entity := range response.Entities {
-				if counterEntry := entity.GetCounterEntry(); counterEntry != nil {
+				if counterEntry := entity.GetCounterEntry(); counterEntry != nil &&
+					counterEntry.Data != nil &&
+					(counterEntry.Data.PacketCount != 0 || counterEntry.Data.ByteCount != 0) {
 					entries = append(entries, counterEntry)
 				}
 			}
@@ -698,4 +702,161 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		log.Printf("failed to encode verify response: %v", err)
 	}
+}
+
+// MetricsHandler reads counter data from the switch and exposes it in Prometheus text format.
+func (d *Driver) MetricsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	counterNames := make(map[uint32]string)
+	if d.CurrentProgram != nil && d.CurrentProgram.P4Info != nil {
+		for _, c := range d.CurrentProgram.P4Info.Counters {
+			if c.Preamble != nil {
+				counterNames[c.Preamble.Id] = c.Preamble.Name
+			}
+		}
+		for _, c := range d.CurrentProgram.P4Info.DirectCounters {
+			if c.Preamble != nil {
+				counterNames[c.Preamble.Id] = c.Preamble.Name
+			}
+		}
+	}
+
+	stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+		Entities: []*v1.Entity{
+			{Entity: &v1.Entity_CounterEntry{CounterEntry: &v1.CounterEntry{}}},
+		},
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var entries []*v1.CounterEntry
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		for _, entity := range response.GetEntities() {
+			if ce := entity.GetCounterEntry(); ce != nil {
+				entries = append(entries, ce)
+			}
+		}
+	}
+
+	reg := prometheus.NewRegistry()
+	labelNames := []string{"counter_id", "counter_name", "index"}
+	packetGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "p4_counter_packets_total",
+		Help: "Packet count per P4 counter entry",
+	}, labelNames)
+	byteGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "p4_counter_bytes_total",
+		Help: "Byte count per P4 counter entry",
+	}, labelNames)
+	reg.MustRegister(packetGauge, byteGauge)
+
+	for _, e := range entries {
+		if e.Data == nil || (e.Data.PacketCount == 0 && e.Data.ByteCount == 0) {
+			continue
+		}
+		idx := int64(0)
+		if e.Index != nil {
+			idx = e.Index.Index
+		}
+		lv := prometheus.Labels{
+			"counter_id":   fmt.Sprintf("%d", e.CounterId),
+			"counter_name": counterNames[e.CounterId],
+			"index":        fmt.Sprintf("%d", idx),
+		}
+		packetGauge.With(lv).Set(float64(e.Data.PacketCount))
+		byteGauge.With(lv).Set(float64(e.Data.ByteCount))
+	}
+
+	promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP(w, r)
+}
+
+// ReadRegistersHandler reads all register arrays from the switch and returns them as JSON.
+func (d *Driver) ReadRegistersHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	regMeta := make(map[uint32]RegisterMetadata)
+	if d.CurrentProgram != nil {
+		for _, m := range GetRegisterMetadata(d.CurrentProgram) {
+			regMeta[m.RegisterID] = m
+		}
+	}
+
+	// BMv2 requires reading each register by ID; wildcard reads are not supported.
+	// We iterate over registers known from P4Info and read each one individually.
+	grouped := make(map[uint32][]RegisterValue)
+	var readErr string
+	for id := range regMeta {
+		stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+			Entities: []*v1.Entity{
+				{Entity: &v1.Entity_RegisterEntry{RegisterEntry: &v1.RegisterEntry{RegisterId: id}}},
+			},
+		})
+		if err != nil {
+			log.Printf("failed to read register %d: %v", id, err)
+			readErr = err.Error()
+			continue
+		}
+		for {
+			response, recvErr := stream.Recv()
+			if recvErr != nil {
+				if readErr == "" {
+					readErr = recvErr.Error()
+				}
+				break
+			}
+			for _, entity := range response.GetEntities() {
+				entry := entity.GetRegisterEntry()
+				if entry == nil {
+					continue
+				}
+				idx := int64(0)
+				if entry.Index != nil {
+					idx = entry.Index.Index
+				}
+				grouped[entry.RegisterId] = append(grouped[entry.RegisterId], RegisterValue{
+					Index: idx,
+					Value: encodeP4Data(entry.Data),
+				})
+			}
+		}
+	}
+
+	registers := make([]RegisterArrayResponse, 0, len(regMeta))
+	for id, meta := range regMeta {
+		registers = append(registers, RegisterArrayResponse{
+			RegisterID:   id,
+			RegisterName: meta.RegisterName,
+			Size:         meta.Size,
+			Values:       grouped[id],
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	resp := RegistersResponse{Registers: registers}
+	if len(grouped) == 0 && readErr != "" {
+		resp.Error = readErr
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("failed to encode registers response: %v", err)
+	}
+}
+
+func encodeP4Data(d *v1.P4Data) string {
+	if d == nil {
+		return ""
+	}
+	if bs, ok := d.Data.(*v1.P4Data_Bitstring); ok {
+		return fmt.Sprintf("0x%x", bs.Bitstring)
+	}
+	return d.String()
 }

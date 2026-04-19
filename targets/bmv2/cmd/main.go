@@ -105,6 +105,8 @@ func main() {
 	mux.HandleFunc("/api/counters", driver.ReadCountersHandler)
 	mux.HandleFunc("/api/p4/program", driver.DeployProgramHandler)
 	mux.HandleFunc("/api/p4/verify", driver.VerifyProgramHandler)
+	mux.HandleFunc("/api/metrics", driver.MetricsHandler)
+	mux.HandleFunc("/api/registers", driver.ReadRegistersHandler)
 
 	httpAddr := "0.0.0.0:8080"
 	log.Printf("Starting HTTP server on %s", httpAddr)
