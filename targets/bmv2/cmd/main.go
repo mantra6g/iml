@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bmv2-driver/api"
+	"bmv2-driver/handlers"
 	"context"
 	"log"
 	"net/http"
@@ -31,7 +31,7 @@ func main() {
 	}()
 	c := v1.NewP4RuntimeClient(conn)
 
-	driver := &api.Driver{
+	driver := &handlers.Driver{
 		Client:         c,
 		Conn:           conn,
 		DeviceID:       deviceID,
