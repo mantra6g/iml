@@ -24,11 +24,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
@@ -41,7 +39,7 @@ var logger = logf.Log.WithName("networkfunctiondeployment-resource")
 
 // SetupNetworkFunctionDeploymentWebhookWithManager registers the webhook for NetworkFunctionDeployment in the manager.
 func SetupNetworkFunctionDeploymentWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&schedulingv1alpha1.NetworkFunctionDeployment{}).
+	return ctrl.NewWebhookManagedBy(mgr, &schedulingv1alpha1.NetworkFunctionDeployment{}).
 		WithValidator(&CustomValidator{
 			Client: mgr.GetClient(),
 		}).WithDefaulter(&CustomDefaulter{}).
@@ -61,15 +59,10 @@ type CustomDefaulter struct {
 	// TODO(user): Add more fields as needed for defaulting
 }
 
-var _ webhook.CustomDefaulter = &CustomDefaulter{}
+var _ admission.Defaulter[*schedulingv1alpha1.NetworkFunctionDeployment] = &CustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind NetworkFunctionDeployment.
-func (d *CustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
-	deployment, ok := obj.(*schedulingv1alpha1.NetworkFunctionDeployment)
-
-	if !ok {
-		return fmt.Errorf("expected an NetworkFunctionDeployment object but got %T", obj)
-	}
+func (d *CustomDefaulter) Default(_ context.Context, deployment *schedulingv1alpha1.NetworkFunctionDeployment) error {
 	logger.Info("Defaulting for NetworkFunctionDeployment",
 		"name", deployment.GetName())
 
@@ -104,16 +97,12 @@ type CustomValidator struct {
 	Client client.Client
 }
 
-var _ webhook.CustomValidator = &CustomValidator{}
+var _ admission.Validator[*schedulingv1alpha1.NetworkFunctionDeployment] = &CustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type NetworkFunctionDeployment.
 func (v *CustomValidator) ValidateCreate(
-	ctx context.Context, obj runtime.Object,
+	ctx context.Context, deployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (admission.Warnings, error) {
-	deployment, ok := obj.(*schedulingv1alpha1.NetworkFunctionDeployment)
-	if !ok {
-		return nil, fmt.Errorf("expected a NetworkFunctionDeployment object but got %T", obj)
-	}
 	logger.Info("Validation for NetworkFunctionDeployment upon creation",
 		"name", deployment.GetName())
 
@@ -134,13 +123,9 @@ func (v *CustomValidator) ValidateCreate(
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type NetworkFunctionDeployment.
 func (v *CustomValidator) ValidateUpdate(
-	_ context.Context, oldObj, newObj runtime.Object,
+	_ context.Context, oldDep, newDep *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (admission.Warnings, error) {
-	deployment, ok := newObj.(*schedulingv1alpha1.NetworkFunctionDeployment)
-	if !ok {
-		return nil, fmt.Errorf("expected a NetworkFunctionDeployment object for the newObj but got %T", newObj)
-	}
-	logger.Info("Validation for NetworkFunctionDeployment upon update", "name", deployment.GetName())
+	logger.Info("Validation for NetworkFunctionDeployment upon update", "name", newDep.GetName())
 
 	// TODO(user): fill in your validation logic upon object update.
 
@@ -149,12 +134,8 @@ func (v *CustomValidator) ValidateUpdate(
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type NetworkFunctionDeployment.
 func (v *CustomValidator) ValidateDelete(
-	_ context.Context, obj runtime.Object,
+	_ context.Context, deployment *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (admission.Warnings, error) {
-	deployment, ok := obj.(*schedulingv1alpha1.NetworkFunctionDeployment)
-	if !ok {
-		return nil, fmt.Errorf("expected a NetworkFunctionDeployment object but got %T", obj)
-	}
 	logger.Info("Validation for NetworkFunctionDeployment upon deletion", "name", deployment.GetName())
 
 	// TODO(user): fill in your validation logic upon object deletion.
