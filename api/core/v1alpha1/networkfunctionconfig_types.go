@@ -24,9 +24,6 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type TableConfig struct {
-	// Name of the table
-	// +required
-	Name string `json:"name"`
 	// Entries to be added to the table
 	// +optional
 	Entries []TableEntry `json:"entries"`
@@ -71,7 +68,7 @@ type NetworkFunctionConfigSpec struct {
 
 	// Tables defines the configurations for each of the tables in the network function
 	// +optional
-	Tables []TableConfig `json:"tables"`
+	Tables map[string]TableConfig `json:"tables"`
 }
 
 // NetworkFunctionConfigStatus defines the observed state of NetworkFunctionConfig.

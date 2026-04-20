@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"hash/fnv"
 	"math"
 	"strconv"
+
+	"github.com/mantra6g/iml/api/core/v1alpha1"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -18,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/util/hash"
 )
 

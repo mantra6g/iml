@@ -41,9 +41,7 @@ spec:
             description: spec defines the desired state of NetworkFunctionConfig
             properties:
               tables:
-                description: Tables defines the configurations for each of the tables
-                  in the network function
-                items:
+                additionalProperties:
                   properties:
                     entries:
                       description: Entries to be added to the table
@@ -105,13 +103,10 @@ spec:
                         - matchFields
                         type: object
                       type: array
-                    name:
-                      description: Name of the table
-                      type: string
-                  required:
-                  - name
                   type: object
-                type: array
+                description: Tables defines the configurations for each of the tables
+                  in the network function
+                type: object
             type: object
           status:
             description: status defines the observed state of NetworkFunctionConfig

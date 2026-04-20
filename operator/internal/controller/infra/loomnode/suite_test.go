@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

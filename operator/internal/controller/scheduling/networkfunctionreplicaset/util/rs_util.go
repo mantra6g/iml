@@ -2,11 +2,12 @@ package util
 
 import (
 	"fmt"
-	"github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"sort"
 	"time"
 
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	"github.com/mantra6g/iml/api/core/v1alpha1"
+
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 
 	"k8s.io/apimachinery/pkg/api/validation"

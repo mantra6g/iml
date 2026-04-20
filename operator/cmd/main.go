@@ -50,9 +50,9 @@ import (
 	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment"
 	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset"
 
-	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

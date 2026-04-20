@@ -19,7 +19,8 @@ package loomnode
 import (
 	"context"
 	"fmt"
-	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/ipam"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

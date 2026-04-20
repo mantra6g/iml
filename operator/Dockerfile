@@ -5,17 +5,18 @@ ARG TARGETARCH
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
+COPY operator/go.mod operator/go.mod
+COPY operator/go.sum operator/go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
 
 # Copy the go source
-COPY cmd/main.go cmd/main.go
+COPY go.work go.work
 COPY api/ api/
-COPY internal/ internal/
-COPY pkg/ pkg/
+COPY operator/cmd/main.go operator/cmd/main.go
+COPY operator/internal/ operator/internal/
+COPY operator/pkg/ operator/pkg/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
