@@ -19,12 +19,12 @@ package networkfunction
 import (
 	"context"
 	"fmt"
-	nfutils "loom/internal/controller/core/networkfunction/util"
+	nfutils "github.com/mantra6g/iml/operator/internal/controller/core/networkfunction/util"
 	"time"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	p4targetutil "loom/internal/controller/core/p4target/util"
-	stringutils "loom/pkg/util/string"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
+	stringutils "github.com/mantra6g/iml/operator/pkg/util/string"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

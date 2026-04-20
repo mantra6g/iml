@@ -14,6 +14,18 @@ spec:
       p4target.loom.io/arch: v1model
 ```
 
+Creating a network function referencing a NetworkFunctionConfig named `example-nf-config`:
+```yaml
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: example-nf
+spec:
+  p4File: https://example.org/p4program.p4
+  configRef:
+    name: example-nf-config
+```
+
 Scheduling a network function on a specific P4 target named `example-target`:
 ```yaml
 apiVersion: core.loom.io/v1alpha1
@@ -70,6 +82,9 @@ spec:
   The scheduler will use this selector to find suitable P4 targets for scheduling the NetworkFunction instance.
   A built-in label that can be used in the target selector is `p4target.loom.io/arch` for selecting P4 targets 
   based on their architecture (e.g., `v1model`, `psa`, etc.).
+* `configRef`: An optional reference to a NetworkFunctionConfig resource that contains the configurations for this
+  network function. If specified, the driver will automatically apply the configuration from the referenced 
+  NetworkFunctionConfig to this NetworkFunction instance.
 
 ## Status fields
 * `observedGeneration`: The most recent generation observed for this NetworkFunction. 
@@ -79,3 +94,5 @@ spec:
 * `conditions`: Represents the latest available observations of the NetworkFunction's current state. 
   Each condition has a type (e.g., `Initialized`, `Ready`, `Scheduled`, `DisruptionTarget`, `ReadyToStart`), a status 
   (True, False, Unknown), and optional fields for the last probe time, last transition time, reason, and message.
+* `assignedIP` is the IP address assigned to the NetworkFunction, used for routing traffic to it.
+

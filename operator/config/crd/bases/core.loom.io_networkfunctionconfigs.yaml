@@ -40,10 +40,78 @@ spec:
           spec:
             description: spec defines the desired state of NetworkFunctionConfig
             properties:
-              foo:
-                description: foo is an example field of NetworkFunctionConfig. Edit
-                  networkfunctionconfig_types.go to remove/update
-                type: string
+              tables:
+                description: Tables defines the configurations for each of the tables
+                  in the network function
+                items:
+                  properties:
+                    entries:
+                      description: Entries to be added to the table
+                      items:
+                        properties:
+                          action:
+                            description: Action is the action to take if the packet
+                              matches the MatchFields.
+                            properties:
+                              name:
+                                description: Name of the action to execute
+                                type: string
+                              parameters:
+                                description: Parameters is a list of parameters for
+                                  the action.
+                                items:
+                                  properties:
+                                    name:
+                                      description: Name of the field to match
+                                      type: string
+                                    type:
+                                      description: Type of the value
+                                      type: string
+                                    value:
+                                      description: Value to of the field to match
+                                        against
+                                      type: string
+                                  required:
+                                  - name
+                                  - type
+                                  - value
+                                  type: object
+                                type: array
+                            required:
+                            - name
+                            type: object
+                          matchFields:
+                            description: MatchFields is a list of fields to match
+                              against for this entry.
+                            items:
+                              properties:
+                                name:
+                                  description: Name of the field to match
+                                  type: string
+                                type:
+                                  description: Type of the value
+                                  type: string
+                                value:
+                                  description: Value to of the field to match against
+                                  type: string
+                              required:
+                              - name
+                              - type
+                              - value
+                              type: object
+                            type: array
+                        required:
+                        - action
+                        - matchFields
+                        type: object
+                      type: array
+                    name:
+                      description: Name of the table
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
           status:
             description: status defines the observed state of NetworkFunctionConfig

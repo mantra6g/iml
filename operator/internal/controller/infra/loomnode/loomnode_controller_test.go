@@ -18,7 +18,7 @@ package loomnode
 
 import (
 	"context"
-	infrav1alpha1 "loom/api/infra/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

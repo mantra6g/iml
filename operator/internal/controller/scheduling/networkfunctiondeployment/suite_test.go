@@ -39,10 +39,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	infrav1alpha1 "loom/api/infra/v1alpha1"
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	nfdepwebhookctrl "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	nfdepwebhookctrl "github.com/mantra6g/iml/operator/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 	// +kubebuilder:scaffold:imports
 )
 

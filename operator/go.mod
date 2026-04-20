@@ -1,4 +1,4 @@
-module loom
+module github.com/mantra6g/iml/operator
 
 go 1.24.0
 

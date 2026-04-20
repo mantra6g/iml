@@ -3,7 +3,7 @@ package util
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
 )
 
 // NewReadyCondition creates a new Condition of type Ready with the given status, reason, and message.

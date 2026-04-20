@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"loom/test/utils"
+	"github.com/mantra6g/iml/operator/test/utils"
 )
 
 // namespace where the project is deployed in

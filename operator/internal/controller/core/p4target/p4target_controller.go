@@ -32,8 +32,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	p4targetutil "loom/internal/controller/core/p4target/util"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
 )
 
 // P4TargetReconciler reconciles a P4Target object
@@ -106,18 +106,30 @@ func (r *P4TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.mapLeaseToRequests),
 			builder.WithPredicates(predicate.Funcs{
 				CreateFunc: func(e event.CreateEvent) bool {
-					if e.Object == nil {return false}
-					if e.Object.GetNamespace() != corev1alpha1.P4TargetLeaseNamespace {return false}
+					if e.Object == nil {
+						return false
+					}
+					if e.Object.GetNamespace() != corev1alpha1.P4TargetLeaseNamespace {
+						return false
+					}
 					return true
 				},
 				UpdateFunc: func(e event.UpdateEvent) bool {
-					if e.ObjectOld == nil || e.ObjectNew == nil {return false}
-					if e.ObjectNew.GetNamespace() != corev1alpha1.P4TargetLeaseNamespace {return false}
+					if e.ObjectOld == nil || e.ObjectNew == nil {
+						return false
+					}
+					if e.ObjectNew.GetNamespace() != corev1alpha1.P4TargetLeaseNamespace {
+						return false
+					}
 					return true
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool {
-					if e.Object == nil {return false}
-					if e.Object.GetNamespace() != corev1alpha1.P4TargetLeaseNamespace {return false}
+					if e.Object == nil {
+						return false
+					}
+					if e.Object.GetNamespace() != corev1alpha1.P4TargetLeaseNamespace {
+						return false
+					}
 					return true
 				},
 			})).

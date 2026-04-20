@@ -18,9 +18,9 @@ package networkfunctionreplicaset
 
 import (
 	"context"
-	"loom/api/core/v1alpha1"
-	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
-	"loom/pkg/util/ptr"
+	"github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	rsutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset/util"
+	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,7 +30,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
 )
 
 var _ = Describe("NetworkFunctionReplicaSet Controller", func() {
