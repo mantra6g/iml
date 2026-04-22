@@ -1,0 +1,61 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: loomnodes.infra.loom.io
+spec:
+  group: infra.loom.io
+  names:
+    kind: LoomNode
+    listKind: LoomNodeList
+    plural: loomnodes
+    singular: loomnode
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: LoomNode is the Schema for the loomnodes API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of LoomNode
+            properties:
+              nodeCIDRs:
+                description: |-
+                  NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
+                  This is used by the CNI plugin to determine which IPs to assign to pods scheduled on this node.
+                  When left empty, the controller will automatically allocate a CIDR block for this node
+                  from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
+                items:
+                  type: string
+                type: array
+            type: object
+          status:
+            description: status defines the observed state of LoomNode
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

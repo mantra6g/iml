@@ -19,3 +19,6 @@ site/
 # Helm generated files
 chart/charts/*.tgz
 Chart.lock
+
+# Locally generated installed
+install.yaml

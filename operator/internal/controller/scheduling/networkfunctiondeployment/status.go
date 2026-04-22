@@ -6,8 +6,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymentutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	deploymentutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment/util"
 )
 
 func (r *NetworkFunctionDeploymentReconciler) updateNFDeploymentStatus(ctx context.Context,
