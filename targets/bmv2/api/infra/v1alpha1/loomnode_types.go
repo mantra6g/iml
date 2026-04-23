@@ -23,59 +23,57 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const APPLICATION_FINALIZER_LABEL = "application.loom.io/finalizer"
-
-type DualStackNetwork struct {
-	IPv4Net string `json:"inet4,omitempty"`
-	IPv6Net string `json:"inet6,omitempty"`
-}
-
-// ApplicationSpec defines the desired state of Application
-type ApplicationSpec struct {
+// LoomNodeSpec defines the desired state of LoomNode
+type LoomNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+
+	// NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
+	// This is used by the CNI plugin to determine which IPs to assign to pods scheduled on this node.
+	// When left empty, the controller will automatically allocate a CIDR block for this node
+	// from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
+	// +optional
+	NodeCIDRs []string `json:"nodeCIDRs,omitempty"`
 }
 
-// ApplicationStatus defines the observed state of Application.
-type ApplicationStatus struct {
+// LoomNodeStatus defines the observed state of LoomNode.
+type LoomNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// Subnets is a list of subnet assignments per node
-	Subnets map[string][]DualStackNetwork `json:"subnets,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
-// Application is the Schema for the applications API
-type Application struct {
+// LoomNode is the Schema for the loomnodes API
+type LoomNode struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of Application
+	// spec defines the desired state of LoomNode
 	// +required
-	Spec ApplicationSpec `json:"spec"`
+	Spec LoomNodeSpec `json:"spec"`
 
-	// status defines the observed state of Application
+	// status defines the observed state of LoomNode
 	// +optional
-	Status ApplicationStatus `json:"status,omitempty,omitzero"`
+	Status LoomNodeStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// ApplicationList contains a list of Application
-type ApplicationList struct {
+// LoomNodeList contains a list of LoomNode
+type LoomNodeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Application `json:"items"`
+	Items           []LoomNode `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Application{}, &ApplicationList{})
+	SchemeBuilder.Register(&LoomNode{}, &LoomNodeList{})
 }

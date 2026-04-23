@@ -3,6 +3,7 @@ package handlers
 import (
 	"bmv2-driver/api"
 
+	"github.com/go-logr/logr"
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"google.golang.org/grpc"
 )
@@ -15,4 +16,5 @@ type Driver struct {
 	DeviceID       uint64
 	ElectionIDHigh uint64
 	ElectionIDLow  uint64
+	Log            logr.Logger
 }
