@@ -2,7 +2,15 @@
 IMG_OPERATOR ?= operator:local
 IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
-IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
+IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
+
+IMG_TARGET_BMV2 ?= bmv2:local
+TARGET_IMAGES = $(IMG_TARGET_BMV2)
+
+IMG_EXAMPLE_LOADBALANCER ?= loadbalancer:local
+EXAMPLE_IMAGES = $(IMG_EXAMPLE_LOADBALANCER)
+
+ALL_IMAGES = $(IML_IMAGES) $(TARGET_IMAGES) $(EXAMPLE_IMAGES)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -54,17 +62,42 @@ help: ## Display this help.
 # If you wish to build the driver image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker images for the cni, daemon and operator.
-	$(MAKE) -C cni docker-build IMG=${IMG_CNI}
-	$(MAKE) -C daemon docker-build IMG=${IMG_DAEMON} IMG_CNI=${IMG_CNI}
-	$(MAKE) -C operator docker-build IMG=${IMG_OPERATOR}
+.PHONY: docker-build-all
+docker-build-all: docker-build-iml docker-build-targets docker-build-examples ## Build docker images for iml, all targets and examples.
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the cni, daemon and operator.
-	$(MAKE) -C cni docker-push IMG=${IMG_CNI}
-	$(MAKE) -C daemon docker-push IMG=${IMG_DAEMON} IMG_CNI=${IMG_CNI}
-	$(MAKE) -C operator docker-push IMG=${IMG_OPERATOR}
+.PHONY: docker-build-iml
+docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator ## Build docker images for the cni, daemon and operator.
+
+.PHONY: docker-build-cni
+docker-build-cni: ## Build docker image for the cni.
+	$(CONTAINER_TOOL) build -t ${IMG_CNI} --target cni .
+
+.PHONY: docker-build-daemon
+docker-build-daemon: ## Build docker image for the daemon.
+	$(CONTAINER_TOOL) build -t ${IMG_DAEMON} --target daemon .
+
+.PHONY: docker-build-operator
+docker-build-operator: ## Build docker image for the operator.
+	$(CONTAINER_TOOL) build -t ${IMG_OPERATOR} --target operator .
+
+.PHONY: docker-build-targets
+docker-build-targets: ## Build docker images for the targets.
+#docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
+
+#.PHONY: docker-build-bmv2
+#docker-build-bmv2: ## Build docker image for the bmv2 target.
+#	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
+
+.PHONY: docker-build-examples
+docker-build-examples: docker-build-loadbalancer ## Build docker images for the examples.
+
+.PHONY: docker-build-loadbalancer
+docker-build-loadbalancer: ## Build docker image for the loadbalancer example.
+	$(CONTAINER_TOOL) build -t ${IMG_EXAMPLE_LOADBALANCER} --target loadbalancer .
+
+.PHONY: docker-push-all
+docker-push-all: ## Push all docker images.
+	$(CONTAINER_TOOL) push ${ALL_IMAGES}
 
 .PHONY: kind-create-multi
 kind-create-multi: ## Create and configure a local kind cluster with a control-plane and a worker node.
@@ -96,8 +129,8 @@ kind-delete: ## Delete the local kind cluster.
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: kind-load
-kind-load: ## Load the cni, daemon and operator images into the local cluster.
-	$(KIND) load docker-image ${IMG_CNI} ${IMG_DAEMON} ${IMG_OPERATOR} --name $(KIND_CLUSTER)
+kind-load: ## Load all images into the local cluster.
+	$(KIND) load docker-image ${ALL_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
 build-installer: ## Generate a consolidated YAML with CRDs and deployment.
@@ -106,11 +139,11 @@ build-installer: ## Generate a consolidated YAML with CRDs and deployment.
 	$(KUSTOMIZE) . > install.yaml
 
 .PHONY: install
-install: ## Deploy the BMv2 test pod.
+install: build-installer ## Install IML in the cluster using the generated installer.
 	$(KUBECTL) apply -f install.yaml
 
 .PHONY: uninstall
-uninstall: ## Remove the BMv2 test pod.
+uninstall: ## Uninstall IML from the cluster by deleting the generated installer.
 	$(KUBECTL) delete -f install.yaml --ignore-not-found
 
 ## Tool Binaries
