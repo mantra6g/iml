@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"net"
 
-	corev1alpha1 "iml-daemon/api/core/v1alpha1"
 	"iml-daemon/pkg/dataplane"
+
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/types"
 )
