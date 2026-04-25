@@ -27,6 +27,10 @@ type TableConfig struct {
 	// Entries to be added to the table
 	// +optional
 	Entries []TableEntry `json:"entries"`
+
+	// DefaultAction is the action to execute whenever there is no match
+	// +optional
+	DefaultAction ActionConfig `json:"defaultAction"`
 }
 
 type TableEntry struct {

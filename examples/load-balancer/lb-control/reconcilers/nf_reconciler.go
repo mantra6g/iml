@@ -204,7 +204,6 @@ func (r *NetworkFunctionConfigReconciler) updateNetworkFunctionConfig(ctx contex
 
 func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 	nfConfig *corev1alpha1.NetworkFunctionConfig, dummyPodList *v1.PodList) error {
-	nfConfig.Spec.Tables
 }
 
 func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(

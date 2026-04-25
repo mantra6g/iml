@@ -1,0 +1,15 @@
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunctionConfig
+metadata:
+  name: pkt-logger-config
+  namespace: default
+spec:
+  tables:
+    log_table:
+      entries:
+        - match_fields:
+            - name: hdr.inner_ipv4.src_addr
+              value: "10.123.0.1"
+              type: "ipv4_address"
+          action:
+            name: log
