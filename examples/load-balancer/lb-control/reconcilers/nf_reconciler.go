@@ -18,7 +18,11 @@ package reconcilers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/netip"
+	"strconv"
 
 	netdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
@@ -46,14 +50,12 @@ const (
 	ECMPNextHopIPv6Table     = "ecmp_nhop_ipv6"
 	ECMPNextHopIPv4Table     = "ecmp_nhop_ipv4"
 
-	MarkAsInboundTrafficAction          = "mark_to_load_balance"
-	MarkAsReturnTrafficAction           = "mark_to_return"
-	SetECMPSelectIPv4Action             = "set_ecmp_select_ipv4"
-	SetECMPSelectIPv6Action             = "set_ecmp_select_ipv6"
-	SetIPv4NextHopAction                = "set_nhop_ipv4"
-	SetIPv6NextHopAction                = "set_nhop_ipv6"
-	RestoreIPv4DestinationAddressAction = "restore_ipv4_dst_addr"
-	RestoreIPv6DestinationAddressAction = "restore_ipv6_dst_addr"
+	MarkAsInboundTrafficAction = "mark_to_load_balance"
+	MarkAsReturnTrafficAction  = "mark_to_return"
+	SetECMPSelectIPv4Action    = "set_ecmp_select_ipv4"
+	SetECMPSelectIPv6Action    = "set_ecmp_select_ipv6"
+	SetIPv4NextHopAction       = "set_nhop_ipv4"
+	SetIPv6NextHopAction       = "set_nhop_ipv6"
 )
 
 type Config struct {
@@ -76,7 +78,7 @@ func (r *NetworkFunctionConfigReconciler) matchesLoadBalancedOrDummyPods(object 
 	return ok && (value == r.Config.DummyAppLabelValue || value == r.Config.LoadBalancedAppLabelValue)
 }
 
-func (r *NetworkFunctionConfigReconciler) getMultusNetworkStatus(object client.Object) string {
+func getMultusNetworkStatusString(object client.Object) string {
 	if object == nil {
 		return ""
 	}
@@ -89,6 +91,18 @@ func (r *NetworkFunctionConfigReconciler) getMultusNetworkStatus(object client.O
 		return ""
 	}
 	return netStatus
+}
+
+func getMultusNetworkStatus(object client.Object) *netdefv1.NetworkStatus {
+	statusString := getMultusNetworkStatusString(object)
+	if statusString == "" {
+		return nil
+	}
+	status := &netdefv1.NetworkStatus{}
+	if err := json.Unmarshal([]byte(statusString), status); err != nil {
+		return nil
+	}
+	return status
 }
 
 // NetworkFunctionConfigReconciler reconciles the configuration for a NetworkFunction resource
@@ -122,8 +136,8 @@ func (r *NetworkFunctionConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 					if !r.matchesLoadBalancedOrDummyPods(e.ObjectNew) {
 						return false
 					}
-					oldNetStatus := r.getMultusNetworkStatus(e.ObjectOld)
-					newNetStatus := r.getMultusNetworkStatus(e.ObjectNew)
+					oldNetStatus := getMultusNetworkStatusString(e.ObjectOld)
+					newNetStatus := getMultusNetworkStatusString(e.ObjectNew)
 					return oldNetStatus != newNetStatus
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool {
@@ -204,9 +218,182 @@ func (r *NetworkFunctionConfigReconciler) updateNetworkFunctionConfig(ctx contex
 
 func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 	nfConfig *corev1alpha1.NetworkFunctionConfig, dummyPodList *v1.PodList) error {
+	if nfConfig.Spec.Tables == nil {
+		nfConfig.Spec.Tables = make(map[string]corev1alpha1.TableConfig)
+	}
+	var ipv4Entries = make([]corev1alpha1.TableEntry, len(dummyPodList.Items))
+	var ipv6Entries = make([]corev1alpha1.TableEntry, len(dummyPodList.Items))
+	for i := range dummyPodList.Items {
+		pod := &dummyPodList.Items[i]
+		podIPv4 := getPodIMLIPv4Addr(pod)
+		podIPv6 := getPodIMLIPv6Addr(pod)
+		if podIPv4 != nil {
+			ipv4Entries = append(ipv4Entries, corev1alpha1.TableEntry{
+				MatchFields: []corev1alpha1.TypedValue{{
+					Name:  "hdr.inner_ipv4.src_addr",
+					Value: podIPv4.String(),
+					Type:  "ipv4_address",
+				}},
+				Action: corev1alpha1.ActionConfig{
+					Name: MarkAsInboundTrafficAction,
+				},
+			})
+		}
+		if podIPv6 != nil {
+			ipv6Entries = append(ipv6Entries, corev1alpha1.TableEntry{
+				MatchFields: []corev1alpha1.TypedValue{{
+					Name:  "hdr.inner_ipv6.src_addr",
+					Value: podIPv6.String(),
+					Type:  "ipv6_address",
+				}},
+				Action: corev1alpha1.ActionConfig{
+					Name: MarkAsInboundTrafficAction,
+				},
+			})
+		}
+	}
+	nfConfig.Spec.Tables[DummyPodIPv4Table] = corev1alpha1.TableConfig{
+		Entries: ipv4Entries,
+	}
+	nfConfig.Spec.Tables[DummyPodIPv6Table] = corev1alpha1.TableConfig{
+		Entries: ipv6Entries,
+	}
+	return nil
 }
 
 func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 	nfConfig *corev1alpha1.NetworkFunctionConfig, lbPodList *v1.PodList) error {
+	if nfConfig.Spec.Tables == nil {
+		nfConfig.Spec.Tables = make(map[string]corev1alpha1.TableConfig)
+	}
+	var ipv4LbTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
+	var ipv6LbTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
+	var ipv4EcmpNhTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
+	var ipv6EcmpNhTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
+	for i := range lbPodList.Items {
+		pod := &lbPodList.Items[i]
+		podIPv4 := getPodIMLIPv4Addr(pod)
+		podIPv6 := getPodIMLIPv6Addr(pod)
+		if podIPv4 != nil {
+			ipv4LbTableEntries = append(ipv4LbTableEntries, corev1alpha1.TableEntry{
+				MatchFields: []corev1alpha1.TypedValue{{
+					Name:  "hdr.inner_ipv4.src_addr",
+					Value: podIPv4.String(),
+					Type:  "ipv4_address",
+				}},
+				Action: corev1alpha1.ActionConfig{
+					Name: MarkAsReturnTrafficAction,
+				},
+			})
+			ipv4EcmpNhTableEntries = append(ipv4EcmpNhTableEntries, corev1alpha1.TableEntry{
+				MatchFields: []corev1alpha1.TypedValue{{
+					Name:  "meta.ecmp_select",
+					Value: strconv.Itoa(i),
+					Type:  "int",
+				}},
+				Action: corev1alpha1.ActionConfig{
+					Name: SetIPv4NextHopAction,
+					Parameters: []corev1alpha1.TypedValue{{
+						Name:  "nhop_ipv4",
+						Value: podIPv4.String(),
+						Type:  "ipv4_address",
+					}},
+				},
+			})
+		}
+		if podIPv6 != nil {
+			ipv6LbTableEntries = append(ipv6LbTableEntries, corev1alpha1.TableEntry{
+				MatchFields: []corev1alpha1.TypedValue{{
+					Name:  "hdr.inner_ipv6.src_addr",
+					Value: podIPv6.String(),
+					Type:  "ipv6_address",
+				}},
+				Action: corev1alpha1.ActionConfig{
+					Name: MarkAsReturnTrafficAction,
+				},
+			})
+			ipv6EcmpNhTableEntries = append(ipv6EcmpNhTableEntries, corev1alpha1.TableEntry{
+				MatchFields: []corev1alpha1.TypedValue{{
+					Name:  "meta.ecmp_select",
+					Value: strconv.Itoa(i),
+					Type:  "int",
+				}},
+				Action: corev1alpha1.ActionConfig{
+					Name: SetIPv6NextHopAction,
+					Parameters: []corev1alpha1.TypedValue{{
+						Name:  "nhop_ipv6",
+						Value: podIPv6.String(),
+						Type:  "ipv6_address",
+					}},
+				},
+			})
+		}
+	}
+	nfConfig.Spec.Tables[LoadBalancedPodIPv4Table] = corev1alpha1.TableConfig{
+		Entries: ipv4LbTableEntries,
+	}
+	nfConfig.Spec.Tables[LoadBalancedPodIPv6Table] = corev1alpha1.TableConfig{
+		Entries: ipv6LbTableEntries,
+	}
+	nfConfig.Spec.Tables[ECMPGroupIPv4Table] = corev1alpha1.TableConfig{
+		DefaultAction: corev1alpha1.ActionConfig{
+			Name: SetECMPSelectIPv4Action,
+			Parameters: []corev1alpha1.TypedValue{{
+				Name:  "ecmp_count",
+				Value: strconv.Itoa(len(ipv4LbTableEntries)),
+				Type:  "int",
+			}},
+		},
+	}
+	nfConfig.Spec.Tables[ECMPGroupIPv6Table] = corev1alpha1.TableConfig{
+		DefaultAction: corev1alpha1.ActionConfig{
+			Name: SetECMPSelectIPv6Action,
+			Parameters: []corev1alpha1.TypedValue{{
+				Name:  "ecmp_count",
+				Value: strconv.Itoa(len(ipv6LbTableEntries)),
+				Type:  "int",
+			}},
+		},
+	}
+	nfConfig.Spec.Tables[ECMPNextHopIPv4Table] = corev1alpha1.TableConfig{
+		Entries: ipv4EcmpNhTableEntries,
+	}
+	nfConfig.Spec.Tables[ECMPNextHopIPv6Table] = corev1alpha1.TableConfig{
+		Entries: ipv6EcmpNhTableEntries,
+	}
+	return nil
+}
 
+func getPodIMLIPv4Addr(pod *v1.Pod) net.IP {
+	status := getMultusNetworkStatus(pod)
+	if status == nil {
+		return nil
+	}
+	for _, ip := range status.IPs {
+		addr, _ := netip.ParseAddr(ip)
+		if !addr.IsValid() {
+			continue
+		}
+		if addr.Is4() {
+			return addr.AsSlice()
+		}
+	}
+	return nil
+}
+
+func getPodIMLIPv6Addr(pod *v1.Pod) net.IP {
+	status := getMultusNetworkStatus(pod)
+	if status == nil {
+		return nil
+	}
+	for _, ip := range status.IPs {
+		addr, _ := netip.ParseAddr(ip)
+		if !addr.IsValid() {
+			continue
+		}
+		if addr.Is6() {
+			return addr.AsSlice()
+		}
+	}
+	return nil
 }
