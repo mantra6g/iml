@@ -248,8 +248,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&p4target.P4TargetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		CIDRAllocator: clusterCIDRv6Allocator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 		os.Exit(1)

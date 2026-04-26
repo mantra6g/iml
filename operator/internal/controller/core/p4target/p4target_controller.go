@@ -18,8 +18,10 @@ package p4target
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/mantra6g/iml/operator/pkg/ipam"
 	v1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +41,8 @@ import (
 // P4TargetReconciler reconciles a P4Target object
 type P4TargetReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	CIDRAllocator *ipam.PrefixAllocator
 }
 
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
@@ -64,6 +67,16 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		logger.Error(err, "unable to fetch P4Target")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if p4target.Spec.NfCIDR == "" {
+		original := p4target.DeepCopy()
+		nfCIDR, err := r.CIDRAllocator.Next()
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("unable to allocate CIDR for P4Target: %w", err)
+		}
+		p4target.Spec.NfCIDR = nfCIDR.String()
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.Patch(ctx, p4target, client.MergeFrom(original))
 	}
 
 	lease, err := r.obtainLease(ctx, p4target)

@@ -129,6 +129,15 @@ const (
 	NetworkFunctionFailed  NetworkFunctionPhase = "Failed"
 )
 
+type NetworkFunctionReason string
+
+var f = v1.PodReasonInfeasible
+
+const (
+	NetworkFunctionReasonEvicted       NetworkFunctionReason = "Evicted"
+	NetworkFunctionReasonUnschedulable NetworkFunctionReason = "Unschedulable"
+)
+
 // NetworkFunctionConditionType is a valid value for NetworkFunctionCondition.Type
 type NetworkFunctionConditionType string
 
@@ -171,6 +180,9 @@ type NetworkFunctionStatus struct {
 
 	// Phase indicates the current phase of the NetworkFunction
 	Phase NetworkFunctionPhase `json:"phase,omitempty"`
+
+	// Reason provides additional information about why the NetworkFunction is in its current phase.
+	Reason NetworkFunctionReason `json:"reason,omitempty"`
 
 	// Conditions represent the latest available observations of the
 	// NetworkFunction's current state.

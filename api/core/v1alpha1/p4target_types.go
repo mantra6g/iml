@@ -80,6 +80,7 @@ const (
 	TaintP4TargetUnreachable   = "p4target.loom.io/unreachable"
 	TaintP4TargetNotReady      = "p4target.loom.io/not-ready"
 	TaintP4TargetUnschedulable = "p4target.loom.io/unschedulable"
+	TaintP4TargetOutOfService  = "p4target.loom.io/out-of-service"
 )
 
 type P4TargetConditionType string
