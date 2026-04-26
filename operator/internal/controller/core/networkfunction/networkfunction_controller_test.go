@@ -179,5 +179,101 @@ var _ = Describe("NetworkFunction Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("should handle resources with missing required fields gracefully", func() {
+			By("Creating a NetworkFunction resource with missing P4File")
+			resource := &schedulingv1alpha1.NetworkFunction{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
+					TargetSelector: map[string]string{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			By("Reconciling the resource with missing fields")
+			controllerReconciler := &NetworkFunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should not schedule if no matching targets exist", func() {
+			By("Creating a NetworkFunction resource with a specific TargetSelector")
+			resource := &schedulingv1alpha1.NetworkFunction{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
+					TargetSelector: map[string]string{"key": "value"},
+					P4File:         "https://example.com/p4file.p4",
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			By("Reconciling the resource with no matching targets")
+			controllerReconciler := &NetworkFunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the NetworkFunction is not scheduled")
+			updatedResource := &schedulingv1alpha1.NetworkFunction{}
+			err = k8sClient.Get(ctx, typeNamespacedName, updatedResource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedResource.Spec.TargetName).To(BeEmpty())
+		})
+
+		It("should remove finalizer on deletion", func() {
+			By("Creating a NetworkFunction resource")
+			resource := &schedulingv1alpha1.NetworkFunction{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: schedulingv1alpha1.NetworkFunctionSpec{
+					TargetSelector: map[string]string{},
+					P4File:         "https://example.com/p4file.p4",
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			By("Reconciling the resource to add finalizer")
+			controllerReconciler := &NetworkFunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Deleting the resource")
+			retrievedResource := &schedulingv1alpha1.NetworkFunction{}
+			err = k8sClient.Get(ctx, typeNamespacedName, retrievedResource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, retrievedResource)).To(Succeed())
+
+			By("Reconciling the deleted resource to remove finalizer")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the finalizer is removed")
+			err = k8sClient.Get(ctx, typeNamespacedName, retrievedResource)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+		})
 	})
 })

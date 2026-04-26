@@ -43,6 +43,36 @@ spec:
               tables:
                 additionalProperties:
                   properties:
+                    defaultAction:
+                      description: DefaultAction is the action to execute whenever
+                        there is no match
+                      properties:
+                        name:
+                          description: Name of the action to execute
+                          type: string
+                        parameters:
+                          description: Parameters is a list of parameters for the
+                            action.
+                          items:
+                            properties:
+                              name:
+                                description: Name of the field to match
+                                type: string
+                              type:
+                                description: Type of the value
+                                type: string
+                              value:
+                                description: Value to of the field to match against
+                                type: string
+                            required:
+                            - name
+                            - type
+                            - value
+                            type: object
+                          type: array
+                      required:
+                      - name
+                      type: object
                     entries:
                       description: Entries to be added to the table
                       items:
