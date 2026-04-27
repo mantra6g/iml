@@ -69,9 +69,6 @@ spec:
                       Requests describes the minimum amount of compute resources required for the target.
                       The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
                     type: object
-                required:
-                - limits
-                - requests
                 type: object
             type: object
           status:

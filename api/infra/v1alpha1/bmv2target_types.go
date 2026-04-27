@@ -39,10 +39,12 @@ const BMV2_CONTROLPLANE_READY_PROBE_PATH = "/healthz"
 type ResourceRequirements struct {
 	// Limits describes the maximum amount of compute resources allowed for the target.
 	// The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+	// +optional
 	Limits corev1.ResourceList `json:"limits"`
 
 	// Requests describes the minimum amount of compute resources required for the target.
 	// The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
+	// +optional
 	Requests corev1.ResourceList `json:"requests"`
 }
 
@@ -54,7 +56,8 @@ type BMv2TargetSpec struct {
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
 	// Resources defines the compute resource requirements for the BMv2 target.
-	Resources ResourceRequirements `json:"resources,omitempty"`
+	// +optional
+	Resources ResourceRequirements `json:"resources,omitempty,omitzero"`
 }
 
 type BMv2TargetConditionType string

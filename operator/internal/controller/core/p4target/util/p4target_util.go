@@ -7,11 +7,11 @@ import (
 )
 
 // NewReadyCondition creates a new Condition of type Ready with the given status, reason, and message.
-// The condition type is set to corev1alpha1.P4_TARGET_CONDITION_READY,
+// The condition type is set to corev1alpha1.P4TargetConditionReady,
 // and the LastTransitionTime is set to the current time.
 func NewReadyCondition(status metav1.ConditionStatus, reason, message string) corev1alpha1.P4TargetCondition {
 	return NewCondition(
-		corev1alpha1.P4_TARGET_CONDITION_READY,
+		corev1alpha1.P4TargetConditionReady,
 		status, reason, message)
 }
 
@@ -31,7 +31,7 @@ func NewCondition(
 
 func GetReadyCondition(p4target *corev1alpha1.P4Target) *corev1alpha1.P4TargetCondition {
 	for i := range p4target.Status.Conditions {
-		if p4target.Status.Conditions[i].Type == corev1alpha1.P4_TARGET_CONDITION_READY {
+		if p4target.Status.Conditions[i].Type == corev1alpha1.P4TargetConditionReady {
 			return &p4target.Status.Conditions[i]
 		}
 	}

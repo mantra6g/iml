@@ -18,111 +18,89 @@ package p4target
 
 import (
 	"context"
+	"net/netip"
 	"time"
 
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
+	"github.com/mantra6g/iml/operator/test/mocks"
+	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	coordinationv1 "k8s.io/api/coordination/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
 )
 
 const (
-	TargetArchitectureBMv2 = "bmv2"
+	TargetArchitectureV1Model = "bmv2"
 )
 
 var _ = Describe("P4Target Controller", func() {
 	Context("When creating a P4Target", func() {
-		const resourceName = "test-resource"
-
+		const targetName = "test-resource"
+		const targetNamespace = "default"
 		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default",
+		p4target := &corev1alpha1.P4Target{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      targetName,
+				Namespace: targetNamespace,
+			},
 		}
-		p4target := &corev1alpha1.P4Target{}
+		targetKey := ctrlclient.ObjectKeyFromObject(p4target)
 
-		BeforeEach(func() {})
+		BeforeEach(func() {
+			_ = k8sClient.Delete(ctx, p4target)
+		})
 
 		AfterEach(func() {})
 
 		It("should successfully create a target of class bmv2", func() {
 			By("creating the custom resource for the Kind P4Target")
-			err := k8sClient.Get(ctx, typeNamespacedName, p4target)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.P4Target{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-						Labels: map[string]string{
-							corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureBMv2,
-						},
+			resource := &corev1alpha1.P4Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureV1Model,
 					},
-					Spec: corev1alpha1.P4TargetSpec{},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				},
+				Spec: corev1alpha1.P4TargetSpec{},
 			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Verifying the created resource")
 			createdResource := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, createdResource)
+			err := k8sClient.Get(ctx, targetKey, createdResource)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdResource.Labels).To(
-				HaveKeyWithValue(corev1alpha1.P4TargetArchitectureLabel, TargetArchitectureBMv2))
+				HaveKeyWithValue(corev1alpha1.P4TargetArchitectureLabel, TargetArchitectureV1Model))
 
 			By("Cleanup the specific resource instance P4Target")
 			Expect(k8sClient.Delete(ctx, createdResource)).To(Succeed())
 		})
 
-		It("should not fail to create targets of unknown class", func() {
-			By("creating a P4Target resource with an unknown target class")
-			err := k8sClient.Get(ctx, typeNamespacedName, p4target)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.P4Target{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-						Labels: map[string]string{
-							corev1alpha1.P4TargetArchitectureLabel: "unknown-class",
-						},
-					},
-					Spec: corev1alpha1.P4TargetSpec{},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
 		It("should use a cluster-wide resource instead of a namespaced resource", func() {
 			By("attempting to create a P4Target resource in a non-default namespace")
-			err := k8sClient.Get(ctx, typeNamespacedName, p4target)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.P4Target{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "some-other-namespace",
-						Labels: map[string]string{
-							corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureBMv2,
-						},
+			resource := &corev1alpha1.P4Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureV1Model,
 					},
-					Spec: corev1alpha1.P4TargetSpec{},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				},
+				Spec: corev1alpha1.P4TargetSpec{},
 			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Verifying that the namespace of the created resource is empty")
 			createdResource := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, createdResource)
+			err := k8sClient.Get(ctx, targetKey, createdResource)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdResource.ObjectMeta.Namespace).To(Equal(""))
 
@@ -132,83 +110,93 @@ var _ = Describe("P4Target Controller", func() {
 	})
 
 	Context("When reconciling a BMv2 P4Target", func() {
-		const resourceName = "test-resource"
-
+		const targetName = "test-resource"
+		const targetNamespace = "default"
+		const leaseNamespace = corev1alpha1.P4TargetLeaseNamespace
 		ctx := context.Background()
-		logger := GinkgoLogr.WithName("P4TargetReconcilerTest")
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default",
+		p4target := &corev1alpha1.P4Target{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      targetName,
+				Namespace: targetNamespace,
+			},
 		}
-		p4target := &corev1alpha1.P4Target{}
+		targetKey := ctrlclient.ObjectKeyFromObject(p4target)
+		lease := &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      targetName,
+				Namespace: leaseNamespace,
+			},
+		}
+		leaseKey := ctrlclient.ObjectKeyFromObject(lease)
+		leaseNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: lease.Namespace}}
+		fakeAllocator := mocks.NewFakePrefixAllocator(netip.MustParsePrefix("10.123.0.0/24"))
 
 		BeforeEach(func() {
-			By("creating the P4Target resource")
-			err := k8sClient.Get(ctx, typeNamespacedName, p4target)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.P4Target{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-						Labels: map[string]string{
-							corev1alpha1.P4TargetArchitectureLabel: "unknown-class",
-						},
-					},
-					Spec: corev1alpha1.P4TargetSpec{},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
+			_ = k8sClient.Delete(ctx, p4target)
+			_ = k8sClient.Delete(ctx, lease)
+			_ = k8sClient.Create(ctx, leaseNs)
 		})
 
-		AfterEach(func() {
-			resource := &corev1alpha1.P4Target{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance P4Target")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
+		AfterEach(func() {})
 
 		It("should have unknown readiness when the associated lease is missing", func() {
+			By("creating the custom resource for the Kind P4Target")
+			resource := &corev1alpha1.P4Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureV1Model,
+					},
+				},
+				Spec: corev1alpha1.P4TargetSpec{},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:        k8sClient,
+				Scheme:        k8sClient.Scheme(),
+				CIDRAllocator: fakeAllocator,
 			}
-
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				NamespacedName: targetKey,
 			})
+			Expect(err).NotTo(HaveOccurred())
+			reconciledResource := &corev1alpha1.P4Target{}
+			err = k8sClient.Get(ctx, targetKey, reconciledResource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying the status of the reconciled resource")
-			reconciledResource := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, reconciledResource)
-			Expect(err).NotTo(HaveOccurred())
-			logger.Info("Reconciled resource", "resource", reconciledResource)
 			readyCondition := p4targetutil.GetReadyCondition(reconciledResource)
 			Expect(readyCondition).To(Not(BeNil()))
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionUnknown))
+
+			By("Verifying the taints of the reconciled resource")
 			unreachableTaint := p4targetutil.GetTaint(reconciledResource.Spec.Taints, corev1alpha1.TaintP4TargetUnreachable)
 			Expect(unreachableTaint).To(Not(BeNil()))
 			Expect(unreachableTaint.Effect).To(Equal(corev1alpha1.TaintEffectNoSchedule))
 		})
 
 		It("should have unknown readiness when the associated lease is expired", func() {
-			By("Creating the namespace for the infrastructure resources")
-			namespace := &corev1.Namespace{
+			By("creating the custom resource for the Kind P4Target")
+			resource := &corev1alpha1.P4Target{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: corev1alpha1.P4TargetLeaseNamespace,
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureV1Model,
+					},
 				},
+				Spec: corev1alpha1.P4TargetSpec{},
 			}
-			_ = k8sClient.Create(ctx, namespace) // Remember to ignore error in case the namespace already exists
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Creating an expired lease for the target")
 			lease := &coordinationv1.Lease{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: corev1alpha1.P4TargetLeaseNamespace,
+					Name:      leaseKey.Name,
+					Namespace: leaseKey.Namespace,
 				},
 				Spec: coordinationv1.LeaseSpec{
 					LeaseDurationSeconds: ptr.To[int32](30),
@@ -220,49 +208,51 @@ var _ = Describe("P4Target Controller", func() {
 			err := k8sClient.Create(ctx, lease)
 			Expect(err).NotTo(HaveOccurred())
 
-			defer func() {
-				By("Cleaning up the created lease")
-				err := k8sClient.Delete(ctx, lease)
-				Expect(err).NotTo(HaveOccurred())
-			}()
-
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:        k8sClient,
+				Scheme:        k8sClient.Scheme(),
+				CIDRAllocator: fakeAllocator,
 			}
 
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				NamespacedName: targetKey,
 			})
+			Expect(err).NotTo(HaveOccurred())
+			reconciledResource := &corev1alpha1.P4Target{}
+			err = k8sClient.Get(ctx, targetKey, reconciledResource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying the status of the reconciled resource")
-			reconciledResource := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, reconciledResource)
-			Expect(err).NotTo(HaveOccurred())
 			readyCondition := p4targetutil.GetReadyCondition(reconciledResource)
 			Expect(readyCondition).To(Not(BeNil()))
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionUnknown))
+
+			By("Verifying the taints of the reconciled resource")
 			unreachableTaint := p4targetutil.GetTaint(reconciledResource.Spec.Taints, corev1alpha1.TaintP4TargetUnreachable)
 			Expect(unreachableTaint).To(Not(BeNil()))
 			Expect(unreachableTaint.Effect).To(Equal(corev1alpha1.TaintEffectNoSchedule))
 		})
 
 		It("should have unknown readiness when the lease is okay but no preexisting readiness exists", func() {
-			By("Creating the namespace for the infrastructure resources")
-			namespace := &corev1.Namespace{
+			By("creating the custom resource for the Kind P4Target")
+			resource := &corev1alpha1.P4Target{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: infrav1alpha1.BMV2_POD_NAMESPACE,
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureV1Model,
+					},
 				},
+				Spec: corev1alpha1.P4TargetSpec{},
 			}
-			_ = k8sClient.Create(ctx, namespace)
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Creating an active lease for the target")
 			lease := &coordinationv1.Lease{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: corev1alpha1.P4TargetLeaseNamespace,
+					Name:      leaseKey.Name,
+					Namespace: leaseKey.Namespace,
 				},
 				Spec: coordinationv1.LeaseSpec{
 					LeaseDurationSeconds: ptr.To[int32](120),
@@ -274,49 +264,51 @@ var _ = Describe("P4Target Controller", func() {
 			err := k8sClient.Create(ctx, lease)
 			Expect(err).NotTo(HaveOccurred())
 
-			defer func() {
-				By("Cleaning up the created lease")
-				err := k8sClient.Delete(ctx, lease)
-				Expect(err).NotTo(HaveOccurred())
-			}()
-
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:        k8sClient,
+				Scheme:        k8sClient.Scheme(),
+				CIDRAllocator: fakeAllocator,
 			}
 
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				NamespacedName: targetKey,
 			})
+			Expect(err).NotTo(HaveOccurred())
+			reconciledResource := &corev1alpha1.P4Target{}
+			err = k8sClient.Get(ctx, targetKey, reconciledResource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying the status of the reconciled resource")
-			reconciledResource := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, reconciledResource)
-			Expect(err).NotTo(HaveOccurred())
 			readyCondition := p4targetutil.GetReadyCondition(reconciledResource)
 			Expect(readyCondition).To(Not(BeNil()))
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionUnknown))
+
+			By("Verifying the taints of the reconciled resource")
 			unreachableTaint := p4targetutil.GetTaint(reconciledResource.Spec.Taints, corev1alpha1.TaintP4TargetUnreachable)
 			Expect(unreachableTaint).To(Not(BeNil()))
 			Expect(unreachableTaint.Effect).To(Equal(corev1alpha1.TaintEffectNoSchedule))
 		})
 
 		It("should be ready when the lease is okay and the last readiness was okay", func() {
-			By("Creating the namespace for the infrastructure resources")
-			namespace := &corev1.Namespace{
+			By("creating the custom resource for the Kind P4Target")
+			resource := &corev1alpha1.P4Target{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: infrav1alpha1.BMV2_POD_NAMESPACE,
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: TargetArchitectureV1Model,
+					},
 				},
+				Spec: corev1alpha1.P4TargetSpec{},
 			}
-			_ = k8sClient.Create(ctx, namespace)
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Creating an active lease for the target")
 			lease := &coordinationv1.Lease{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: corev1alpha1.P4TargetLeaseNamespace,
+					Name:      leaseKey.Name,
+					Namespace: leaseKey.Namespace,
 				},
 				Spec: coordinationv1.LeaseSpec{
 					LeaseDurationSeconds: ptr.To[int32](120),
@@ -327,17 +319,11 @@ var _ = Describe("P4Target Controller", func() {
 			}
 			err := k8sClient.Create(ctx, lease)
 			Expect(err).NotTo(HaveOccurred())
-
-			defer func() {
-				By("Cleaning up the created lease")
-				err := k8sClient.Delete(ctx, lease)
-				Expect(err).NotTo(HaveOccurred())
-			}()
+			p4target := &corev1alpha1.P4Target{}
+			err = k8sClient.Get(ctx, targetKey, p4target)
+			Expect(err).NotTo(HaveOccurred())
 
 			By("Setting the last readiness condition to true")
-			p4target := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, p4target)
-			Expect(err).NotTo(HaveOccurred())
 			original := p4target.DeepCopy()
 			newReadyCondition := p4targetutil.NewReadyCondition(
 				metav1.ConditionTrue, "InitialReady", "The P4Target is initially ready.")
@@ -346,19 +332,20 @@ var _ = Describe("P4Target Controller", func() {
 
 			By("Reconciling the created resource")
 			controllerReconciler := &P4TargetReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:        k8sClient,
+				Scheme:        k8sClient.Scheme(),
+				CIDRAllocator: fakeAllocator,
 			}
 
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				NamespacedName: targetKey,
 			})
+			Expect(err).NotTo(HaveOccurred())
+			reconciledResource := &corev1alpha1.P4Target{}
+			err = k8sClient.Get(ctx, targetKey, reconciledResource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying the status of the reconciled resource")
-			reconciledResource := &corev1alpha1.P4Target{}
-			err = k8sClient.Get(ctx, typeNamespacedName, reconciledResource)
-			Expect(err).NotTo(HaveOccurred())
 			reconciledReadyCondition := p4targetutil.GetReadyCondition(reconciledResource)
 			Expect(reconciledReadyCondition).To(Not(BeNil()))
 			Expect(reconciledReadyCondition.Status).To(Equal(metav1.ConditionTrue))

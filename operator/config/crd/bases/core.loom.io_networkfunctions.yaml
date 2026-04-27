@@ -1328,6 +1328,10 @@ spec:
               phase:
                 description: Phase indicates the current phase of the NetworkFunction
                 type: string
+              reason:
+                description: Reason provides additional information about why the
+                  NetworkFunction is in its current phase.
+                type: string
             type: object
         required:
         - spec

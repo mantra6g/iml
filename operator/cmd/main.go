@@ -194,7 +194,7 @@ func main() {
 		})
 	}
 
-	var clusterCIDRv4Allocator, clusterCIDRv6Allocator *ipam.PrefixAllocator
+	var clusterCIDRv4Allocator, clusterCIDRv6Allocator ipam.PrefixAllocator
 	clusterCIDRConfig, err := envutils.ParseClusterCIDRConfig()
 	if err != nil {
 		setupLog.Error(err, "Failed to parse cluster CIDR configuration")

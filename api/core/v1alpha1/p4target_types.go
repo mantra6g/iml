@@ -86,7 +86,7 @@ const (
 type P4TargetConditionType string
 
 const (
-	P4_TARGET_CONDITION_READY P4TargetConditionType = "Ready"
+	P4TargetConditionReady P4TargetConditionType = "Ready"
 )
 
 // P4TargetCondition represents the state of a specific aspect of the P4 target,

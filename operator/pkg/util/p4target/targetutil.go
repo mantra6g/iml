@@ -8,7 +8,7 @@ import (
 // IsTargetReady returns true if a target is ready; false otherwise.
 func IsTargetReady(target *v1alpha1.P4Target) bool {
 	for _, c := range target.Status.Conditions {
-		if c.Type == v1alpha1.P4_TARGET_CONDITION_READY {
+		if c.Type == v1alpha1.P4TargetConditionReady {
 			return c.Status == metav1.ConditionTrue
 		}
 	}

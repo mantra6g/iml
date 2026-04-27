@@ -34,8 +34,8 @@ import (
 type LoomNodeReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
-	NodeCIDRv4Allocator *ipam.PrefixAllocator
-	NodeCIDRv6Allocator *ipam.PrefixAllocator
+	NodeCIDRv4Allocator ipam.PrefixAllocator
+	NodeCIDRv6Allocator ipam.PrefixAllocator
 }
 
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete

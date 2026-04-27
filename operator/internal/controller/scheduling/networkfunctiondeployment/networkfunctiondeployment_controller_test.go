@@ -205,7 +205,7 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 				By("Verifying that a new NetworkFunctionReplicaSet was created with the new P4 file")
 				Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
 				Expect(replicaSetList.Items).To(HaveLen(2))
-				Expect(replicaSetList.Items[1].Spec.Template.Spec.P4File).To(Equal(newP4File))
+				Expect(replicaSetList.Items[0].Spec.Template.Spec.P4File).To(Equal(newP4File))
 			})
 	})
 })

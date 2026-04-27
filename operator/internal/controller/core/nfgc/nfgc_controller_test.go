@@ -69,13 +69,15 @@ func newNetworkFunction(name string, phase corev1alpha1.NetworkFunctionPhase, ta
 }
 
 func createNFWithStatus(nf *corev1alpha1.NetworkFunction) {
-	Expect(k8sClient.Create(ctx, nf)).To(Succeed())
+	nfStatus := nf.Status
+	Expect(k8sClient.Create(ctx, nf)).To(Succeed()) // This will delete the original status
+	nf.Status = nfStatus                            // restore it here
 	Eventually(func() error {
 		created := &corev1alpha1.NetworkFunction{}
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: nf.Name, Namespace: nf.Namespace}, created); err != nil {
 			return err
 		}
-		created.Status = nf.Status
+		created.Status = nfStatus
 		return k8sClient.Status().Update(ctx, created)
 	}).Should(Succeed())
 }
@@ -88,12 +90,12 @@ func createTarget(name string, ready bool, outOfService bool) *corev1alpha1.P4Ta
 	target := &corev1alpha1.P4Target{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec:       corev1alpha1.P4TargetSpec{},
-		Status: corev1alpha1.P4TargetStatus{
-			Conditions: []corev1alpha1.P4TargetCondition{{
-				Type:   corev1alpha1.P4_TARGET_CONDITION_READY,
-				Status: conditionStatus,
-			}},
-		},
+	}
+	targetStatus := corev1alpha1.P4TargetStatus{
+		Conditions: []corev1alpha1.P4TargetCondition{{
+			Type:   corev1alpha1.P4TargetConditionReady,
+			Status: conditionStatus,
+		}},
 	}
 	if outOfService {
 		target.Spec.Taints = []corev1alpha1.Taint{{
@@ -102,15 +104,11 @@ func createTarget(name string, ready bool, outOfService bool) *corev1alpha1.P4Ta
 		}}
 	}
 	Expect(k8sClient.Create(ctx, target)).To(Succeed())
-	Eventually(func() error {
-		created := &corev1alpha1.P4Target{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: target.Name}, created); err != nil {
-			return err
-		}
-		created.Status = target.Status
-		return k8sClient.Status().Update(ctx, created)
-	}).Should(Succeed())
-	return target
+	created := &corev1alpha1.P4Target{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: target.Name}, created)).To(Succeed())
+	created.Status = targetStatus
+	Expect(k8sClient.Status().Update(ctx, created)).To(Succeed())
+	return created
 }
 
 func forceCleanupNF(name string) {
@@ -143,6 +141,7 @@ var _ = Describe("NetworkFunctionGC Controller", func() {
 	)
 
 	newName := func(prefix string) string {
+		time.Sleep(5 * time.Millisecond)
 		return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 	}
 
@@ -237,7 +236,6 @@ var _ = Describe("NetworkFunctionGC Controller", func() {
 	It("does not delete terminating nfs when target is still ready", func() {
 		target := createTarget(newName("target-ready"), true, true)
 		cleanupP4Ts = append(cleanupP4Ts, target.Name)
-
 		nf := newNetworkFunction(newName("skip-terminating"), corev1alpha1.NetworkFunctionRunning, target.Name)
 		nf.Finalizers = []string{corev1alpha1.NetworkFunctionFinalizer}
 		cleanupNFs = append(cleanupNFs, nf.Name)
