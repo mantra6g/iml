@@ -3,8 +3,9 @@ package main
 import (
 	"bmv2-driver/api"
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
@@ -20,13 +21,16 @@ const (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil)).With("component", "bmv2-driver")
+
 	conn, err := grpc.NewClient(switchAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		logger.Error("did not connect", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			log.Printf("failed to close connection: %v", err)
+			logger.Error("failed to close connection", "error", err)
 		}
 	}()
 	c := v1.NewP4RuntimeClient(conn)
@@ -37,6 +41,7 @@ func main() {
 		DeviceID:       deviceID,
 		ElectionIDHigh: electionIDHigh,
 		ElectionIDLow:  electionIDLow,
+		Log:            logger,
 	}
 
 	// Wait for the switch and establish primary arbitration via StreamChannel.
@@ -48,7 +53,7 @@ func main() {
 	for i := 0; i < maxRetries; i++ {
 		stream, err := c.StreamChannel(context.Background())
 		if err != nil {
-			log.Printf("Switch not ready (attempt %d/%d): %v — retrying in %s", i+1, maxRetries, err, retryInterval)
+			logger.Info("switch not ready, retrying", "attempt", i+1, "max", maxRetries, "error", err, "retry_in", retryInterval)
 			time.Sleep(retryInterval)
 			continue
 		}
@@ -62,20 +67,20 @@ func main() {
 			},
 		})
 		if err != nil {
-			log.Printf("Switch not ready (attempt %d/%d): %v — retrying in %s", i+1, maxRetries, err, retryInterval)
+			logger.Info("switch not ready, retrying", "attempt", i+1, "max", maxRetries, "error", err, "retry_in", retryInterval)
 			time.Sleep(retryInterval)
 			continue
 		}
 
 		resp, err := stream.Recv()
 		if err != nil {
-			log.Printf("Switch not ready (attempt %d/%d): %v — retrying in %s", i+1, maxRetries, err, retryInterval)
+			logger.Info("switch not ready, retrying", "attempt", i+1, "max", maxRetries, "error", err, "retry_in", retryInterval)
 			time.Sleep(retryInterval)
 			continue
 		}
 
 		if arb := resp.GetArbitration(); arb == nil {
-			log.Printf("Switch not ready (attempt %d/%d): unexpected response type — retrying in %s", i+1, maxRetries, retryInterval)
+			logger.Info("switch not ready, unexpected response type, retrying", "attempt", i+1, "max", maxRetries, "retry_in", retryInterval)
 			time.Sleep(retryInterval)
 			continue
 		}
@@ -84,7 +89,7 @@ func main() {
 		go func() {
 			for {
 				if _, err := stream.Recv(); err != nil {
-					log.Printf("stream channel closed: %v", err)
+					logger.Error("stream channel closed", "error", err)
 					return
 				}
 			}
@@ -94,10 +99,11 @@ func main() {
 		break
 	}
 	if !connected {
-		log.Fatalf("Could not connect to P4 switch at %s after %d attempts", switchAddr, maxRetries)
+		logger.Error("could not connect to P4 switch after max retries", "address", switchAddr, "max_retries", maxRetries)
+		os.Exit(1)
 	}
 
-	log.Printf("Connected to P4 switch at %s (primary arbitration established)", switchAddr)
+	logger.Info("connected to P4 switch, primary arbitration established", "address", switchAddr)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", driver.HealthHandler)
@@ -107,7 +113,7 @@ func main() {
 	mux.HandleFunc("/api/p4/verify", driver.VerifyProgramHandler)
 
 	httpAddr := "0.0.0.0:8080"
-	log.Printf("Starting HTTP server on %s", httpAddr)
+	logger.Info("starting HTTP server", "address", httpAddr)
 
 	server := &http.Server{
 		Addr:    httpAddr,
@@ -115,6 +121,7 @@ func main() {
 	}
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
+		logger.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }

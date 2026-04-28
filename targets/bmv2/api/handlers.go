@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -25,6 +25,7 @@ type Driver struct {
 	DeviceID       uint64
 	ElectionIDHigh uint64
 	ElectionIDLow  uint64
+	Log            *slog.Logger
 }
 
 // HealthHandler checks if the switch is reachable
@@ -43,7 +44,7 @@ func (d *Driver) HealthHandler(w http.ResponseWriter, r *http.Request) {
 			Status: "unhealthy",
 			Switch: err.Error(),
 		}); err != nil {
-			log.Printf("failed to encode health response: %v", err)
+			d.Log.Error("failed to encode health response", "error", err)
 		}
 		return
 	}
@@ -53,7 +54,7 @@ func (d *Driver) HealthHandler(w http.ResponseWriter, r *http.Request) {
 		Status: "healthy",
 		Switch: "connected",
 	}); err != nil {
-		log.Printf("failed to encode health response: %v", err)
+		d.Log.Error("failed to encode health response", "error", err)
 	}
 }
 
@@ -78,7 +79,7 @@ func (d *Driver) ReadTableEntriesHandler(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -101,7 +102,7 @@ func (d *Driver) ReadTableEntriesHandler(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(TableEntriesResponse{TableEntries: entries}); err != nil {
-		log.Printf("failed to encode table entries response: %v", err)
+		d.Log.Error("failed to encode table entries response", "error", err)
 	}
 }
 
@@ -126,7 +127,7 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -149,7 +150,7 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(CounterDataResponse{CounterEntries: entries}); err != nil {
-		log.Printf("failed to encode counter data response: %v", err)
+		d.Log.Error("failed to encode counter data response", "error", err)
 	}
 }
 
@@ -165,7 +166,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -175,7 +176,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("invalid request: %v", err)}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -184,7 +185,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "p4_file_url is required"}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -194,7 +195,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to create temp dir: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -207,7 +208,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to download P4 file: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -218,7 +219,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to create input file: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -227,7 +228,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to write P4 file: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -250,7 +251,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("p4c compilation failed: %s", string(out))}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -260,7 +261,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read compiled JSON: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -270,7 +271,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read p4info: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -280,7 +281,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to parse p4info: " + err.Error()}); err != nil {
-			log.Printf("failed to encode error response: %v", err)
+			d.Log.Error("failed to encode error response", "error", err)
 		}
 		return
 	}
@@ -313,7 +314,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 			Error:   fmt.Sprintf("failed to deploy program: %v", err),
 			Message: "P4 program deployment failed",
 		}); err != nil {
-			log.Printf("failed to encode deployment error response: %v", err)
+			d.Log.Error("failed to encode deployment error response", "error", err)
 		}
 		return
 	}
@@ -336,7 +337,7 @@ func (d *Driver) DeployProgramHandler(w http.ResponseWriter, r *http.Request) {
 		Counters:    GetCounterMetadata(program),
 		Message:     fmt.Sprintf("P4 program successfully %s", status),
 	}); err != nil {
-		log.Printf("failed to encode deployment response: %v", err)
+		d.Log.Error("failed to encode deployment response", "error", err)
 	}
 }
 
@@ -356,7 +357,7 @@ func (d *Driver) GetProgramHandler(w http.ResponseWriter, r *http.Request) {
 			Status: "not_deployed",
 			Error:  fmt.Sprintf("failed to query switch: %v", err),
 		}); err != nil {
-			log.Printf("failed to encode get program error response: %v", err)
+			d.Log.Error("failed to encode get program error response", "error", err)
 		}
 		return
 	}
@@ -373,7 +374,7 @@ func (d *Driver) GetProgramHandler(w http.ResponseWriter, r *http.Request) {
 			Tables:      tables,
 			Counters:    counters,
 		}); err != nil {
-			log.Printf("failed to encode get program response: %v", err)
+			d.Log.Error("failed to encode get program response", "error", err)
 		}
 		return
 	}
@@ -385,7 +386,7 @@ func (d *Driver) GetProgramHandler(w http.ResponseWriter, r *http.Request) {
 			Status: "deployed",
 			Error:  "program metadata not available in driver memory",
 		}); err != nil {
-			log.Printf("failed to encode get program deployed response: %v", err)
+			d.Log.Error("failed to encode get program deployed response", "error", err)
 		}
 		return
 	}
@@ -394,7 +395,7 @@ func (d *Driver) GetProgramHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(P4ProgramResponse{
 		Status: "not_deployed",
 	}); err != nil {
-		log.Printf("failed to encode get program not deployed response: %v", err)
+		d.Log.Error("failed to encode get program not deployed response", "error", err)
 	}
 }
 
@@ -404,7 +405,7 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"}); err != nil {
-			log.Printf("failed to encode verify error response: %v", err)
+			d.Log.Error("failed to encode verify error response", "error", err)
 		}
 		return
 	}
@@ -414,7 +415,7 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("invalid request: %v", err)}); err != nil {
-			log.Printf("failed to encode verify error response: %v", err)
+			d.Log.Error("failed to encode verify error response", "error", err)
 		}
 		return
 	}
@@ -423,7 +424,7 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "no P4 program provided"}); err != nil {
-			log.Printf("failed to encode verify error response: %v", err)
+			d.Log.Error("failed to encode verify error response", "error", err)
 		}
 		return
 	}
@@ -433,7 +434,7 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("invalid P4 program: %v", err)}); err != nil {
-			log.Printf("failed to encode verify error response: %v", err)
+			d.Log.Error("failed to encode verify error response", "error", err)
 		}
 		return
 	}
@@ -459,7 +460,7 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 			Error:   fmt.Sprintf("verification failed: %v", err),
 			Message: "P4 program verification failed",
 		}); err != nil {
-			log.Printf("failed to encode verify error response: %v", err)
+			d.Log.Error("failed to encode verify error response", "error", err)
 		}
 		return
 	}
@@ -475,6 +476,6 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 		Counters:    counters,
 		Message:     fmt.Sprintf("P4 program %s verification successful (not deployed)", d.CurrentProgram.ProgramName),
 	}); err != nil {
-		log.Printf("failed to encode verify response: %v", err)
+		d.Log.Error("failed to encode verify response", "error", err)
 	}
 }
