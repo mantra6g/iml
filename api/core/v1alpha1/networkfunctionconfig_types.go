@@ -36,22 +36,89 @@ type TableConfig struct {
 type TableEntry struct {
 	// MatchFields is a list of fields to match against for this entry.
 	// +required
-	MatchFields []TypedValue `json:"matchFields"`
+	MatchFields []MatchField `json:"matchFields"`
 	// Action is the action to take if the packet matches the MatchFields.
 	// +required
 	Action ActionConfig `json:"action"`
 }
 
-type TypedValue struct {
+// MatchField determines which fields and values to match.
+// +kubebuilder:validation:AtMostOneOf:=exact;ternary;lpm;range;optional
+type MatchField struct {
 	// Name of the field to match
 	// +required
 	Name string `json:"name"`
-	// Value to of the field to match against
-	// +required
-	Value string `json:"value"`
+
 	// Type of the value
 	// +required
-	Type string `json:"type"`
+	Type MatchFieldType `json:"type"`
+
+	// Exact match on the field value.
+	// +optional
+	Exact *ParametrizedValue `json:"exact"`
+
+	// Ternary specifies a mask to
+	// +optional
+	Ternary *TernaryValue `json:"ternary"`
+
+	// LPM specifies a prefix length match on the field value.
+	// +optional
+	LPM *LPMValue `json:"lpm"`
+
+	// Range
+	// +optional
+	Range *RangeValue `json:"range"`
+
+	// Optional match on the field value. If the value is present, it will be treated as an exact match,
+	// if the value is not present, it will be treated as a wildcard.
+	// +optional
+	Optional *ParametrizedValue `json:"optional"`
+}
+
+type MatchFieldType string
+
+const (
+	ExactMatch    MatchFieldType = "Exact"
+	TernaryMatch  MatchFieldType = "Ternary"
+	LPMMatch      MatchFieldType = "LPM"
+	RangeMatch    MatchFieldType = "Range"
+	OptionalMatch MatchFieldType = "Optional"
+)
+
+type TernaryValue struct {
+	Value ParametrizedValue `json:"value"`
+	Mask  string            `json:"mask"`
+}
+
+type LPMValue struct {
+	Value ParametrizedValue `json:"value"`
+	// PrefixLen in bits
+	PrefixLen string `json:"prefixLen"`
+}
+
+type RangeValue struct {
+	Low  ParametrizedValue `json:"low"`
+	High ParametrizedValue `json:"high"`
+}
+
+// ParametrizedValue allows defining a value and the type at the same time.
+// +kubebuilder:validation:ExactlyOneOf:=rawHex;int;ipv4Address;ipv6Address;macAddress
+type ParametrizedValue struct {
+	// RawHex allows specifying hex values directly
+	// +optional
+	RawHex *string `json:"rawHex"`
+	// Int specifies integer values of arbitrary size as a string
+	// +optional
+	Int *string `json:"int"`
+	// IPv4Address specifies an IPv4 address
+	// +optional
+	IPv4Address *string `json:"ipv4Address"`
+	// IPv6Address specifies an IPv6 address
+	// +optional
+	IPv6Address *string `json:"ipv6Address"`
+	// MACAddress specifies a MAC address
+	// +optional
+	MACAddress *string `json:"macAddress"`
 }
 
 type ActionConfig struct {
@@ -60,7 +127,14 @@ type ActionConfig struct {
 	Name string `json:"name"`
 	// Parameters is a list of parameters for the action.
 	// +optional
-	Parameters []TypedValue `json:"parameters"`
+	Parameters []NamedParameter `json:"parameters"`
+}
+
+type NamedParameter struct {
+	Value ParametrizedValue `json:",inline"`
+	// Name of the parameter. This is used to identify the parameter in the action definition.
+	// +required
+	Name string `json:"name"`
 }
 
 // NetworkFunctionConfigSpec defines the desired state of NetworkFunctionConfig

@@ -229,10 +229,12 @@ func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 		podIPv6 := getPodIMLIPv6Addr(pod)
 		if podIPv4 != nil {
 			ipv4Entries = append(ipv4Entries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.TypedValue{{
-					Name:  "hdr.inner_ipv4.src_addr",
-					Value: podIPv4.String(),
-					Type:  "ipv4_address",
+				MatchFields: []corev1alpha1.MatchField{{
+					Name: "hdr.inner_ipv4.src_addr",
+					Type: corev1alpha1.ExactMatch,
+					Exact: &corev1alpha1.ParametrizedValue{
+						IPv4Address: new(podIPv4.String()),
+					},
 				}},
 				Action: corev1alpha1.ActionConfig{
 					Name: MarkAsInboundTrafficAction,
@@ -241,10 +243,12 @@ func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 		}
 		if podIPv6 != nil {
 			ipv6Entries = append(ipv6Entries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.TypedValue{{
-					Name:  "hdr.inner_ipv6.src_addr",
-					Value: podIPv6.String(),
-					Type:  "ipv6_address",
+				MatchFields: []corev1alpha1.MatchField{{
+					Name: "hdr.inner_ipv6.src_addr",
+					Type: corev1alpha1.ExactMatch,
+					Exact: &corev1alpha1.ParametrizedValue{
+						IPv6Address: new(podIPv6.String()),
+					},
 				}},
 				Action: corev1alpha1.ActionConfig{
 					Name: MarkAsInboundTrafficAction,
@@ -276,54 +280,64 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 		podIPv6 := getPodIMLIPv6Addr(pod)
 		if podIPv4 != nil {
 			ipv4LbTableEntries = append(ipv4LbTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.TypedValue{{
-					Name:  "hdr.inner_ipv4.src_addr",
-					Value: podIPv4.String(),
-					Type:  "ipv4_address",
+				MatchFields: []corev1alpha1.MatchField{{
+					Name: "hdr.inner_ipv4.src_addr",
+					Type: corev1alpha1.ExactMatch,
+					Exact: &corev1alpha1.ParametrizedValue{
+						IPv4Address: new(podIPv4.String()),
+					},
 				}},
 				Action: corev1alpha1.ActionConfig{
 					Name: MarkAsReturnTrafficAction,
 				},
 			})
 			ipv4EcmpNhTableEntries = append(ipv4EcmpNhTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.TypedValue{{
-					Name:  "meta.ecmp_select",
-					Value: strconv.Itoa(i),
-					Type:  "int",
+				MatchFields: []corev1alpha1.MatchField{{
+					Name: "meta.ecmp_select",
+					Type: corev1alpha1.ExactMatch,
+					Exact: &corev1alpha1.ParametrizedValue{
+						Int: new(strconv.Itoa(i)),
+					},
 				}},
 				Action: corev1alpha1.ActionConfig{
 					Name: SetIPv4NextHopAction,
-					Parameters: []corev1alpha1.TypedValue{{
-						Name:  "nhop_ipv4",
-						Value: podIPv4.String(),
-						Type:  "ipv4_address",
+					Parameters: []corev1alpha1.NamedParameter{{
+						Name: "nhop_ipv4",
+						Value: corev1alpha1.ParametrizedValue{
+							IPv4Address: new(podIPv4.String()),
+						},
 					}},
 				},
 			})
 		}
 		if podIPv6 != nil {
 			ipv6LbTableEntries = append(ipv6LbTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.TypedValue{{
-					Name:  "hdr.inner_ipv6.src_addr",
-					Value: podIPv6.String(),
-					Type:  "ipv6_address",
+				MatchFields: []corev1alpha1.MatchField{{
+					Name: "hdr.inner_ipv6.src_addr",
+					Type: corev1alpha1.ExactMatch,
+					Exact: &corev1alpha1.ParametrizedValue{
+						IPv6Address: new(podIPv6.String()),
+					},
 				}},
 				Action: corev1alpha1.ActionConfig{
 					Name: MarkAsReturnTrafficAction,
 				},
 			})
 			ipv6EcmpNhTableEntries = append(ipv6EcmpNhTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.TypedValue{{
-					Name:  "meta.ecmp_select",
-					Value: strconv.Itoa(i),
-					Type:  "int",
+				MatchFields: []corev1alpha1.MatchField{{
+					Name: "meta.ecmp_select",
+					Type: corev1alpha1.ExactMatch,
+					Exact: &corev1alpha1.ParametrizedValue{
+						Int: new(strconv.Itoa(i)),
+					},
 				}},
 				Action: corev1alpha1.ActionConfig{
 					Name: SetIPv6NextHopAction,
-					Parameters: []corev1alpha1.TypedValue{{
-						Name:  "nhop_ipv6",
-						Value: podIPv6.String(),
-						Type:  "ipv6_address",
+					Parameters: []corev1alpha1.NamedParameter{{
+						Name: "nhop_ipv6",
+						Value: corev1alpha1.ParametrizedValue{
+							IPv6Address: new(podIPv6.String()),
+						},
 					}},
 				},
 			})
@@ -338,20 +352,22 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 	nfConfig.Spec.Tables[ECMPGroupIPv4Table] = corev1alpha1.TableConfig{
 		DefaultAction: corev1alpha1.ActionConfig{
 			Name: SetECMPSelectIPv4Action,
-			Parameters: []corev1alpha1.TypedValue{{
-				Name:  "ecmp_count",
-				Value: strconv.Itoa(len(ipv4LbTableEntries)),
-				Type:  "int",
+			Parameters: []corev1alpha1.NamedParameter{{
+				Name: "ecmp_count",
+				Value: corev1alpha1.ParametrizedValue{
+					Int: new(strconv.Itoa(len(ipv4LbTableEntries))),
+				},
 			}},
 		},
 	}
 	nfConfig.Spec.Tables[ECMPGroupIPv6Table] = corev1alpha1.TableConfig{
 		DefaultAction: corev1alpha1.ActionConfig{
 			Name: SetECMPSelectIPv6Action,
-			Parameters: []corev1alpha1.TypedValue{{
-				Name:  "ecmp_count",
-				Value: strconv.Itoa(len(ipv6LbTableEntries)),
-				Type:  "int",
+			Parameters: []corev1alpha1.NamedParameter{{
+				Name: "ecmp_count",
+				Value: corev1alpha1.ParametrizedValue{
+					Int: new(strconv.Itoa(len(ipv6LbTableEntries))),
+				},
 			}},
 		},
 	}

@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: networkfunctionconfigs.core.loom.io
 spec:
   group: core.loom.io
@@ -55,20 +55,34 @@ spec:
                             action.
                           items:
                             properties:
+                              int:
+                                description: Int specifies integer values of arbitrary
+                                  size as a string
+                                type: string
+                              ipv4Address:
+                                description: IPv4Address specifies an IPv4 address
+                                type: string
+                              ipv6Address:
+                                description: IPv6Address specifies an IPv6 address
+                                type: string
+                              macAddress:
+                                description: MACAddress specifies a MAC address
+                                type: string
                               name:
-                                description: Name of the field to match
+                                description: Name of the parameter. This is used to
+                                  identify the parameter in the action definition.
                                 type: string
-                              type:
-                                description: Type of the value
-                                type: string
-                              value:
-                                description: Value to of the field to match against
+                              rawHex:
+                                description: RawHex allows specifying hex values directly
                                 type: string
                             required:
                             - name
-                            - type
-                            - value
                             type: object
+                            x-kubernetes-validations:
+                            - message: exactly one of the fields in [rawHex int ipv4Address
+                                ipv6Address macAddress] must be set
+                              rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                == 1'
                           type: array
                       required:
                       - name
@@ -89,21 +103,37 @@ spec:
                                   the action.
                                 items:
                                   properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
                                     name:
-                                      description: Name of the field to match
+                                      description: Name of the parameter. This is
+                                        used to identify the parameter in the action
+                                        definition.
                                       type: string
-                                    type:
-                                      description: Type of the value
-                                      type: string
-                                    value:
-                                      description: Value to of the field to match
-                                        against
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
                                       type: string
                                   required:
                                   - name
-                                  - type
-                                  - value
                                   type: object
+                                  x-kubernetes-validations:
+                                  - message: exactly one of the fields in [rawHex
+                                      int ipv4Address ipv6Address macAddress] must
+                                      be set
+                                    rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                      == 1'
                                 type: array
                             required:
                             - name
@@ -112,21 +142,231 @@ spec:
                             description: MatchFields is a list of fields to match
                               against for this entry.
                             items:
+                              description: MatchField determines which fields and
+                                values to match.
                               properties:
+                                exact:
+                                  description: Exact match on the field value.
+                                  properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
+                                      type: string
+                                  type: object
+                                  x-kubernetes-validations:
+                                  - message: exactly one of the fields in [rawHex
+                                      int ipv4Address ipv6Address macAddress] must
+                                      be set
+                                    rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                      == 1'
+                                lpm:
+                                  description: LPM specifies a prefix length match
+                                    on the field value.
+                                  properties:
+                                    prefixLen:
+                                      description: PrefixLen in bits
+                                      type: string
+                                    value:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                      x-kubernetes-validations:
+                                      - message: exactly one of the fields in [rawHex
+                                          int ipv4Address ipv6Address macAddress]
+                                          must be set
+                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                          == 1'
+                                  required:
+                                  - prefixLen
+                                  - value
+                                  type: object
                                 name:
                                   description: Name of the field to match
                                   type: string
+                                optional:
+                                  description: |-
+                                    Optional match on the field value. If the value is present, it will be treated as an exact match,
+                                    if the value is not present, it will be treated as a wildcard.
+                                  properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
+                                      type: string
+                                  type: object
+                                  x-kubernetes-validations:
+                                  - message: exactly one of the fields in [rawHex
+                                      int ipv4Address ipv6Address macAddress] must
+                                      be set
+                                    rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                      == 1'
+                                range:
+                                  description: Range
+                                  properties:
+                                    high:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                      x-kubernetes-validations:
+                                      - message: exactly one of the fields in [rawHex
+                                          int ipv4Address ipv6Address macAddress]
+                                          must be set
+                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                          == 1'
+                                    low:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                      x-kubernetes-validations:
+                                      - message: exactly one of the fields in [rawHex
+                                          int ipv4Address ipv6Address macAddress]
+                                          must be set
+                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                          == 1'
+                                  required:
+                                  - high
+                                  - low
+                                  type: object
+                                ternary:
+                                  description: Ternary specifies a mask to
+                                  properties:
+                                    mask:
+                                      type: string
+                                    value:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                      x-kubernetes-validations:
+                                      - message: exactly one of the fields in [rawHex
+                                          int ipv4Address ipv6Address macAddress]
+                                          must be set
+                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
+                                          == 1'
+                                  required:
+                                  - mask
+                                  - value
+                                  type: object
                                 type:
                                   description: Type of the value
-                                  type: string
-                                value:
-                                  description: Value to of the field to match against
                                   type: string
                               required:
                               - name
                               - type
-                              - value
                               type: object
+                              x-kubernetes-validations:
+                              - message: at most one of the fields in [exact ternary
+                                  lpm range optional] may be set
+                                rule: '[has(self.exact),has(self.ternary),has(self.lpm),has(self.range),has(self.optional)].filter(x,x==true).size()
+                                  <= 1'
                             type: array
                         required:
                         - action
