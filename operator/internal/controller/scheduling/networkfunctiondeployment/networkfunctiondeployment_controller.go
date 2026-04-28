@@ -27,9 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	nfutil "loom/internal/controller/scheduling/networkfunctiondeployment/util"
-	stringutils "loom/pkg/util/string"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	nfutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment/util"
+	stringutils "github.com/mantra6g/iml/operator/pkg/util/string"
 )
 
 // NetworkFunctionDeploymentReconciler reconciles a NetworkFunctionDeployment object
@@ -38,13 +38,10 @@ type NetworkFunctionDeploymentReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctiondeployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctiondeployments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctiondeployments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=scheduling.loom.io,resources=networkfunctionreplicasets,verbs=get;list;watch;create;update;patch;delete
-
-// RBAC permissions for Deployments
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkFunctionDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -120,16 +120,6 @@ spec:
             type: object
           status:
             description: status defines the observed state of ServiceChain
-            properties:
-              dst_app_uid:
-                description: UID of the destinatination application.
-                type: string
-              src_app_uid:
-                description: UID of the source application.
-                type: string
-            required:
-            - dst_app_uid
-            - src_app_uid
             type: object
         required:
         - spec

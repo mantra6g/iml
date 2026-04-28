@@ -19,7 +19,7 @@ package networkfunctiondeployment
 import (
 	"context"
 	"fmt"
-	"loom/pkg/util/ptr"
+	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -30,8 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	deploymenthookutil "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment/util"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	deploymenthookutil "github.com/mantra6g/iml/operator/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment/util"
 )
 
 // nolint:unused

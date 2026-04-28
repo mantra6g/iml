@@ -25,26 +25,26 @@ import (
 
 const APPLICATION_FINALIZER_LABEL = "application.loom.io/finalizer"
 
+type DualStackNetwork struct {
+	IPv4Net string `json:"inet4,omitempty"`
+	IPv6Net string `json:"inet6,omitempty"`
+}
+
 // ApplicationSpec defines the desired state of Application
 type ApplicationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of Application. Edit application_types.go to remove/update
-	// +optional
-	// Foo *string `json:"foo,omitempty"`
-
-	// Instead of letting the system generate an ID, use this field to override it
-	// +optional
-	OverrideID string `json:"override_id,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.
 type ApplicationStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Subnets is a list of subnet assignments per node
+	Subnets map[string][]DualStackNetwork `json:"subnets,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -30,8 +30,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	infrav1alpha1 "loom/api/infra/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
 )
 
 var _ = Describe("BMv2Target Controller", func() {

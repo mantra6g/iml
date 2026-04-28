@@ -1,0 +1,11 @@
+resources:
+- daemon.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: cni
+  newName: cni
+  newTag: local
+- name: daemon
+  newName: daemon
+  newTag: local

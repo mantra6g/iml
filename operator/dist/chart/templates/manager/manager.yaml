@@ -84,6 +84,9 @@ spec:
           {}
           {{- end }}
         volumeMounts:
+        - mountPath: /etc/iml/config
+          name: iml-config
+          readOnly: true
         {{- if .Values.certManager.enable }}
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: webhook-certs
@@ -98,6 +101,9 @@ spec:
       serviceAccountName: {{ include "loom-operator.resourceName" (dict "suffix" "controller-manager" "context" $) }}
       terminationGracePeriodSeconds: 10
       volumes:
+      - configMap:
+          name: {{ include "loom-operator.resourceName" (dict "suffix" "iml-config" "context" $) }}
+        name: iml-config
       {{- if .Values.certManager.enable }}
       - name: webhook-certs
         secret:

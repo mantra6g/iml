@@ -1,0 +1,30 @@
+{{- if .Values.rbacHelpers.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "loom-operator.name" . }}-operator
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "loom-operator.resourceName" (dict "suffix" "infra-loomnode-editor-role" "context" $) }}
+rules:
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infra.loom.io
+  resources:
+  - loomnodes/status
+  verbs:
+  - get
+{{- end }}

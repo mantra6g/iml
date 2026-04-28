@@ -7,4 +7,6 @@ resources:
 - scheduling_v1alpha1_networkfunctionreplicaset.yaml
 - core_v1alpha1_networkfunction.yaml
 - infra_v1alpha1_bmv2target.yaml
+- infra_v1alpha1_loomnode.yaml
+- core_v1alpha1_networkfunctionconfig.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

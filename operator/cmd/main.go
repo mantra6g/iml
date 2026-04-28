@@ -19,11 +19,14 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	webhookschedulingv1alpha1 "loom/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 	"os"
 	"path/filepath"
 
-	rsutil "loom/internal/controller/scheduling/networkfunctionreplicaset/util"
+	webhookschedulingv1alpha1 "github.com/mantra6g/iml/operator/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
+
+	rsutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset/util"
+	"github.com/mantra6g/iml/operator/pkg/ipam"
+	envutils "github.com/mantra6g/iml/operator/pkg/util/env"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -40,18 +43,16 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"loom/internal/controller/core/application"
-	"loom/internal/controller/core/networkfunction"
-	"loom/internal/controller/core/p4target"
-	"loom/internal/controller/core/servicechain"
-	"loom/internal/controller/infra/bmv2target"
-	"loom/internal/controller/scheduling/networkfunctiondeployment"
-	"loom/internal/controller/scheduling/networkfunctionreplicaset"
+	"github.com/mantra6g/iml/operator/internal/controller/core/networkfunction"
+	"github.com/mantra6g/iml/operator/internal/controller/core/p4target"
+	"github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target"
+	"github.com/mantra6g/iml/operator/internal/controller/infra/loomnode"
+	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment"
+	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	infrav1alpha1 "loom/api/infra/v1alpha1"
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	"loom/pkg/southapi"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -193,6 +194,28 @@ func main() {
 		})
 	}
 
+	var clusterCIDRv4Allocator, clusterCIDRv6Allocator *ipam.PrefixAllocator
+	clusterCIDRConfig, err := envutils.ParseClusterCIDRConfig()
+	if err != nil {
+		setupLog.Error(err, "Failed to parse cluster CIDR configuration")
+		os.Exit(1)
+	}
+	ipv4Enabled := clusterCIDRConfig.ClusterPoolIPv4CIDR.IsValid()
+	if ipv4Enabled {
+		clusterCIDRv4Allocator, err = ipam.NewPrefixAllocator(
+			clusterCIDRConfig.ClusterPoolIPv4CIDR, int(clusterCIDRConfig.ClusterPoolIPv4MaskSize))
+		if err != nil {
+			setupLog.Error(err, "Failed to initialize cluster IPv4 CIDR allocator")
+			os.Exit(1)
+		}
+	}
+	clusterCIDRv6Allocator, err = ipam.NewPrefixAllocator(
+		clusterCIDRConfig.ClusterPoolIPv6CIDR, int(clusterCIDRConfig.ClusterPoolIPv6MaskSize))
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize cluster IPv6 CIDR allocator")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -217,31 +240,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = southapi.InitializeSouthboundAPI(ctrl.Log.WithName("south-api"))
-	if err != nil {
-		setupLog.Error(err, "unable to initialize southbound API")
-		os.Exit(1)
-	}
-
-	if err := (&application.ApplicationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Application")
-		os.Exit(1)
-	}
 	if err := (&networkfunctiondeployment.NetworkFunctionDeploymentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunctionDeployment")
-		os.Exit(1)
-	}
-	if err := (&servicechain.ServiceChainReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ServiceChain")
 		os.Exit(1)
 	}
 	if err := (&p4target.P4TargetReconciler{
@@ -280,6 +283,15 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "NetworkFunctionDeployment")
 			os.Exit(1)
 		}
+	}
+	if err := (&loomnode.LoomNodeReconciler{
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		NodeCIDRv4Allocator: clusterCIDRv4Allocator,
+		NodeCIDRv6Allocator: clusterCIDRv6Allocator,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LoomNode")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
