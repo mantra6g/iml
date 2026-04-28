@@ -20,7 +20,7 @@ metadata:
   labels:
     nf: logger
 spec:
-  p4Code: "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4"
   targetSelector:
     p4target.loom.io/arch: v1-model
 ---
@@ -50,7 +50,8 @@ spec:
     name: web-server
     namespace: default
   functions:
-  - nf: logger
+    - matchLabels:
+        nf: logger
 ---
 apiVersion: apps/v1
 kind: Deployment

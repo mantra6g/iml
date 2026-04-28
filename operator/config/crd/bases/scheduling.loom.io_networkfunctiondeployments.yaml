@@ -162,11 +162,8 @@ spec:
                         properties:
                           name:
                             type: string
-                          namespace:
-                            type: string
                         required:
                         - name
-                        - namespace
                         type: object
                       controlPlane:
                         description: |-
@@ -1405,7 +1402,7 @@ spec:
                           where this NetworkFunction instance should be scheduled.
                           If not specified, the scheduler will automatically select a suitable P4Target based on the TargetSelector.
                         type: string
-                      targetselector:
+                      targetSelector:
                         additionalProperties:
                           type: string
                         description: TargetSelector is used to select P4 targets based

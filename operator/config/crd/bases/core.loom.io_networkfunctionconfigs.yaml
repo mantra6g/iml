@@ -78,11 +78,6 @@ spec:
                             required:
                             - name
                             type: object
-                            x-kubernetes-validations:
-                            - message: exactly one of the fields in [rawHex int ipv4Address
-                                ipv6Address macAddress] must be set
-                              rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                == 1'
                           type: array
                       required:
                       - name
@@ -128,12 +123,6 @@ spec:
                                   required:
                                   - name
                                   type: object
-                                  x-kubernetes-validations:
-                                  - message: exactly one of the fields in [rawHex
-                                      int ipv4Address ipv6Address macAddress] must
-                                      be set
-                                    rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                      == 1'
                                 type: array
                             required:
                             - name
@@ -166,12 +155,6 @@ spec:
                                         directly
                                       type: string
                                   type: object
-                                  x-kubernetes-validations:
-                                  - message: exactly one of the fields in [rawHex
-                                      int ipv4Address ipv6Address macAddress] must
-                                      be set
-                                    rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                      == 1'
                                 lpm:
                                   description: LPM specifies a prefix length match
                                     on the field value.
@@ -204,12 +187,6 @@ spec:
                                             values directly
                                           type: string
                                       type: object
-                                      x-kubernetes-validations:
-                                      - message: exactly one of the fields in [rawHex
-                                          int ipv4Address ipv6Address macAddress]
-                                          must be set
-                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                          == 1'
                                   required:
                                   - prefixLen
                                   - value
@@ -240,12 +217,6 @@ spec:
                                         directly
                                       type: string
                                   type: object
-                                  x-kubernetes-validations:
-                                  - message: exactly one of the fields in [rawHex
-                                      int ipv4Address ipv6Address macAddress] must
-                                      be set
-                                    rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                      == 1'
                                 range:
                                   description: Range
                                   properties:
@@ -274,12 +245,6 @@ spec:
                                             values directly
                                           type: string
                                       type: object
-                                      x-kubernetes-validations:
-                                      - message: exactly one of the fields in [rawHex
-                                          int ipv4Address ipv6Address macAddress]
-                                          must be set
-                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                          == 1'
                                     low:
                                       description: ParametrizedValue allows defining
                                         a value and the type at the same time.
@@ -305,12 +270,6 @@ spec:
                                             values directly
                                           type: string
                                       type: object
-                                      x-kubernetes-validations:
-                                      - message: exactly one of the fields in [rawHex
-                                          int ipv4Address ipv6Address macAddress]
-                                          must be set
-                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                          == 1'
                                   required:
                                   - high
                                   - low
@@ -345,12 +304,6 @@ spec:
                                             values directly
                                           type: string
                                       type: object
-                                      x-kubernetes-validations:
-                                      - message: exactly one of the fields in [rawHex
-                                          int ipv4Address ipv6Address macAddress]
-                                          must be set
-                                        rule: '[has(self.rawHex),has(self.int),has(self.ipv4Address),has(self.ipv6Address),has(self.macAddress)].filter(x,x==true).size()
-                                          == 1'
                                   required:
                                   - mask
                                   - value
@@ -362,11 +315,6 @@ spec:
                               - name
                               - type
                               type: object
-                              x-kubernetes-validations:
-                              - message: at most one of the fields in [exact ternary
-                                  lpm range optional] may be set
-                                rule: '[has(self.exact),has(self.ternary),has(self.lpm),has(self.range),has(self.optional)].filter(x,x==true).size()
-                                  <= 1'
                             type: array
                         required:
                         - action

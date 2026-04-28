@@ -30,7 +30,7 @@ type TableConfig struct {
 
 	// DefaultAction is the action to execute whenever there is no match
 	// +optional
-	DefaultAction ActionConfig `json:"defaultAction"`
+	DefaultAction *ActionConfig `json:"defaultAction"`
 }
 
 type TableEntry struct {
@@ -43,7 +43,6 @@ type TableEntry struct {
 }
 
 // MatchField determines which fields and values to match.
-// +kubebuilder:validation:AtMostOneOf:=exact;ternary;lpm;range;optional
 type MatchField struct {
 	// Name of the field to match
 	// +required
@@ -102,7 +101,6 @@ type RangeValue struct {
 }
 
 // ParametrizedValue allows defining a value and the type at the same time.
-// +kubebuilder:validation:ExactlyOneOf:=rawHex;int;ipv4Address;ipv6Address;macAddress
 type ParametrizedValue struct {
 	// RawHex allows specifying hex values directly
 	// +optional

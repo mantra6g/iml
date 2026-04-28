@@ -6,71 +6,60 @@
 # Build stages
 # ============================================================================
 
-# Common builder for CNI (loom) - golang:1.24
-FROM golang:1.24 AS cni-builder
-ARG TARGETOS
-ARG TARGETARCH
-
-WORKDIR /workspace
-COPY cni/go.mod cni/go.mod
-COPY cni/go.sum cni/go.sum
-RUN cd cni && go mod download
-
-COPY cni/ cni/
-
-RUN cd cni && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ../loom cmd/main.go
-
-# ============================================================================
-# Daemon builder - golang:1.25
-FROM golang:1.25 AS daemon-builder
+# Common base build stage for all services
+FROM golang:1.26 AS base-builder
 ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /workspace
 COPY go.work go.work.sum ./
+COPY cni/go.mod cni/go.sum cni/
 COPY api/go.mod api/go.sum api/
 COPY daemon/go.mod daemon/go.sum daemon/
-RUN cd daemon && go mod download
+COPY operator/go.mod operator/go.sum operator/
+
+# Common builder for CNI (loom) - golang:1.24
+FROM golang:1.26 AS cni-builder
+ARG TARGETOS
+ARG TARGETARCH
+
+COPY --from=base-builder /workspace /workspace
+WORKDIR /workspace
+RUN cd cni && go mod download && mkdir bin
+
+COPY cni/ cni/
+
+RUN cd cni && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/loom cmd/main.go
+
+# ============================================================================
+# Daemon builder - golang:1.25
+FROM golang:1.26 AS daemon-builder
+ARG TARGETOS
+ARG TARGETARCH
+
+COPY --from=base-builder /workspace /workspace
+WORKDIR /workspace
+RUN cd daemon && go mod download && mkdir bin
 
 COPY api/ api/
 COPY daemon/ daemon/
 
-RUN cd daemon && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ../daemon cmd/main.go
+RUN cd daemon && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/daemon cmd/main.go
 
 # ============================================================================
 # Operator builder - golang:1.24
-FROM golang:1.24 AS operator-builder
+FROM golang:1.26 AS operator-builder
 ARG TARGETOS
 ARG TARGETARCH
 
+COPY --from=base-builder /workspace /workspace
 WORKDIR /workspace
-COPY go.work go.work.sum ./
-COPY api/go.mod api/go.sum api/
-COPY operator/go.mod operator/go.sum operator/
-RUN cd operator && go mod download
+RUN cd operator && go mod download && mkdir bin
 
 COPY api/ api/
 COPY operator/ operator/
 
-RUN cd operator && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ../manager cmd/main.go
-
-# ============================================================================
-# lb-control builder - golang:1.26
-FROM golang:1.26 AS lb-control-builder
-ARG TARGETOS
-ARG TARGETARCH
-
-WORKDIR /workspace
-COPY go.work go.work.sum ./
-COPY api/go.mod api/go.sum api/
-COPY examples/load-balancer/lb-control/go.mod examples/load-balancer/lb-control/go.mod
-COPY examples/load-balancer/lb-control/go.sum examples/load-balancer/lb-control/go.sum
-RUN cd examples/load-balancer/lb-control && go mod download
-
-COPY api/ api/
-COPY examples/load-balancer/lb-control/ examples/load-balancer/lb-control/
-
-RUN cd examples/load-balancer/lb-control && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ../../../lb-control cmd/main.go
+RUN cd operator && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/manager cmd/main.go
 
 # ============================================================================
 # Final images
@@ -79,28 +68,21 @@ RUN cd examples/load-balancer/lb-control && CGO_ENABLED=0 GOOS=${TARGETOS:-linux
 # CNI image (loom)
 FROM alpine:3.19 AS cni
 WORKDIR /
-COPY --from=cni-builder /workspace/loom .
+COPY --from=cni-builder /workspace/cni/bin/loom .
 ENTRYPOINT ["/loom"]
 
 # Daemon image
 FROM alpine:3.20 AS daemon
 RUN apk add --no-cache iptables iptables-legacy
 WORKDIR /
-COPY --from=daemon-builder /workspace/daemon .
+COPY --from=daemon-builder /workspace/daemon/bin/daemon .
 ENTRYPOINT ["/daemon"]
 
 # Operator image (manager)
 FROM gcr.io/distroless/static:nonroot AS operator
 WORKDIR /
-COPY --from=operator-builder /workspace/manager .
+COPY --from=operator-builder /workspace/operator/bin/manager .
 USER 65532:65532
 ENTRYPOINT ["/manager"]
-
-# lb-control image
-FROM alpine:3.20 AS lb-control
-WORKDIR /
-COPY --from=lb-control-builder /workspace/lb-control .
-ENTRYPOINT ["/lb-control"]
-
 
 

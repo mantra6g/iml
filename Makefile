@@ -89,11 +89,12 @@ docker-build-targets: ## Build docker images for the targets.
 #	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
 
 .PHONY: docker-build-examples
-docker-build-examples: docker-build-loadbalancer ## Build docker images for the examples.
-
-.PHONY: docker-build-loadbalancer
-docker-build-loadbalancer: ## Build docker image for the loadbalancer example.
-	$(CONTAINER_TOOL) build -t ${IMG_EXAMPLE_LOADBALANCER} --target loadbalancer .
+docker-build-examples: ## Build docker images for the examples.
+#docker-build-examples: docker-build-loadbalancer ## Build docker images for the examples.
+#
+#.PHONY: docker-build-loadbalancer
+#docker-build-loadbalancer: ## Build docker image for the loadbalancer example.
+#	$(CONTAINER_TOOL) build -t ${IMG_EXAMPLE_LOADBALANCER} --target loadbalancer .
 
 .PHONY: docker-push-all
 docker-push-all: ## Push all docker images.
@@ -130,7 +131,7 @@ kind-delete: ## Delete the local kind cluster.
 
 .PHONY: kind-load
 kind-load: ## Load all images into the local cluster.
-	$(KIND) load docker-image ${ALL_IMAGES} --name $(KIND_CLUSTER)
+	$(KIND) load docker-image ${IML_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
 build-installer: ## Generate a consolidated YAML with CRDs and deployment.

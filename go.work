@@ -4,7 +4,5 @@ use (
 	api
 	operator
 	daemon
-	iml-oakestra-agent
 	cni
-	examples/load-balancer/lb-control
 )

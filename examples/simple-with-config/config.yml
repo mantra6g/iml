@@ -7,9 +7,10 @@ spec:
   tables:
     log_table:
       entries:
-        - match_fields:
-            - name: hdr.inner_ipv4.src_addr
-              value: "10.123.0.1"
-              type: "ipv4_address"
+        - matchFields:
+          - name: hdr.inner_ipv4.src_addr
+            type: Exact
+            exact:
+              ipv4Address: 10.123.0.1
           action:
             name: log

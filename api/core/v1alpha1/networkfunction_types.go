@@ -84,8 +84,7 @@ type NetworkFunctionTemplate struct {
 }
 
 type NetworkFunctionConfigReference struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+	Name string `json:"name"`
 }
 
 // NetworkFunctionSpec defines the desired state of NetworkFunction
@@ -108,7 +107,7 @@ type NetworkFunctionSpec struct {
 
 	// TargetSelector is used to select P4 targets based on their supported architectures
 	// +optional
-	TargetSelector map[string]string `json:"targetselector,omitempty"`
+	TargetSelector map[string]string `json:"targetSelector,omitempty"`
 
 	// ConfigRef allows specifying a NetworkFunctionConfig resource to modify table entries
 	// +optional

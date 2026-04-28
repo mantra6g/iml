@@ -19,9 +19,10 @@ package networkfunctiondeployment
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
-
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -118,6 +119,19 @@ func (v *CustomValidator) ValidateCreate(
 		return nil, fmt.Errorf("label selector does not match template labels")
 	}
 
+	deploymentList := &appsv1.DeploymentList{}
+	err = v.Client.List(ctx, deploymentList, client.InNamespace(deployment.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range deploymentList.Items {
+		dep := &deploymentList.Items[i]
+		if dep.Name != deployment.GetName() && reflect.DeepEqual(dep.Spec.Selector, deployment.Spec.Selector) {
+			return nil, fmt.Errorf("deployment with the same selector already exists: %s", dep.Name)
+		}
+	}
+
 	return nil, nil
 }
 
@@ -127,7 +141,9 @@ func (v *CustomValidator) ValidateUpdate(
 ) (admission.Warnings, error) {
 	logger.Info("Validation for NetworkFunctionDeployment upon update", "name", newDep.GetName())
 
-	// TODO(user): fill in your validation logic upon object update.
+	if !reflect.DeepEqual(oldDep.Spec.Selector, newDep.Spec.Selector) {
+		return nil, fmt.Errorf("spec.selector is immutable and cannot be changed")
+	}
 
 	return nil, nil
 }

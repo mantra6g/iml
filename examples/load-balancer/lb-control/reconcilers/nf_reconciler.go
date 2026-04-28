@@ -350,7 +350,7 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 		Entries: ipv6LbTableEntries,
 	}
 	nfConfig.Spec.Tables[ECMPGroupIPv4Table] = corev1alpha1.TableConfig{
-		DefaultAction: corev1alpha1.ActionConfig{
+		DefaultAction: &corev1alpha1.ActionConfig{
 			Name: SetECMPSelectIPv4Action,
 			Parameters: []corev1alpha1.NamedParameter{{
 				Name: "ecmp_count",
@@ -361,7 +361,7 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 		},
 	}
 	nfConfig.Spec.Tables[ECMPGroupIPv6Table] = corev1alpha1.TableConfig{
-		DefaultAction: corev1alpha1.ActionConfig{
+		DefaultAction: &corev1alpha1.ActionConfig{
 			Name: SetECMPSelectIPv6Action,
 			Parameters: []corev1alpha1.NamedParameter{{
 				Name: "ecmp_count",
