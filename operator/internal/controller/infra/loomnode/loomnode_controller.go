@@ -19,7 +19,8 @@ package loomnode
 import (
 	"context"
 	"fmt"
-	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/ipam"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,8 +34,8 @@ import (
 type LoomNodeReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
-	NodeCIDRv4Allocator *ipam.PrefixAllocator
-	NodeCIDRv6Allocator *ipam.PrefixAllocator
+	NodeCIDRv4Allocator ipam.PrefixAllocator
+	NodeCIDRv6Allocator ipam.PrefixAllocator
 }
 
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch;create;update;patch;delete

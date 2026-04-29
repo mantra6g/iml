@@ -4,8 +4,8 @@ package routecalc
 //import (
 //	"context"
 //	"fmt"
-//	corev1alpha1 "iml-daemon/api/core/v1alpha1"
-//	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
+//	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+//	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 //	"iml-daemon/env"
 //	"iml-daemon/logger"
 //	"iml-daemon/models"

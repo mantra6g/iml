@@ -18,8 +18,9 @@ package networkfunctionreplicaset
 
 import (
 	"context"
-	"github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"time"
+
+	"github.com/mantra6g/iml/api/core/v1alpha1"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	rsutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset/util"
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 )

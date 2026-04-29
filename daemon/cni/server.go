@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	corev1alpha1 "iml-daemon/api/core/v1alpha1"
 	"iml-daemon/pkg/dataplane"
 	netutils "iml-daemon/pkg/utils/net"
+
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
 	"github.com/go-logr/logr"
 	"github.com/go-playground/validator/v10"

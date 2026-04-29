@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: networkfunctionconfigs.core.loom.io
 spec:
   group: core.loom.io
@@ -11,6 +11,10 @@ spec:
     kind: NetworkFunctionConfig
     listKind: NetworkFunctionConfigList
     plural: networkfunctionconfigs
+    shortNames:
+    - nfconf
+    - nfconfigs
+    - nfconfig
     singular: networkfunctionconfig
   scope: Namespaced
   versions:
@@ -41,10 +45,47 @@ spec:
             description: spec defines the desired state of NetworkFunctionConfig
             properties:
               tables:
-                description: Tables defines the configurations for each of the tables
-                  in the network function
-                items:
+                additionalProperties:
                   properties:
+                    defaultAction:
+                      description: DefaultAction is the action to execute whenever
+                        there is no match
+                      properties:
+                        name:
+                          description: Name of the action to execute
+                          type: string
+                        parameters:
+                          description: Parameters is a list of parameters for the
+                            action.
+                          items:
+                            properties:
+                              int:
+                                description: Int specifies integer values of arbitrary
+                                  size as a string
+                                type: string
+                              ipv4Address:
+                                description: IPv4Address specifies an IPv4 address
+                                type: string
+                              ipv6Address:
+                                description: IPv6Address specifies an IPv6 address
+                                type: string
+                              macAddress:
+                                description: MACAddress specifies a MAC address
+                                type: string
+                              name:
+                                description: Name of the parameter. This is used to
+                                  identify the parameter in the action definition.
+                                type: string
+                              rawHex:
+                                description: RawHex allows specifying hex values directly
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                      required:
+                      - name
+                      type: object
                     entries:
                       description: Entries to be added to the table
                       items:
@@ -61,20 +102,30 @@ spec:
                                   the action.
                                 items:
                                   properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
                                     name:
-                                      description: Name of the field to match
+                                      description: Name of the parameter. This is
+                                        used to identify the parameter in the action
+                                        definition.
                                       type: string
-                                    type:
-                                      description: Type of the value
-                                      type: string
-                                    value:
-                                      description: Value to of the field to match
-                                        against
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
                                       type: string
                                   required:
                                   - name
-                                  - type
-                                  - value
                                   type: object
                                 type: array
                             required:
@@ -84,20 +135,189 @@ spec:
                             description: MatchFields is a list of fields to match
                               against for this entry.
                             items:
+                              description: MatchField determines which fields and
+                                values to match.
                               properties:
+                                exact:
+                                  description: Exact match on the field value.
+                                  properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
+                                      type: string
+                                  type: object
+                                lpm:
+                                  description: LPM specifies a prefix length match
+                                    on the field value.
+                                  properties:
+                                    prefixLen:
+                                      description: PrefixLen in bits
+                                      type: string
+                                    value:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                  required:
+                                  - prefixLen
+                                  - value
+                                  type: object
                                 name:
                                   description: Name of the field to match
                                   type: string
+                                optional:
+                                  description: |-
+                                    Optional match on the field value. If the value is present, it will be treated as an exact match,
+                                    if the value is not present, it will be treated as a wildcard.
+                                  properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
+                                      type: string
+                                  type: object
+                                range:
+                                  description: Range
+                                  properties:
+                                    high:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                    low:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                  required:
+                                  - high
+                                  - low
+                                  type: object
+                                ternary:
+                                  description: Ternary specifies a mask to
+                                  properties:
+                                    mask:
+                                      type: string
+                                    value:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                  required:
+                                  - mask
+                                  - value
+                                  type: object
                                 type:
                                   description: Type of the value
-                                  type: string
-                                value:
-                                  description: Value to of the field to match against
                                   type: string
                               required:
                               - name
                               - type
-                              - value
                               type: object
                             type: array
                         required:
@@ -105,13 +325,10 @@ spec:
                         - matchFields
                         type: object
                       type: array
-                    name:
-                      description: Name of the table
-                      type: string
-                  required:
-                  - name
                   type: object
-                type: array
+                description: Tables defines the configurations for each of the tables
+                  in the network function
+                type: object
             type: object
           status:
             description: status defines the observed state of NetworkFunctionConfig

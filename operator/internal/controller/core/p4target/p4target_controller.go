@@ -18,8 +18,10 @@ package p4target
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/mantra6g/iml/operator/pkg/ipam"
 	v1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,14 +34,15 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
 )
 
 // P4TargetReconciler reconciles a P4Target object
 type P4TargetReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	CIDRAllocator ipam.PrefixAllocator
 }
 
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
@@ -91,6 +94,16 @@ func (r *P4TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil {
 		logger.Error(err, "Failed to ensure readiness state for P4Target")
 		return ctrl.Result{}, err
+	}
+
+	if p4target.Spec.NfCIDR == "" {
+		original := p4target.DeepCopy()
+		nfCIDR, err := r.CIDRAllocator.Next()
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("unable to allocate CIDR for P4Target: %w", err)
+		}
+		p4target.Spec.NfCIDR = nfCIDR.String()
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.Patch(ctx, p4target, client.MergeFrom(original))
 	}
 
 	return ctrl.Result{}, nil
@@ -188,7 +201,7 @@ func (r *P4TargetReconciler) calculateReadinessCondition(target *corev1alpha1.P4
 
 	// If the lease is valid, then we can trust the existing readiness condition on the P4Target, if it exists.
 	// If it doesn't exist, then we should return an unknown readiness condition.
-	readinessCondition := p4targetutil.GetCondition(target.Status.Conditions, corev1alpha1.P4_TARGET_CONDITION_READY)
+	readinessCondition := p4targetutil.GetCondition(target.Status.Conditions, corev1alpha1.P4TargetConditionReady)
 	if readinessCondition == nil {
 		return p4targetutil.NewReadyCondition(
 			metav1.ConditionUnknown, "NoReadinessCondition", "No readiness condition found for P4Target",
@@ -264,7 +277,7 @@ func (r *P4TargetReconciler) ensureReadinessConditions(preExistingConditions []c
 	newConditions = make([]corev1alpha1.P4TargetCondition, 0, len(preExistingConditions))
 	copy(newConditions, preExistingConditions)
 
-	existingReadyCondition := p4targetutil.GetCondition(newConditions, corev1alpha1.P4_TARGET_CONDITION_READY)
+	existingReadyCondition := p4targetutil.GetCondition(newConditions, corev1alpha1.P4TargetConditionReady)
 	if existingReadyCondition == nil {
 		// If there is no existing readiness newCond, then we should add the new newCond to the target's status
 		return append(newConditions, newCond), true

@@ -26,8 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 )
 
@@ -205,7 +205,7 @@ var _ = Describe("NetworkFunctionDeployment Controller", func() {
 				By("Verifying that a new NetworkFunctionReplicaSet was created with the new P4 file")
 				Expect(k8sClient.List(ctx, replicaSetList, client.InNamespace(typeNamespacedName.Namespace))).To(Succeed())
 				Expect(replicaSetList.Items).To(HaveLen(2))
-				Expect(replicaSetList.Items[1].Spec.Template.Spec.P4File).To(Equal(newP4File))
+				Expect(replicaSetList.Items[0].Spec.Template.Spec.P4File).To(Equal(newP4File))
 			})
 	})
 })

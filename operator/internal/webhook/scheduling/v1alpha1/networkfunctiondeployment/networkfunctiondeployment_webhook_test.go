@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	// TODO (user): Add any additional imports if needed
 )
 
