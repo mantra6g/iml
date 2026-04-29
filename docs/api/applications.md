@@ -10,8 +10,8 @@ metadata:
 spec: {}
 status:
   subnets:
-    ubuntu-1: ["10.0.0.0/24", "10.0.1.0/24"]
-    ubuntu-2: ["10.0.2.0/24"]
+    ubuntu-1: ["10.123.0.0/28", "10.123.0.16/28"]
+    ubuntu-2: ["10.123.2.0/28"]
 ```
 
 ## Spec fields
@@ -26,6 +26,7 @@ metadata:
       [{
         "name": "iml-cni",
         "cni-args": {
+          "app_type":      "application",
           "app_name":      "<application-name>",
           "app_namespace": "<application-namespace>"
         }

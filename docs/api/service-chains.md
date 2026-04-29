@@ -15,8 +15,10 @@ spec:
     name: application-2
     namespace: default
   functions:
-    - nf: firewall
-    - nf: load-balancer
+  - matchLabels:
+      nf: firewall
+  - matchLabels:
+      nf: load-balancer
 status: {}
 ```
 
