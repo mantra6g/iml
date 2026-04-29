@@ -41,14 +41,22 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of Application
-            properties:
-              override_id:
-                description: Instead of letting the system generate an ID, use this
-                  field to override it
-                type: string
             type: object
           status:
             description: status defines the observed state of Application
+            properties:
+              subnets:
+                additionalProperties:
+                  items:
+                    properties:
+                      inet4:
+                        type: string
+                      inet6:
+                        type: string
+                    type: object
+                  type: array
+                description: Subnets is a list of subnet assignments per node
+                type: object
             type: object
         required:
         - spec

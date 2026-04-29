@@ -61,35 +61,82 @@ func GetTableMetadata(program *P4Program) []TableMetadata {
 		return []TableMetadata{}
 	}
 
+	// Build action lookup by ID for efficient resolution.
+	actionByID := make(map[uint32]*p4configv1.Action, len(program.P4Info.Actions))
+	for _, a := range program.P4Info.Actions {
+		if a.Preamble != nil {
+			actionByID[a.Preamble.Id] = a
+		}
+	}
+
 	tables := make([]TableMetadata, 0, len(program.P4Info.Tables))
 	for _, t := range program.P4Info.Tables {
 		if t.Preamble == nil {
 			continue
 		}
-		matchKeys := make([]string, 0, len(t.MatchFields))
+
+		matchFields := make([]MatchFieldMetadata, 0, len(t.MatchFields))
 		for _, mf := range t.MatchFields {
-			if mf.Name != "" {
-				matchKeys = append(matchKeys, mf.Name)
+			matchType := ""
+			if mt, ok := mf.GetMatch().(*p4configv1.MatchField_MatchType_); ok {
+				matchType = mt.MatchType.String()
 			}
+			matchFields = append(matchFields, MatchFieldMetadata{
+				FieldID:   mf.Id,
+				FieldName: mf.Name,
+				MatchType: matchType,
+				Bitwidth:  mf.Bitwidth,
+			})
 		}
-		actions := make([]string, 0, len(t.ActionRefs))
+
+		actions := make([]ActionMetadata, 0, len(t.ActionRefs))
 		for _, ar := range t.ActionRefs {
-			for _, a := range program.P4Info.Actions {
-				if a.Preamble != nil && a.Preamble.Id == ar.Id {
-					actions = append(actions, a.Preamble.Name)
-					break
-				}
+			a, ok := actionByID[ar.Id]
+			if !ok {
+				continue
 			}
+			params := make([]ActionParamMetadata, 0, len(a.Params))
+			for _, p := range a.Params {
+				params = append(params, ActionParamMetadata{
+					ParamID:  p.Id,
+					Name:     p.Name,
+					Bitwidth: p.Bitwidth,
+				})
+			}
+			actions = append(actions, ActionMetadata{
+				ActionID:   a.Preamble.Id,
+				ActionName: a.Preamble.Name,
+				Params:     params,
+			})
 		}
+
 		tables = append(tables, TableMetadata{
-			TableID:   t.Preamble.Id,
-			TableName: t.Preamble.Name,
-			Size:      uint32(t.Size),
-			MatchKeys: matchKeys,
-			Actions:   actions,
+			TableID:     t.Preamble.Id,
+			TableName:   t.Preamble.Name,
+			Size:        uint32(t.Size),
+			MatchFields: matchFields,
+			Actions:     actions,
 		})
 	}
 	return tables
+}
+
+func GetRegisterMetadata(program *P4Program) []RegisterMetadata {
+	if program == nil || program.P4Info == nil {
+		return []RegisterMetadata{}
+	}
+	result := make([]RegisterMetadata, 0, len(program.P4Info.Registers))
+	for _, reg := range program.P4Info.Registers {
+		if reg.Preamble == nil {
+			continue
+		}
+		result = append(result, RegisterMetadata{
+			RegisterID:   reg.Preamble.Id,
+			RegisterName: reg.Preamble.Name,
+			Size:         reg.Size,
+		})
+	}
+	return result
 }
 
 func GetCounterMetadata(program *P4Program) []CounterMetadata {

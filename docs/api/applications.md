@@ -26,8 +26,8 @@ metadata:
       [{
         "name": "iml-cni",
         "cni-args": {
-          "appName":      "<application-name>",
-          "appNamespace": "<application-namespace>"
+          "app_name":      "<application-name>",
+          "app_namespace": "<application-namespace>"
         }
       }]
 ```

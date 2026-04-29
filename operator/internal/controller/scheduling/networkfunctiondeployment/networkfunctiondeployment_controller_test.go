@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	schedulingv1alpha1 "loom/api/scheduling/v1alpha1"
-	"loom/pkg/util/ptr"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 )
 
 const (

@@ -18,8 +18,9 @@ package p4target
 
 import (
 	"context"
-	"loom/pkg/util/ptr"
 	"time"
+
+	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,9 +32,9 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	corev1alpha1 "loom/api/core/v1alpha1"
-	infrav1alpha1 "loom/api/infra/v1alpha1"
-	p4targetutil "loom/internal/controller/core/p4target/util"
+	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
 )
 
 const (

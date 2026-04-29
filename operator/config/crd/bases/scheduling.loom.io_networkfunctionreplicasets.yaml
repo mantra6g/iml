@@ -111,6 +111,18 @@ spec:
                   spec:
                     description: Specification of the desired behavior of the pod.
                     properties:
+                      configRef:
+                        description: ConfigRef allows specifying a NetworkFunctionConfig
+                          resource to modify table entries
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        type: object
                       controlPlane:
                         description: |-
                           ControlPlanePod defines the template for the control plane pod

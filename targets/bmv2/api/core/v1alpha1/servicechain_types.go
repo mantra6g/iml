@@ -21,8 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const SERVICE_CHAIN_FINALIZER_LABEL = "servicechain.loom.io/finalizer"
-
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -61,12 +59,6 @@ type ServiceChainSpec struct {
 type ServiceChainStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// UID of the source application.
-	SourceAppUID types.UID `json:"src_app_uid"`
-
-	// UID of the destinatination application.
-	DestinationAppUID types.UID `json:"dst_app_uid"`
 }
 
 // +kubebuilder:object:root=true

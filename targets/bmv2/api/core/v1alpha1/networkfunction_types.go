@@ -83,6 +83,11 @@ type NetworkFunctionTemplate struct {
 	Spec NetworkFunctionSpec `json:"spec,omitempty"`
 }
 
+type NetworkFunctionConfigReference struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
 // NetworkFunctionSpec defines the desired state of NetworkFunction
 type NetworkFunctionSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -104,6 +109,10 @@ type NetworkFunctionSpec struct {
 	// TargetSelector is used to select P4 targets based on their supported architectures
 	// +optional
 	TargetSelector map[string]string `json:"targetselector,omitempty"`
+
+	// ConfigRef allows specifying a NetworkFunctionConfig resource to modify table entries
+	// +optional
+	ConfigRef *NetworkFunctionConfigReference `json:"configRef,omitempty"`
 
 	// P4File is the actual P4 program file for the network function.
 	// It can be the actual p4program encoded in base64 or
@@ -153,6 +162,9 @@ type NetworkFunctionCondition struct {
 type NetworkFunctionStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// AssignedIP is the IP address assigned to the NetworkFunction, used for routing traffic to it.
+	AssignedIP string `json:"assignedIP,omitempty"`
 
 	// ObservedGeneration is the most recent generation observed for this NetworkFunction
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
