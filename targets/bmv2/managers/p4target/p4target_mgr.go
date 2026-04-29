@@ -1,10 +1,10 @@
 package p4target
 
 import (
-	corev1alpha1 "bmv2-driver/api/core/v1alpha1"
 	"fmt"
 	"net"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

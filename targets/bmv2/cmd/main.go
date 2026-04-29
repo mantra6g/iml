@@ -1,9 +1,6 @@
 package main
 
 import (
-	corev1alpha1 "bmv2-driver/api/core/v1alpha1"
-	infrav1alpha1 "bmv2-driver/api/infra/v1alpha1"
-	schedulingv1alpha1 "bmv2-driver/api/scheduling/v1alpha1"
 	"bmv2-driver/controllers/lease"
 	"bmv2-driver/controllers/nf"
 	"bmv2-driver/controllers/p4target"
@@ -18,6 +15,9 @@ import (
 	"os"
 	"time"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
