@@ -23,6 +23,7 @@ import (
 	"context"
 	"time"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,8 +31,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	corev1alpha1 "bmv2-driver/api/core/v1alpha1"
 )
 
 // Reconciler reconciles a P4Target object
