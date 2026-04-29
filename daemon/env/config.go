@@ -39,7 +39,6 @@ type IMLConfigMap struct {
 type GlobalConfig struct {
 	IMLConfigMap
 	PodCIDR  netutils.DualStackNetwork
-	DecapSID *net.IPNet
 	NodeID   types.UID
 	NodeName string
 }

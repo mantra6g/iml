@@ -138,7 +138,6 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
 	}
-	cfg.DecapSID = rtrSubnet.DecapSID
 
 	return &Software{
 		appNet4Allocator:   net4Allocator,
@@ -184,7 +183,7 @@ func (d *Software) AddServiceChainRoutes(chain *corev1alpha1.ServiceChain, route
 		}
 		for i := range sourceAppSubnets {
 			subnet := &sourceAppSubnets[i]
-			err := subnet.AddSRv6Route(route.DestNet, route.FunctionIPs)
+			err := subnet.AddSRv6Route(route.DestNet, route.FunctionIPs, d.routingSubnet.DecapSIDv4, d.routingSubnet.DecapSIDv6)
 			if err != nil {
 				return fmt.Errorf("failed to add SRv6 route to subnet %s: %w", route.DestNet, err)
 			}

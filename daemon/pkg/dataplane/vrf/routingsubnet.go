@@ -20,7 +20,8 @@ type RoutingSubnet struct {
 	Vrf           *netlink.Vrf
 	Bridge        *netlink.Bridge
 	IP6Allocator  *dataplane.IPv6Allocator
-	DecapSID      *net.IPNet
+	DecapSIDv6    *net.IPNet
+	DecapSIDv4    *net.IPNet
 	SubnetTunnels map[SubnetCIDR]*netlink.Veth
 	Log           logr.Logger
 }
@@ -68,7 +69,7 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 		return nil, fmt.Errorf("failed to set up decap interface: %w", err)
 	}
 
-	decapSid, err := subnet.IP6Allocator.Allocate()
+	decapSidv6, err := subnet.IP6Allocator.Allocate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate decap SID: %w", err)
 	}
@@ -76,8 +77,8 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 	var flagsEndDt6Encaps [nl.SEG6_LOCAL_MAX]bool
 	flagsEndDt6Encaps[nl.SEG6_LOCAL_ACTION] = true
 	flagsEndDt6Encaps[nl.SEG6_LOCAL_TABLE] = true
-	decapRoute := &netlink.Route{
-		Dst:   decapSid,
+	decapRoutev6 := &netlink.Route{
+		Dst:   decapSidv6,
 		Table: int(routerVrf.Table),
 		Encap: &netlink.SEG6LocalEncap{
 			Flags:  flagsEndDt6Encaps,
@@ -86,13 +87,39 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 		},
 		LinkIndex: decapIface.Attrs().Index,
 	}
-	if err = netlink.RouteAdd(decapRoute); err != nil {
+	if err = netlink.RouteAdd(decapRoutev6); err != nil {
 		err = fmt.Errorf(
-			"Failed to execute `ip -6 route add %s table %d encap seg6local action End.DT6 vrftable %d dev %s`: %s",
-			decapSid.String(), routerVrf.Table, routerVrf.Table, decapIface.Attrs().Name, err)
+			"failed to execute `ip -6 route add %s table %d encap seg6local action End.DT6 vrftable %d dev %s`: %s",
+			decapSidv6.String(), routerVrf.Table, routerVrf.Table, decapIface.Attrs().Name, err)
 		return nil, fmt.Errorf("failed to add decap route: %w", err)
 	}
-	subnet.DecapSID = decapSid
+	decapSidv4, err := subnet.IP6Allocator.Allocate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate decap SID: %w", err)
+	}
+	// ip -6 route add <decap sid> table <router vrf table> encap seg6local action End.DT4 table <router vrf table> dev <decap iface>
+	var flagsEndDt4Encaps [nl.SEG6_LOCAL_MAX]bool
+	flagsEndDt4Encaps[nl.SEG6_LOCAL_ACTION] = true
+	flagsEndDt4Encaps[nl.SEG6_LOCAL_TABLE] = true
+	decapRoutev4 := &netlink.Route{
+		Dst:   decapSidv4,
+		Table: int(routerVrf.Table),
+		Encap: &netlink.SEG6LocalEncap{
+			Flags:  flagsEndDt6Encaps,
+			Action: nl.SEG6_LOCAL_ACTION_END_DT4,
+			Table:  int(routerVrf.Table),
+		},
+		LinkIndex: decapIface.Attrs().Index,
+	}
+	if err = netlink.RouteAdd(decapRoutev4); err != nil {
+		err = fmt.Errorf(
+			"failed to execute `ip -6 route add %s table %d encap seg6local action End.DT4 vrftable %d dev %s`: %s",
+			decapSidv6.String(), routerVrf.Table, routerVrf.Table, decapIface.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to add decap route: %w", err)
+	}
+
+	subnet.DecapSIDv6 = decapSidv6
+	subnet.DecapSIDv4 = decapSidv4
 	subnet.Vrf = routerVrf
 	return subnet, nil
 }

@@ -329,18 +329,19 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 	return nil
 }
 
-func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP) error {
+func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, decapSIDv4, decapSIDv6 *net.IPNet) error {
 	if dst.IsEmpty() {
 		return fmt.Errorf("destination's IPv4Net and IPv6Net are both nil")
 	}
 	if dst.IPv4Net != nil {
 		// ip route add <dstNet4> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
+		ipv4Sids := reversed(append(sids, decapSIDv4.IP))
 		route := &netlink.Route{
 			Dst:   dst.IPv4Net,
 			Table: int(s.Vrf.Table),
 			Encap: &netlink.SEG6Encap{
 				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
-				Segments: sids,
+				Segments: ipv4Sids,
 			},
 			LinkIndex: s.Bridge.Attrs().Index,
 		}
@@ -350,12 +351,13 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP) e
 	}
 	if dst.IPv6Net != nil {
 		// same as above but in IPv6
+		ipv6Sids := reversed(append(sids, decapSIDv6.IP))
 		route := &netlink.Route{
 			Dst:   dst.IPv6Net,
 			Table: int(s.Vrf.Table),
 			Encap: &netlink.SEG6Encap{
 				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
-				Segments: sids,
+				Segments: ipv6Sids,
 			},
 			LinkIndex: s.Bridge.Attrs().Index,
 		}
@@ -414,4 +416,12 @@ func (s *AppSubnet) GetStack() StackType {
 
 func (s *AppSubnet) GetVRFName() string {
 	return s.Vrf.Name
+}
+
+func reversed[T any](slice []T) []T {
+	result := make([]T, len(slice))
+	for i := range slice {
+		result[len(slice)-1-i] = slice[i]
+	}
+	return result
 }
