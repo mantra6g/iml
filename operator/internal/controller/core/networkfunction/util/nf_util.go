@@ -1,14 +1,14 @@
 package util
 
 import (
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GetNFCondition(conditionType schedulingv1alpha1.NetworkFunctionConditionType,
-	nf *schedulingv1alpha1.NetworkFunction) *schedulingv1alpha1.NetworkFunctionCondition {
-	for _, cond := range nf.Status.Conditions {
+	nfStatus *schedulingv1alpha1.NetworkFunctionStatus) *schedulingv1alpha1.NetworkFunctionCondition {
+	for _, cond := range nfStatus.Conditions {
 		if cond.Type == conditionType {
 			return &cond
 		}
@@ -27,10 +27,10 @@ func NewNFCondition(conditionType schedulingv1alpha1.NetworkFunctionConditionTyp
 	}
 }
 
-func RemoveNFCondition(nf *schedulingv1alpha1.NetworkFunction,
+func RemoveNFCondition(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 	conditionType schedulingv1alpha1.NetworkFunctionConditionType) []schedulingv1alpha1.NetworkFunctionCondition {
 	var newConditions []schedulingv1alpha1.NetworkFunctionCondition
-	for _, cond := range nf.Status.Conditions {
+	for _, cond := range nfStatus.Conditions {
 		if cond.Type != conditionType {
 			newConditions = append(newConditions, cond)
 		}
@@ -38,10 +38,10 @@ func RemoveNFCondition(nf *schedulingv1alpha1.NetworkFunction,
 	return newConditions
 }
 
-func CopyConditions(nf *schedulingv1alpha1.NetworkFunction,
+func CopyConditions(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 ) []schedulingv1alpha1.NetworkFunctionCondition {
-	newConditions := make([]schedulingv1alpha1.NetworkFunctionCondition, len(nf.Status.Conditions))
-	for _, cond := range nf.Status.Conditions {
+	newConditions := make([]schedulingv1alpha1.NetworkFunctionCondition, len(nfStatus.Conditions))
+	for _, cond := range nfStatus.Conditions {
 		newConditions = append(newConditions, cond)
 	}
 	return newConditions
@@ -51,18 +51,18 @@ func NewScheduledCondition(status metav1.ConditionStatus, reason, message string
 	return NewNFCondition(schedulingv1alpha1.NetworkFunctionScheduled, status, reason, message)
 }
 
-func UpdateNFCondition(nf *schedulingv1alpha1.NetworkFunction,
+func UpdateNFCondition(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 	newCondition schedulingv1alpha1.NetworkFunctionCondition) []schedulingv1alpha1.NetworkFunctionCondition {
-	existingCondition := GetNFCondition(newCondition.Type, nf)
+	existingCondition := GetNFCondition(newCondition.Type, nfStatus)
 	if existingCondition != nil && existingCondition.Status == newCondition.Status {
-		return CopyConditions(nf) // If the status hasn't changed, we don't need to update the LastTransitionTime
+		return CopyConditions(nfStatus) // If the status hasn't changed, we don't need to update the LastTransitionTime
 	}
-	newConditions := RemoveNFCondition(nf, newCondition.Type)
+	newConditions := RemoveNFCondition(nfStatus, newCondition.Type)
 	newConditions = append(newConditions, newCondition)
 	return newConditions
 }
 
-func GetScheduledCondition(nf *schedulingv1alpha1.NetworkFunction,
+func GetScheduledCondition(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 ) *schedulingv1alpha1.NetworkFunctionCondition {
-	return GetNFCondition(schedulingv1alpha1.NetworkFunctionScheduled, nf)
+	return GetNFCondition(schedulingv1alpha1.NetworkFunctionScheduled, nfStatus)
 }

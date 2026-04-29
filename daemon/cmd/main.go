@@ -6,9 +6,6 @@ import (
 	"os"
 	"time"
 
-	corev1alpha1 "iml-daemon/api/core/v1alpha1"
-	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
-	schedulingv1alpha1 "iml-daemon/api/scheduling/v1alpha1"
 	"iml-daemon/cni"
 	loomnodecontroller "iml-daemon/controllers/loomnode"
 	nodecontroller "iml-daemon/controllers/node"
@@ -17,6 +14,10 @@ import (
 	"iml-daemon/env"
 	"iml-daemon/pkg/dataplane/vrf"
 	"iml-daemon/pkg/tunnel/geneve"
+
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"

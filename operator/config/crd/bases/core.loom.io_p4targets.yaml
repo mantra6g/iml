@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: p4targets.core.loom.io
 spec:
   group: core.loom.io
@@ -11,10 +11,20 @@ spec:
     kind: P4Target
     listKind: P4TargetList
     plural: p4targets
+    shortNames:
+    - targets
+    - target
     singular: p4target
-  scope: Cluster
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API

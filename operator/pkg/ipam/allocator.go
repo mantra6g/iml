@@ -5,25 +5,33 @@ import (
 	"net/netip"
 )
 
-type AddrAllocator struct {
+type AddrAllocator interface {
+	Next() (netip.Addr, error)
+}
+
+type PrefixAllocator interface {
+	Next() (netip.Prefix, error)
+}
+
+type addrAllocator struct {
 	BaseNetwork    netip.Prefix
 	LastAssignedIP netip.Addr
 }
 
-func NewAddrAllocator(base netip.Prefix) (*AddrAllocator, error) {
+func NewAddrAllocator(base netip.Prefix) (AddrAllocator, error) {
 	if !base.IsValid() {
 		return nil, fmt.Errorf("invalid base network: %v", base)
 	}
 	if base != base.Masked() {
 		return nil, fmt.Errorf("base network must be a valid prefix: %v", base)
 	}
-	return &AddrAllocator{
+	return &addrAllocator{
 		BaseNetwork:    base,
 		LastAssignedIP: base.Addr(),
 	}, nil
 }
 
-func (a *AddrAllocator) Next() (netip.Addr, error) {
+func (a *addrAllocator) Next() (netip.Addr, error) {
 	next := a.LastAssignedIP.Next()
 	isOutOfRange := !a.BaseNetwork.Contains(next)
 	isBroadcast := !a.BaseNetwork.Contains(next.Next())
@@ -34,13 +42,13 @@ func (a *AddrAllocator) Next() (netip.Addr, error) {
 	return next, nil
 }
 
-type PrefixAllocator struct {
+type prefixAllocator struct {
 	BaseNetwork  netip.Prefix
 	LastAssigned netip.Prefix
 	PrefixLen    int
 }
 
-func NewPrefixAllocator(base netip.Prefix, subnetPrefixLen int) (*PrefixAllocator, error) {
+func NewPrefixAllocator(base netip.Prefix, subnetPrefixLen int) (PrefixAllocator, error) {
 	if !base.IsValid() {
 		return nil, fmt.Errorf("invalid base network: %v", base)
 	}
@@ -51,14 +59,14 @@ func NewPrefixAllocator(base netip.Prefix, subnetPrefixLen int) (*PrefixAllocato
 		return nil, fmt.Errorf("invalid subnet prefix length: %d, must be > %d and <= %d",
 			subnetPrefixLen, base.Bits(), base.Addr().BitLen())
 	}
-	return &PrefixAllocator{
+	return &prefixAllocator{
 		BaseNetwork:  base,
 		LastAssigned: netip.Prefix{},
 		PrefixLen:    subnetPrefixLen,
 	}, nil
 }
 
-func (a *PrefixAllocator) Next() (netip.Prefix, error) {
+func (a *prefixAllocator) Next() (netip.Prefix, error) {
 	var nextPrefixNetAddress netip.Addr
 	if a.LastAssigned.IsValid() {
 		nextPrefixNetAddress = broadcastAddr(a.LastAssigned).Next()
