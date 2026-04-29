@@ -75,23 +75,28 @@ kind: NetworkFunction
 metadata:
   name: my-nf
 spec:
-  p4code: https://my-repo.com/my-nf.p4
-  configRef: my-nf-config
+  p4File: https://my-repo.com/my-nf.p4
+  configRef:
+    name: my-nf-config
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunctionConfig
 metadata:
   name: my-nf-config
 spec:
-  table: my_table
-  entries:
-    - match:
-        field1: value1
-        field2: value2
-      action:
-        name: my_action
-        params:
-          param1: value1
+  tables:
+    my_table:
+      entries:
+        - matchFields:
+            - name: hdr.ethernet.srcAddr
+              type: Exact
+              exact:
+                macAddress: 00:11:22:33:44:55
+          action:
+            name: MyIngress.my_action
+            parameters:
+              - name: param1
+                int: "42" # This field NEEDS to be a string to support arbitrary precision integers.
 ```
 
 ## Publishing data-plane objects and telemetry
@@ -102,41 +107,6 @@ of this, they are in constant change. The Kubernetes API is not designed to hand
 so instead of using Kubernetes resources to represent these data-plane objects, these objects must be published 
 through the `/objects` endpoint on the driver. Additionally, the values of some these data-plane objects can be
 published as metrics by the P4Target driver, which then can be scraped by Prometheus or any other monitoring tool.
-
-In order to allow users to easily identify which metrics correspond to which NFs or targets, the `NetworkFunction` 
-resource includes a `status.metrics` field where the driver can publish the names of the metrics corresponding 
-to each NF. This way, users can easily query for this information without having to know the specific implementation
-details of each driver or target.
-
-```yaml
-apiVersion: core.loom.io/v1alpha1
-kind: NetworkFunction
-metadata:
-  name: my-nf
-spec:
-  // ...
-status:
-  metrics:
-    - name: my_nf_counter
-      type: counter
-      labels:
-        target: my-target
-        nf: my-nf
-    - name: my_nf_meter
-      type: meter
-      labels:
-        target: my-target
-        nf: my-nf
-    - name: my_nf_register
-      type: register
-      labels:
-        target: my-target
-        nf: my-nf
-```
-
-[//] # TODO: Explain how to retrieve objects directly from the target without using metrics, by using a
-[//] custom API provided by the driver that exposes this information through an HTTP endpoint.
-
 
 ## Configuring networking
 To allow NFs to communicate with each other and with external applications, the P4Target addon system also provides

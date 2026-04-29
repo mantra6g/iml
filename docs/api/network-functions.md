@@ -10,8 +10,7 @@ metadata:
 spec:
   p4File: https://example.org/p4program.p4
   targetSelector:
-    matchLabels:
-      p4target.loom.io/arch: v1model
+    p4target.loom.io/arch: v1model
 ```
 
 Creating a network function referencing a NetworkFunctionConfig named `example-nf-config`:

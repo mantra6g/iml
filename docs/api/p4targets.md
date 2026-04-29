@@ -79,8 +79,8 @@ status:
       message: "The P4 target is ready to accept network functions"
     - type: Unschedulable
       status: "True"
-      reason: "AdminMarkedUnschedulable"
-      message: "The P4 target is marked as unschedulable by an administrator."
+      reason: "MarkedUnschedulable"
+      message: "P4 target is marked as unschedulable"
 ```
 
 ## Spec fields
