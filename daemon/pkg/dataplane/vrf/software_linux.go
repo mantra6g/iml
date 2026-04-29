@@ -134,6 +134,10 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	//if err := os.WriteFile("/proc/sys/net/vrf/strict_mode", []byte("1"), 0644); err != nil {
 	//	logger.ErrorLogger().Printf("Failed to enable VRF strict mode: %s", err)
 	//}
+	// Disable reverse-path filtering. Needed for the routing to work properly in the presence of asymmetric routes, which can happen with SRv6.
+	if err = os.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte("0"), 0644); err != nil {
+		return nil, fmt.Errorf("failed to disable rp_filter: %w", err)
+	}
 	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingBaseNet, rtrVrfTable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
