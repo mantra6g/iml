@@ -167,7 +167,7 @@ spec:
                         type: object
                       controlPlane:
                         description: |-
-                          ControlPlanePod defines the template for the control plane pod
+                          ControlPlane defines the template for the control plane pod
                           of the network function.
                         properties:
                           affinity:

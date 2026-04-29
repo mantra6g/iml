@@ -249,6 +249,10 @@ spec:
     kind: NetworkFunctionConfig
     listKind: NetworkFunctionConfigList
     plural: networkfunctionconfigs
+    shortNames:
+    - nfconf
+    - nfconfigs
+    - nfconfig
     singular: networkfunctionconfig
   scope: Namespaced
   versions:
@@ -743,7 +747,7 @@ spec:
                         type: object
                       controlPlane:
                         description: |-
-                          ControlPlanePod defines the template for the control plane pod
+                          ControlPlane defines the template for the control plane pod
                           of the network function.
                         properties:
                           affinity:
@@ -2194,7 +2198,7 @@ spec:
                         type: object
                       controlPlane:
                         description: |-
-                          ControlPlanePod defines the template for the control plane pod
+                          ControlPlane defines the template for the control plane pod
                           of the network function.
                         properties:
                           affinity:
@@ -3524,10 +3528,20 @@ spec:
     kind: NetworkFunction
     listKind: NetworkFunctionList
     plural: networkfunctions
+    shortNames:
+    - nf
+    - nfs
     singular: networkfunction
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NetworkFunction is the Schema for the networkfunctions API
@@ -3563,7 +3577,7 @@ spec:
                 type: object
               controlPlane:
                 description: |-
-                  ControlPlanePod defines the template for the control plane pod
+                  ControlPlane defines the template for the control plane pod
                   of the network function.
                 properties:
                   affinity:
@@ -4863,10 +4877,20 @@ spec:
     kind: P4Target
     listKind: P4TargetList
     plural: p4targets
+    shortNames:
+    - targets
+    - target
     singular: p4target
-  scope: Cluster
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API

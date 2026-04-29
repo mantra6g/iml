@@ -100,10 +100,10 @@ type NetworkFunctionSpec struct {
 	// +optional
 	TargetName string `json:"targetName,omitempty"`
 
-	// ControlPlanePod defines the template for the control plane pod
+	// ControlPlane defines the template for the control plane pod
 	// of the network function.
 	// +optional
-	ControlPlane *ControlPlaneSpec `json:"controlPlane"`
+	ControlPlane *ControlPlaneSpec `json:"controlPlane,omitempty"`
 
 	// TargetSelector is used to select P4 targets based on their supported architectures
 	// +optional
@@ -117,7 +117,7 @@ type NetworkFunctionSpec struct {
 	// It can be the actual p4program encoded in base64 or
 	// a s3://, http:// or https:// URL pointing to the P4 file location.
 	// +required
-	P4File string `json:"p4File,omitempty"`
+	P4File string `json:"p4File"`
 }
 
 type NetworkFunctionPhase string
@@ -190,6 +190,9 @@ type NetworkFunctionStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:resource:shortName=nf;nfs
 
 // NetworkFunction is the Schema for the networkfunctions API
 type NetworkFunction struct {

@@ -11,10 +11,20 @@ spec:
     kind: NetworkFunction
     listKind: NetworkFunctionList
     plural: networkfunctions
+    shortNames:
+    - nf
+    - nfs
     singular: networkfunction
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NetworkFunction is the Schema for the networkfunctions API
@@ -50,7 +60,7 @@ spec:
                 type: object
               controlPlane:
                 description: |-
-                  ControlPlanePod defines the template for the control plane pod
+                  ControlPlane defines the template for the control plane pod
                   of the network function.
                 properties:
                   affinity:

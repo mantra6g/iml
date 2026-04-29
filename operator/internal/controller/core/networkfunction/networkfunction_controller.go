@@ -76,7 +76,7 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err := r.scheduleNetworkFunction(ctx, nf)
 		if errors.Is(err, NoMatchingTargetsError{}) {
 			cond := nfutils.NewScheduledCondition(metav1.ConditionFalse, "Unschedulable", "No matching targets found")
-			nfutils.UpdateNFCondition(nf, cond)
+			nfutils.UpdateNFCondition(&nf.Status, cond)
 			_ = r.updateStatus(ctx, nf)
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		} else if err != nil {
@@ -155,29 +155,32 @@ func (r *NetworkFunctionReconciler) updateStatus(ctx context.Context,
 	nf *corev1alpha1.NetworkFunction) error {
 	original := nf.DeepCopy()
 	newStatus := calculateStatus(nf)
-	nf.Status = newStatus
+	nf.Status = *newStatus
 	return r.Status().Patch(ctx, nf, client.MergeFrom(original))
 }
 
 func calculateStatus(nf *corev1alpha1.NetworkFunction,
-) corev1alpha1.NetworkFunctionStatus {
-	status := corev1alpha1.NetworkFunctionStatus{
+) *corev1alpha1.NetworkFunctionStatus {
+	status := &corev1alpha1.NetworkFunctionStatus{
 		ObservedGeneration: nf.Generation,
 	}
 	// Copy conditions to the new status
 	status.Conditions = make([]corev1alpha1.NetworkFunctionCondition, len(nf.Status.Conditions))
 	for i := range nf.Status.Conditions {
-		status.Conditions = append(status.Conditions, nf.Status.Conditions[i])
+		status.Conditions[i] = nf.Status.Conditions[i]
+	}
+	if status.Phase == "" {
+		status.Phase = corev1alpha1.NetworkFunctionPending
 	}
 	if nf.Spec.TargetName != "" {
 		newCondition := nfutils.NewScheduledCondition(metav1.ConditionTrue, "Scheduled",
 			fmt.Sprintf("The NetworkFunction is scheduled to target %s.", nf.Spec.TargetName))
-		status.Conditions = nfutils.UpdateNFCondition(nf, newCondition)
+		status.Conditions = nfutils.UpdateNFCondition(status, newCondition)
 	}
-	if nfutils.GetScheduledCondition(nf) == nil {
+	if nfutils.GetScheduledCondition(status) == nil {
 		newCondition := nfutils.NewScheduledCondition(metav1.ConditionFalse,
 			"SchedulingPending", "The NetworkFunction has not been scheduled to a target yet.")
-		status.Conditions = nfutils.UpdateNFCondition(nf, newCondition)
+		status.Conditions = nfutils.UpdateNFCondition(status, newCondition)
 		return status
 	}
 	return status

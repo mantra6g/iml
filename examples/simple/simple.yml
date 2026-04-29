@@ -12,17 +12,26 @@ metadata:
   namespace: default
 spec: {}
 ---
-apiVersion: core.loom.io/v1alpha1
-kind: NetworkFunction
+apiVersion: scheduling.loom.io/v1alpha1
+kind: NetworkFunctionDeployment
 metadata:
   name: pkt-logger
   namespace: default
   labels:
     nf: logger
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4"
-  targetSelector:
-    p4target.loom.io/arch: v1-model
+  selector:
+    matchLabels:
+      nf: logger
+  template:
+    metadata:
+      name: pkt-logger
+      labels:
+        nf: logger
+    spec:
+      p4File: "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4"
+      targetSelector:
+        p4target.loom.io/arch: v1model
 ---
 apiVersion: infra.loom.io/v1alpha1
 kind: BMv2Target

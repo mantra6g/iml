@@ -11,6 +11,10 @@ spec:
     kind: NetworkFunctionConfig
     listKind: NetworkFunctionConfigList
     plural: networkfunctionconfigs
+    shortNames:
+    - nfconf
+    - nfconfigs
+    - nfconfig
     singular: networkfunctionconfig
   scope: Namespaced
   versions:

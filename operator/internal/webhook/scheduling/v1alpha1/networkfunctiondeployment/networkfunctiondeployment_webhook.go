@@ -66,6 +66,7 @@ var _ admission.Defaulter[*schedulingv1alpha1.NetworkFunctionDeployment] = &Cust
 func (d *CustomDefaulter) Default(_ context.Context, deployment *schedulingv1alpha1.NetworkFunctionDeployment) error {
 	logger.Info("Defaulting for NetworkFunctionDeployment",
 		"name", deployment.GetName())
+	logger.V(1).Info("Current spec before defaulting", "spec", deployment.Spec)
 
 	// TODO(user): fill in your defaulting logic.
 	// Set default replicas to 1 if not specified

@@ -155,6 +155,7 @@ type NetworkFunctionConfigStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=nfconf;nfconfigs;nfconfig
 
 // NetworkFunctionConfig is the Schema for the networkfunctionconfigs API
 type NetworkFunctionConfig struct {

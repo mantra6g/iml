@@ -22,7 +22,7 @@ metadata:
 spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4"
   targetSelector:
-    p4target.loom.io/arch: v1-model
+    p4target.loom.io/arch: v1model
 ---
 apiVersion: infra.loom.io/v1alpha1
 kind: BMv2Target

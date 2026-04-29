@@ -100,7 +100,7 @@ type NetworkFunctionDeploymentSpec struct {
 
 	// Template describes the NetworkFunctionDeployment that will be created
 	// +required
-	Template corev1alpha1.NetworkFunctionTemplate `json:"template,omitempty"`
+	Template corev1alpha1.NetworkFunctionTemplate `json:"template"`
 
 	// MinReadySeconds is the minimum number of seconds for which a newly created NetworkFunction
 	// should be ready without any of its container crashing, for it to be considered available. Defaults
