@@ -26,7 +26,7 @@ func (s *Software) DeleteAppInstance(containerID string) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
 
-func (s *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target, containerID string,
+func (s *Software) ConfigureP4TargetInstance(targetName string, containerID string,
 ) (*dataplane.P4TargetConfig, error) {
 	return nil, fmt.Errorf("Windows is not supported yet")
 }

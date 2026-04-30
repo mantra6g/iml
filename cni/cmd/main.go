@@ -274,7 +274,7 @@ func getP4TargetConfigFromIML(configRequest types2.ContainerizedP4TargetConfigRe
 	}
 
 	resp, err := http.Post(
-		"http://localhost:7623/api/v1/cni/vnf/register",
+		"http://localhost:7623/api/v1/cni/p4target/register",
 		"application/json", bytes.NewBuffer(data),
 	)
 	if err != nil {

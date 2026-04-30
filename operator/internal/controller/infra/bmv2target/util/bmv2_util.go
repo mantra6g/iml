@@ -162,7 +162,7 @@ func (c CNIConfig) String() string {
 
 func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 	return CNIConfig{
-		Name: "iml-cni",
+		Name: "loom-cni",
 		CNIArgs: CNIArgs{
 			AppType:    "p4target",
 			TargetName: bmv2Target.Name,

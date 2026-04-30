@@ -74,7 +74,7 @@ func (t *Tunnel) UpdateDestinationNode(node *corev1.Node) (err error) {
 		}
 		for _, ip := range addr.IPv4Addresses {
 			err = t.ip4t.Insert("filter", t.chainName, 1,
-				"-s", ip.String(), "-j", "MARK", "--or-mark", PacketAcceptedMark)
+				"-s", ip.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark))
 			if err != nil {
 				return fmt.Errorf("failed to insert mark rule: %v", err)
 			}
@@ -91,7 +91,7 @@ func (t *Tunnel) UpdateDestinationNode(node *corev1.Node) (err error) {
 		}
 		for _, ip := range addr.IPv6Addresses {
 			err = t.ip6t.Insert("filter", t.chainName, 1,
-				"-s", ip.String(), "-j", "mark", "--or-mark", PacketAcceptedMark)
+				"-s", ip.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark))
 			if err != nil {
 				return fmt.Errorf("failed to insert mark rule: %v", err)
 			}

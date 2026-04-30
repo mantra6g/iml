@@ -131,9 +131,9 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 		return nil, fmt.Errorf("failed to set seg6_enabled: %w", err)
 	}
 	// Enable VRF strict mode. Recommended because of SRv6 and VRF interaction.
-	//if err := os.WriteFile("/proc/sys/net/vrf/strict_mode", []byte("1"), 0644); err != nil {
-	//	logger.ErrorLogger().Printf("Failed to enable VRF strict mode: %s", err)
-	//}
+	if err := os.WriteFile("/proc/sys/net/vrf/strict_mode", []byte("1"), 0644); err != nil {
+		return nil, fmt.Errorf("failed to enable VRF strict mode: %s", err)
+	}
 	// Disable reverse-path filtering. Needed for the routing to work properly in the presence of asymmetric routes, which can happen with SRv6.
 	if err = os.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte("0"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to disable rp_filter: %w", err)
@@ -158,7 +158,7 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	}, nil
 }
 
-func (d *Software) Close() error {
+func (d *Software) Shutdown(ctx context.Context) error {
 	// Delete the router subnet
 	d.routingSubnet.Teardown()
 
@@ -366,13 +366,11 @@ func (d *Software) DeleteAppInstance(_ string) error {
 	return nil
 }
 
-func (d *Software) ConfigureP4TargetInstance(
-	target *corev1alpha1.P4Target, _ string,
-) (*dataplane.P4TargetConfig, error) {
+func (d *Software) ConfigureP4TargetInstance(targetName string, _ string) (*dataplane.P4TargetConfig, error) {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	p4TargetConfig, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
+	p4TargetConfig, exists := d.p4Targets[client.ObjectKey{Name: targetName}]
 	if exists {
 		return &dataplane.P4TargetConfig{
 			IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
@@ -386,15 +384,16 @@ func (d *Software) ConfigureP4TargetInstance(
 
 	ips, err := d.routingSubnet.AllocateIPs()
 	if err != nil {
-		return nil, fmt.Errorf("failed to allocate IPs for application %s/%s: %w", target.Name, target.Namespace, err)
+		return nil, fmt.Errorf("failed to allocate IPs for target \"%s\": %w", targetName, err)
 	}
+	d.log.V(1).Info("Allocated IPs for P4Target", "targetName", targetName, "ips", ips)
 
 	ifaceName, err := vrfutil.GenerateRandomName("nfr", 8)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate interface name: %w", err)
 	}
 
-	d.p4Targets[client.ObjectKeyFromObject(target)] = &P4TargetInstance{
+	d.p4Targets[client.ObjectKey{Name: targetName}] = &P4TargetInstance{
 		TargetIPs: ips,
 		ifaceName: ifaceName,
 	}

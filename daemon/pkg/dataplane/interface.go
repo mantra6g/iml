@@ -1,6 +1,7 @@
 package dataplane
 
 import (
+	"context"
 	"net"
 
 	netutils "iml-daemon/pkg/utils/net"
@@ -37,12 +38,12 @@ type P4TargetConfig struct {
 }
 
 type Dataplane interface {
-	Close() error
+	Shutdown(ctx context.Context) error
 
 	ConfigureAppInstance(app *corev1alpha1.Application, containerID string) (*AppConfig, error)
 	DeleteAppInstance(containerID string) error
 
-	ConfigureP4TargetInstance(target *corev1alpha1.P4Target, containerID string) (*P4TargetConfig, error)
+	ConfigureP4TargetInstance(targetName string, containerID string) (*P4TargetConfig, error)
 	DeleteP4TargetInstance(containerID string) error
 
 	UpdateAppRoutes(app *corev1alpha1.Application) error

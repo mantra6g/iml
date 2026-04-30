@@ -135,6 +135,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to calculate SRv6 Routes: %w", err)
 	}
 
+	if len(routes) == 0 {
+		logger.V(1).Info("No available routes to add for this service chain, skipping dataplane configuration")
+		return ctrl.Result{}, nil
+	}
+
 	err = r.Dataplane.AddServiceChainRoutes(&serviceChain, routes)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to add Route: %w", err)
@@ -149,6 +154,9 @@ func (r *Reconciler) calculateSRv6Routes(ctx context.Context, serviceChain *core
 	logger := logf.FromContext(ctx)
 	segments := make([]net.IP, 0)
 	for _, nfs := range matchingNFs {
+		if len(nfs) == 0 {
+			return nil, nil
+		} // If any stage has no available NFs, we can't create a route
 		parsedIP := net.ParseIP(nfs[0].Status.AssignedIP)
 		if parsedIP == nil {
 			logger.V(1).Error(fmt.Errorf("failed to parse assigned IP for NF"),
@@ -230,14 +238,14 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		"spec.to",
 		func(obj client.Object) []string {
 			sc := obj.(*corev1alpha1.ServiceChain)
-			if sc.Spec.From.Name == "" {
+			if sc.Spec.To.Name == "" {
 				return nil
 			}
-			ns := sc.Spec.From.Namespace
+			ns := sc.Spec.To.Namespace
 			if ns == "" {
 				ns = sc.Namespace
 			}
-			return []string{ns + "/" + sc.Spec.From.Name}
+			return []string{ns + "/" + sc.Spec.To.Name}
 		},
 	); err != nil {
 		return err
@@ -335,7 +343,9 @@ func (r *Reconciler) reconcileAllChains(ctx context.Context, _ client.Object) []
 	}
 	requests := make([]reconcile.Request, len(serviceChains.Items))
 	for i := range serviceChains.Items {
-		requests[i] = reconcile.Request{}
+		requests[i] = reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&serviceChains.Items[i]),
+		}
 	}
 	return requests
 }
