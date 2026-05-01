@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"flag"
+	"iml-daemon/pkg/janitor"
 	"os"
 	"time"
 
-	corev1alpha1 "iml-daemon/api/core/v1alpha1"
-	infrav1alpha1 "iml-daemon/api/infra/v1alpha1"
-	schedulingv1alpha1 "iml-daemon/api/scheduling/v1alpha1"
 	"iml-daemon/cni"
 	loomnodecontroller "iml-daemon/controllers/loomnode"
 	nodecontroller "iml-daemon/controllers/node"
@@ -17,6 +14,10 @@ import (
 	"iml-daemon/env"
 	"iml-daemon/pkg/dataplane/vrf"
 	"iml-daemon/pkg/tunnel/geneve"
+
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -81,23 +82,37 @@ func main() {
 		os.Exit(1)
 	}
 
+	jan := janitor.NewJanitor(10 * time.Second)
+	defer func() {
+		if r := recover(); r != nil {
+			_ = jan.Cleanup()
+			panic(r)
+		}
+	}()
+
 	tunnelMgr, err := geneve.NewTunnelManager(ctrl.Log.WithName("gnv-tunnel-manager"))
 	if err != nil {
 		setupLog.Error(err, "unable to create tunnel manager")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
+	jan.Add(tunnelMgr.Shutdown)
 
 	dataPlane, err := vrf.NewSoftware(ctrl.Log.WithName("vrf-dataplane"), config, tunnelMgr, mgr.GetClient())
 	if err != nil {
 		setupLog.Error(err, "unable to initialize VRF dataplane")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
+	jan.Add(dataPlane.Shutdown)
 
 	cniServer, err := cni.NewServer(ctrl.Log.WithName("cni-server"), mgr.GetClient(), dataPlane)
 	if err != nil {
 		setupLog.Error(err, "unable to initialize cni server")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
+	jan.Add(cniServer.Shutdown)
 
 	// Set up informers
 	err = (&nodecontroller.Reconciler{
@@ -108,6 +123,7 @@ func main() {
 	}).SetupWithManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to set up node controller")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
 	err = (&sccontroller.Reconciler{
@@ -118,6 +134,7 @@ func main() {
 	}).SetupWithManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to set up service chain controller")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
 	err = (&p4tcontroller.Reconciler{
@@ -127,6 +144,7 @@ func main() {
 	}).SetupWithManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to set up p4target controller")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
 	err = (&loomnodecontroller.Reconciler{
@@ -137,6 +155,7 @@ func main() {
 	}).SetupWithManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to set up loom node controller")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
 
@@ -144,27 +163,9 @@ func main() {
 	err = mgr.Start(mainContext)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		_ = jan.Cleanup()
 		os.Exit(1)
 	}
 
-	// Wait until main context has finished
-	<-mainContext.Done()
-	setupLog.Info("Shutting down services...")
-
-	// Graceful shutdown context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
-	defer cancel()
-
-	// Shutdown services gracefully
-	if err = cniServer.Shutdown(ctx); err != nil {
-		setupLog.Error(err, "CNI API shutdown error")
-	}
-	if err = tunnelMgr.Close(); err != nil {
-		setupLog.Error(err, "Failed to close tunnel manager")
-	}
-	if err = dataPlane.Close(); err != nil {
-		setupLog.Error(err, "Failed to close data plane")
-	}
-
-	setupLog.Info("All services stopped gracefully.")
+	_ = jan.Cleanup()
 }

@@ -1,11 +1,11 @@
 package geneve
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 
-	vrfutils "iml-daemon/pkg/dataplane/vrf/util"
 	"iml-daemon/pkg/tunnel"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	TunnelName                = "imlgnv0"
 	TunnelPort                = 6018
 	IPTablesRootChainName     = "IML-TUNNEL"
 	IPTablesSubchainPrefix    = "IML-TUNNEL"
@@ -34,10 +35,6 @@ type TunnelManager struct {
 }
 
 func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
-	ifName, err := vrfutils.GenerateRandomName("imltun", 4)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate tunnel interface name: %v", err)
-	}
 	ip4t, err := iptables.New()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init iptables for IPv4 address family: %v", err)
@@ -46,101 +43,176 @@ func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to init iptables for IPv6 address family: %v", err)
 	}
-	v4ChainExists, err := ip4t.ChainExists("filter", IPTablesRootChainName)
+	err = ensureIptables(ip4t, ip6t)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check whether IP4 chain exists: %v", err)
+		return nil, fmt.Errorf("failed to ensure iptables: %v", err)
 	}
-	v6ChainExists, err := ip6t.ChainExists("filter", IPTablesRootChainName)
+	err = ensureTunnel(TunnelName, TunnelPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check whether IP6 chain exists: %v", err)
+		return nil, fmt.Errorf("failed to ensure tunnel: %v", err)
 	}
-	if !v4ChainExists {
-		err = ip4t.NewChain("filter", IPTablesRootChainName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create IP4 iptables chain: %v", err)
-		}
+	return &TunnelManager{
+		tunnelInterface: TunnelName,
+		tunnels:         make(map[NodeName]*Tunnel),
+		ip4t:            ip4t,
+		ip6t:            ip6t,
+		log:             logger,
+	}, nil
+}
+
+func ensureIptables(ip4t, ip6t *iptables.IPTables) error {
+	// Delete leftover data
+	if err := deleteChains(ip4t, ip6t); err != nil {
+		return fmt.Errorf("failed to delete leftover iptables chains: %v", err)
+	}
+	err := ip4t.NewChain("filter", IPTablesRootChainName)
+	if err != nil {
+		return fmt.Errorf("failed to create %s chain in IP4 iptables: %v", IPTablesRootChainName, err)
+	}
+	err = ip6t.NewChain("filter", IPTablesRootChainName)
+	if err != nil {
+		return fmt.Errorf("failed to create %s chain in IP6 iptables: %v", IPTablesRootChainName, err)
 	}
 	// Accepts marked packets
 	err = ip4t.AppendUnique("filter", IPTablesRootChainName,
 		"-m", "mark", "--mark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark),
 		"-j", "RETURN")
 	if err != nil {
-		return nil, fmt.Errorf("failed to append return rule in %s chain: %v", IPTablesRootChainName, err)
+		return fmt.Errorf("failed to append return rule in %s chain: %v", IPTablesRootChainName, err)
+	}
+	err = ip4t.AppendUnique("filter", IPTablesRootChainName,
+		"-j", "MARK", "--set-xmark", fmt.Sprintf("0x0/%s", PacketAcceptedMark))
+	if err != nil {
+		return fmt.Errorf("failed to append mark cleanup rule in %s chain: %v", IPTablesRootChainName, err)
 	}
 	// Drops anything unmarked
 	err = ip4t.AppendUnique("filter", IPTablesRootChainName,
 		"-j", "DROP")
 	if err != nil {
-		return nil, fmt.Errorf("failed to append drop rule in %s chain: %v", IPTablesRootChainName, err)
-	}
-	if !v6ChainExists {
-		err = ip6t.NewChain("filter", IPTablesRootChainName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create IP6 iptables chain: %v", err)
-		}
+		return fmt.Errorf("failed to append drop rule in %s chain: %v", IPTablesRootChainName, err)
 	}
 	err = ip6t.AppendUnique("filter", IPTablesRootChainName,
 		"-m", "mark", "--mark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark),
 		"-j", "RETURN")
 	if err != nil {
-		return nil, fmt.Errorf("failed to append return rule in %s chain: %v", IPTablesRootChainName, err)
+		return fmt.Errorf("failed to append return rule in %s chain: %v", IPTablesRootChainName, err)
 	}
 	err = ip6t.AppendUnique("filter", IPTablesRootChainName,
-		"-j", "MARK", "--and-mark", MarkCleanupMask)
+		"-j", "MARK", "--set-xmark", fmt.Sprintf("0x0/%s", PacketAcceptedMark))
 	if err != nil {
-		return nil, fmt.Errorf("failed to append mark cleanup rule in %s chain: %v", IPTablesRootChainName, err)
+		return fmt.Errorf("failed to append mark cleanup rule in %s chain: %v", IPTablesRootChainName, err)
 	}
 	err = ip6t.AppendUnique("filter", IPTablesRootChainName,
 		"-j", "DROP")
 	if err != nil {
-		return nil, fmt.Errorf("failed to append drop rule in %s chain: %v", IPTablesRootChainName, err)
+		return fmt.Errorf("failed to append drop rule in %s chain: %v", IPTablesRootChainName, err)
 	}
 	if err = ip4t.InsertUnique("filter", "INPUT", 1,
 		"-p", "udp", "--dport", strconv.Itoa(TunnelPort), "-j", IPTablesRootChainName); err != nil {
-		return nil, fmt.Errorf("failed to append rule to IP4 iptables chain: %v", err)
+		return fmt.Errorf("failed to append rule to IP4 iptables chain: %v", err)
 	}
 	if err = ip6t.InsertUnique("filter", "INPUT", 1,
 		"-p", "udp", "--dport", strconv.Itoa(TunnelPort), "-j", IPTablesRootChainName); err != nil {
-		return nil, fmt.Errorf("failed to append rule to IP4 iptables chain: %v", err)
+		return fmt.Errorf("failed to append rule to IP4 iptables chain: %v", err)
 	}
-
-	tun := &netlink.Geneve{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: ifName,
-		},
-		Dport:     TunnelPort,
-		FlowBased: true,
-	}
-	if err = netlink.LinkAdd(tun); err != nil {
-		return nil, fmt.Errorf("failed to add Geneve tunnel: %v", err)
-	}
-	if err = netlink.LinkSetUp(tun); err != nil {
-		return nil, fmt.Errorf("failed to set up Geneve tunnel: %v", err)
-	}
-
-	return &TunnelManager{
-		tunnelInterface: ifName,
-		tunnels:         make(map[NodeName]*Tunnel),
-		ip4t:            ip4t,
-		ip6t:            ip6t,
-	}, nil
+	return nil
 }
 
-func (mgr *TunnelManager) Close() error {
+func ensureTunnel(name string, port uint16) error {
+	tunLink, err := netlink.LinkByName(name)
+	if err != nil {
+		tunLink, err = createTunnel(name, port)
+		if err != nil {
+			return fmt.Errorf("failed to create tunnel: %v", err)
+		}
+	}
+	tun, ok := tunLink.(*netlink.Geneve)
+	if !ok {
+		return fmt.Errorf("a tunnel with the name %s already exists but is not a Geneve tunnel", name)
+	}
+	if tun.Dport != port || tun.FlowBased != true {
+		err = netlink.LinkDel(tunLink)
+		if err != nil {
+			return fmt.Errorf("failed to delete tunnel: %v", err)
+		}
+		tunLink, err = createTunnel(name, port)
+		tun, _ = tunLink.(*netlink.Geneve)
+	}
+	if err = netlink.LinkSetUp(tun); err != nil {
+		return fmt.Errorf("failed to set up Geneve tunnel: %v", err)
+	}
+	return nil
+}
+
+func createTunnel(name string, port uint16) (netlink.Link, error) {
+	tun := &netlink.Geneve{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: name,
+		},
+		Dport:     port,
+		FlowBased: true,
+	}
+	if err := netlink.LinkAdd(tun); err != nil {
+		return nil, fmt.Errorf("failed to add Geneve tunnel: %v", err)
+	}
+	return tun, nil
+}
+
+func deleteChains(ip4t, ip6t *iptables.IPTables) error {
+	exists, err := ip4t.ChainExists("filter", IPTablesRootChainName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		err := ip4t.DeleteIfExists("filter", "INPUT",
+			"-p", "udp", "--dport", strconv.Itoa(TunnelPort), "-j", IPTablesRootChainName)
+		if err != nil {
+			return err
+		}
+		err = ip4t.ClearAndDeleteChain("filter", IPTablesRootChainName)
+		if err != nil {
+			return err
+		}
+	}
+	exists, err = ip6t.ChainExists("filter", IPTablesRootChainName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		err = ip6t.DeleteIfExists("filter", "INPUT",
+			"-p", "udp", "--dport", strconv.Itoa(TunnelPort), "-j", IPTablesRootChainName)
+		if err != nil {
+			return err
+		}
+		err = ip6t.ClearAndDeleteChain("filter", IPTablesRootChainName)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (mgr *TunnelManager) Shutdown(ctx context.Context) error {
+	mgr.log.V(1).Info("Closing tunnel manager")
+	err := deleteChains(mgr.ip4t, mgr.ip6t)
+	if err != nil {
+		mgr.log.Error(err, "Failed to delete iptables chains during shutdown")
+	}
 	tunInterface, err := netlink.LinkByName(mgr.tunnelInterface)
 	if err != nil && errors.Is(err, netlink.LinkNotFoundError{}) {
 		// Interface is missing, skip teardown
-		return nil
+		mgr.log.V(1).Info("TunnelManager already closed")
 	} else if err != nil {
-		return fmt.Errorf("failed to lookup interface %s: %v", mgr.tunnelInterface, err)
-	}
-	err = netlink.LinkDel(tunInterface)
-	if err != nil {
-		return fmt.Errorf("failed to delete interface %s: %v", mgr.tunnelInterface, err)
+		mgr.log.Error(err, "Failed to get handle of tunnel interface", "interface", mgr.tunnelInterface)
+	} else {
+		err = netlink.LinkDel(tunInterface)
+		if err != nil {
+			mgr.log.Error(err, "Failed to delete tunnel interface", "interface", mgr.tunnelInterface)
+		}
 	}
 	for _, tun := range mgr.tunnels {
 		if err := tun.Teardown(); err != nil {
-			return fmt.Errorf("error while tearing down Geneve tunnel: %v", err)
+			mgr.log.Error(err, "Failed to tear down tunnel chain", "chain", tun.chainName)
 		}
 	}
 	return nil

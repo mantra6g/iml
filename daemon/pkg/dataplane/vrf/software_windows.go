@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 
-	corev1alpha1 "iml-daemon/api/core/v1alpha1"
 	"iml-daemon/pkg/dataplane"
+
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -25,7 +26,7 @@ func (s *Software) DeleteAppInstance(containerID string) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
 
-func (s *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target, containerID string,
+func (s *Software) ConfigureP4TargetInstance(targetName string, containerID string,
 ) (*dataplane.P4TargetConfig, error) {
 	return nil, fmt.Errorf("Windows is not supported yet")
 }

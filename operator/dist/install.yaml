@@ -11,7 +11,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: applications.core.loom.io
 spec:
   group: core.loom.io
@@ -75,7 +75,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: bmv2targets.infra.loom.io
 spec:
   group: infra.loom.io
@@ -141,9 +141,6 @@ spec:
                       Requests describes the minimum amount of compute resources required for the target.
                       The values of the map are string quantities, e.g. "100m" for CPU or "1Gi" for memory.
                     type: object
-                required:
-                - limits
-                - requests
                 type: object
             type: object
           status:
@@ -183,7 +180,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: loomnodes.infra.loom.io
 spec:
   group: infra.loom.io
@@ -244,7 +241,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: networkfunctionconfigs.core.loom.io
 spec:
   group: core.loom.io
@@ -252,6 +249,10 @@ spec:
     kind: NetworkFunctionConfig
     listKind: NetworkFunctionConfigList
     plural: networkfunctionconfigs
+    shortNames:
+    - nfconf
+    - nfconfigs
+    - nfconfig
     singular: networkfunctionconfig
   scope: Namespaced
   versions:
@@ -282,10 +283,47 @@ spec:
             description: spec defines the desired state of NetworkFunctionConfig
             properties:
               tables:
-                description: Tables defines the configurations for each of the tables
-                  in the network function
-                items:
+                additionalProperties:
                   properties:
+                    defaultAction:
+                      description: DefaultAction is the action to execute whenever
+                        there is no match
+                      properties:
+                        name:
+                          description: Name of the action to execute
+                          type: string
+                        parameters:
+                          description: Parameters is a list of parameters for the
+                            action.
+                          items:
+                            properties:
+                              int:
+                                description: Int specifies integer values of arbitrary
+                                  size as a string
+                                type: string
+                              ipv4Address:
+                                description: IPv4Address specifies an IPv4 address
+                                type: string
+                              ipv6Address:
+                                description: IPv6Address specifies an IPv6 address
+                                type: string
+                              macAddress:
+                                description: MACAddress specifies a MAC address
+                                type: string
+                              name:
+                                description: Name of the parameter. This is used to
+                                  identify the parameter in the action definition.
+                                type: string
+                              rawHex:
+                                description: RawHex allows specifying hex values directly
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                      required:
+                      - name
+                      type: object
                     entries:
                       description: Entries to be added to the table
                       items:
@@ -302,20 +340,30 @@ spec:
                                   the action.
                                 items:
                                   properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
                                     name:
-                                      description: Name of the field to match
+                                      description: Name of the parameter. This is
+                                        used to identify the parameter in the action
+                                        definition.
                                       type: string
-                                    type:
-                                      description: Type of the value
-                                      type: string
-                                    value:
-                                      description: Value to of the field to match
-                                        against
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
                                       type: string
                                   required:
                                   - name
-                                  - type
-                                  - value
                                   type: object
                                 type: array
                             required:
@@ -325,20 +373,189 @@ spec:
                             description: MatchFields is a list of fields to match
                               against for this entry.
                             items:
+                              description: MatchField determines which fields and
+                                values to match.
                               properties:
+                                exact:
+                                  description: Exact match on the field value.
+                                  properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
+                                      type: string
+                                  type: object
+                                lpm:
+                                  description: LPM specifies a prefix length match
+                                    on the field value.
+                                  properties:
+                                    prefixLen:
+                                      description: PrefixLen in bits
+                                      type: string
+                                    value:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                  required:
+                                  - prefixLen
+                                  - value
+                                  type: object
                                 name:
                                   description: Name of the field to match
                                   type: string
+                                optional:
+                                  description: |-
+                                    Optional match on the field value. If the value is present, it will be treated as an exact match,
+                                    if the value is not present, it will be treated as a wildcard.
+                                  properties:
+                                    int:
+                                      description: Int specifies integer values of
+                                        arbitrary size as a string
+                                      type: string
+                                    ipv4Address:
+                                      description: IPv4Address specifies an IPv4 address
+                                      type: string
+                                    ipv6Address:
+                                      description: IPv6Address specifies an IPv6 address
+                                      type: string
+                                    macAddress:
+                                      description: MACAddress specifies a MAC address
+                                      type: string
+                                    rawHex:
+                                      description: RawHex allows specifying hex values
+                                        directly
+                                      type: string
+                                  type: object
+                                range:
+                                  description: Range
+                                  properties:
+                                    high:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                    low:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                  required:
+                                  - high
+                                  - low
+                                  type: object
+                                ternary:
+                                  description: Ternary specifies a mask to
+                                  properties:
+                                    mask:
+                                      type: string
+                                    value:
+                                      description: ParametrizedValue allows defining
+                                        a value and the type at the same time.
+                                      properties:
+                                        int:
+                                          description: Int specifies integer values
+                                            of arbitrary size as a string
+                                          type: string
+                                        ipv4Address:
+                                          description: IPv4Address specifies an IPv4
+                                            address
+                                          type: string
+                                        ipv6Address:
+                                          description: IPv6Address specifies an IPv6
+                                            address
+                                          type: string
+                                        macAddress:
+                                          description: MACAddress specifies a MAC
+                                            address
+                                          type: string
+                                        rawHex:
+                                          description: RawHex allows specifying hex
+                                            values directly
+                                          type: string
+                                      type: object
+                                  required:
+                                  - mask
+                                  - value
+                                  type: object
                                 type:
                                   description: Type of the value
-                                  type: string
-                                value:
-                                  description: Value to of the field to match against
                                   type: string
                               required:
                               - name
                               - type
-                              - value
                               type: object
                             type: array
                         required:
@@ -346,13 +563,10 @@ spec:
                         - matchFields
                         type: object
                       type: array
-                    name:
-                      description: Name of the table
-                      type: string
-                  required:
-                  - name
                   type: object
-                type: array
+                description: Tables defines the configurations for each of the tables
+                  in the network function
+                type: object
             type: object
           status:
             description: status defines the observed state of NetworkFunctionConfig
@@ -369,7 +583,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: networkfunctiondeployments.scheduling.loom.io
 spec:
   group: scheduling.loom.io
@@ -528,15 +742,12 @@ spec:
                         properties:
                           name:
                             type: string
-                          namespace:
-                            type: string
                         required:
                         - name
-                        - namespace
                         type: object
                       controlPlane:
                         description: |-
-                          ControlPlanePod defines the template for the control plane pod
+                          ControlPlane defines the template for the control plane pod
                           of the network function.
                         properties:
                           affinity:
@@ -1118,8 +1329,8 @@ spec:
                                       most preferred is the one with the greatest sum of weights, i.e.
                                       for each node that meets all of the scheduling requirements (resource
                                       request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                      compute a sum by iterating through the elements of this field and adding
-                                      "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                      compute a sum by iterating through the elements of this field and subtracting
+                                      "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                       node(s) with the highest sum are the most preferred.
                                     items:
                                       description: The weights of all of the matched
@@ -1482,8 +1693,9 @@ spec:
                                 present in a Container.
                               properties:
                                 name:
-                                  description: Name of the environment variable. Must
-                                    be a C_IDENTIFIER.
+                                  description: |-
+                                    Name of the environment variable.
+                                    May consist of any printable ASCII characters except '='.
                                   type: string
                                 value:
                                   description: |-
@@ -1539,6 +1751,43 @@ spec:
                                           type: string
                                       required:
                                       - fieldPath
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    fileKeyRef:
+                                      description: |-
+                                        FileKeyRef selects a key of the env file.
+                                        Requires the EnvFiles feature gate to be enabled.
+                                      properties:
+                                        key:
+                                          description: |-
+                                            The key within the env file. An invalid key will prevent the pod from starting.
+                                            The keys defined within a source may consist of any printable ASCII characters except '='.
+                                            During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                          type: string
+                                        optional:
+                                          default: false
+                                          description: |-
+                                            Specify whether the file or its key must be defined. If the file or key
+                                            does not exist, then the env var is not published.
+                                            If optional is set to true and the specified key does not exist,
+                                            the environment variable will not be set in the Pod's containers.
+
+                                            If optional is set to false and the specified key does not exist,
+                                            an error will be returned during Pod creation.
+                                          type: boolean
+                                        path:
+                                          description: |-
+                                            The path within the volume from which to select the file.
+                                            Must be relative and may not contain the '..' path or start with '..'.
+                                          type: string
+                                        volumeName:
+                                          description: The name of the volume mount
+                                            containing the env file.
+                                          type: string
+                                      required:
+                                      - key
+                                      - path
+                                      - volumeName
                                       type: object
                                       x-kubernetes-map-type: atomic
                                     resourceFieldRef:
@@ -1625,7 +1874,7 @@ spec:
                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                   that are used by this container.
 
-                                  This is an alpha field and requires enabling the
+                                  This field depends on the
                                   DynamicResourceAllocation feature gate.
 
                                   This field is immutable. It can only be set for containers.
@@ -1698,9 +1947,10 @@ spec:
                                 operator:
                                   description: |-
                                     Operator represents a key's relationship to the value.
-                                    Valid operators are Exists and Equal. Defaults to Equal.
+                                    Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                                     Exists is equivalent to wildcard for value, so that a pod can
                                     tolerate all taints of a particular category.
+                                    Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                                   type: string
                                 tolerationSeconds:
                                   description: |-
@@ -1732,7 +1982,7 @@ spec:
                           where this NetworkFunction instance should be scheduled.
                           If not specified, the scheduler will automatically select a suitable P4Target based on the TargetSelector.
                         type: string
-                      targetselector:
+                      targetSelector:
                         additionalProperties:
                           type: string
                         description: TargetSelector is used to select P4 targets based
@@ -1829,7 +2079,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: networkfunctionreplicasets.scheduling.loom.io
 spec:
   group: scheduling.loom.io
@@ -1943,15 +2193,12 @@ spec:
                         properties:
                           name:
                             type: string
-                          namespace:
-                            type: string
                         required:
                         - name
-                        - namespace
                         type: object
                       controlPlane:
                         description: |-
-                          ControlPlanePod defines the template for the control plane pod
+                          ControlPlane defines the template for the control plane pod
                           of the network function.
                         properties:
                           affinity:
@@ -2533,8 +2780,8 @@ spec:
                                       most preferred is the one with the greatest sum of weights, i.e.
                                       for each node that meets all of the scheduling requirements (resource
                                       request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                      compute a sum by iterating through the elements of this field and adding
-                                      "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                      compute a sum by iterating through the elements of this field and subtracting
+                                      "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                       node(s) with the highest sum are the most preferred.
                                     items:
                                       description: The weights of all of the matched
@@ -2897,8 +3144,9 @@ spec:
                                 present in a Container.
                               properties:
                                 name:
-                                  description: Name of the environment variable. Must
-                                    be a C_IDENTIFIER.
+                                  description: |-
+                                    Name of the environment variable.
+                                    May consist of any printable ASCII characters except '='.
                                   type: string
                                 value:
                                   description: |-
@@ -2954,6 +3202,43 @@ spec:
                                           type: string
                                       required:
                                       - fieldPath
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    fileKeyRef:
+                                      description: |-
+                                        FileKeyRef selects a key of the env file.
+                                        Requires the EnvFiles feature gate to be enabled.
+                                      properties:
+                                        key:
+                                          description: |-
+                                            The key within the env file. An invalid key will prevent the pod from starting.
+                                            The keys defined within a source may consist of any printable ASCII characters except '='.
+                                            During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                          type: string
+                                        optional:
+                                          default: false
+                                          description: |-
+                                            Specify whether the file or its key must be defined. If the file or key
+                                            does not exist, then the env var is not published.
+                                            If optional is set to true and the specified key does not exist,
+                                            the environment variable will not be set in the Pod's containers.
+
+                                            If optional is set to false and the specified key does not exist,
+                                            an error will be returned during Pod creation.
+                                          type: boolean
+                                        path:
+                                          description: |-
+                                            The path within the volume from which to select the file.
+                                            Must be relative and may not contain the '..' path or start with '..'.
+                                          type: string
+                                        volumeName:
+                                          description: The name of the volume mount
+                                            containing the env file.
+                                          type: string
+                                      required:
+                                      - key
+                                      - path
+                                      - volumeName
                                       type: object
                                       x-kubernetes-map-type: atomic
                                     resourceFieldRef:
@@ -3040,7 +3325,7 @@ spec:
                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                   that are used by this container.
 
-                                  This is an alpha field and requires enabling the
+                                  This field depends on the
                                   DynamicResourceAllocation feature gate.
 
                                   This field is immutable. It can only be set for containers.
@@ -3113,9 +3398,10 @@ spec:
                                 operator:
                                   description: |-
                                     Operator represents a key's relationship to the value.
-                                    Valid operators are Exists and Equal. Defaults to Equal.
+                                    Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                                     Exists is equivalent to wildcard for value, so that a pod can
                                     tolerate all taints of a particular category.
+                                    Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                                   type: string
                                 tolerationSeconds:
                                   description: |-
@@ -3147,7 +3433,7 @@ spec:
                           where this NetworkFunction instance should be scheduled.
                           If not specified, the scheduler will automatically select a suitable P4Target based on the TargetSelector.
                         type: string
-                      targetselector:
+                      targetSelector:
                         additionalProperties:
                           type: string
                         description: TargetSelector is used to select P4 targets based
@@ -3234,7 +3520,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: networkfunctions.core.loom.io
 spec:
   group: core.loom.io
@@ -3242,10 +3528,20 @@ spec:
     kind: NetworkFunction
     listKind: NetworkFunctionList
     plural: networkfunctions
+    shortNames:
+    - nf
+    - nfs
     singular: networkfunction
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NetworkFunction is the Schema for the networkfunctions API
@@ -3276,15 +3572,12 @@ spec:
                 properties:
                   name:
                     type: string
-                  namespace:
-                    type: string
                 required:
                 - name
-                - namespace
                 type: object
               controlPlane:
                 description: |-
-                  ControlPlanePod defines the template for the control plane pod
+                  ControlPlane defines the template for the control plane pod
                   of the network function.
                 properties:
                   affinity:
@@ -3861,8 +4154,8 @@ spec:
                               most preferred is the one with the greatest sum of weights, i.e.
                               for each node that meets all of the scheduling requirements (resource
                               request, requiredDuringScheduling anti-affinity expressions, etc.),
-                              compute a sum by iterating through the elements of this field and adding
-                              "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                              compute a sum by iterating through the elements of this field and subtracting
+                              "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                               node(s) with the highest sum are the most preferred.
                             items:
                               description: The weights of all of the matched WeightedPodAffinityTerm
@@ -4221,8 +4514,9 @@ spec:
                         in a Container.
                       properties:
                         name:
-                          description: Name of the environment variable. Must be a
-                            C_IDENTIFIER.
+                          description: |-
+                            Name of the environment variable.
+                            May consist of any printable ASCII characters except '='.
                           type: string
                         value:
                           description: |-
@@ -4278,6 +4572,43 @@ spec:
                                   type: string
                               required:
                               - fieldPath
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fileKeyRef:
+                              description: |-
+                                FileKeyRef selects a key of the env file.
+                                Requires the EnvFiles feature gate to be enabled.
+                              properties:
+                                key:
+                                  description: |-
+                                    The key within the env file. An invalid key will prevent the pod from starting.
+                                    The keys defined within a source may consist of any printable ASCII characters except '='.
+                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                  type: string
+                                optional:
+                                  default: false
+                                  description: |-
+                                    Specify whether the file or its key must be defined. If the file or key
+                                    does not exist, then the env var is not published.
+                                    If optional is set to true and the specified key does not exist,
+                                    the environment variable will not be set in the Pod's containers.
+
+                                    If optional is set to false and the specified key does not exist,
+                                    an error will be returned during Pod creation.
+                                  type: boolean
+                                path:
+                                  description: |-
+                                    The path within the volume from which to select the file.
+                                    Must be relative and may not contain the '..' path or start with '..'.
+                                  type: string
+                                volumeName:
+                                  description: The name of the volume mount containing
+                                    the env file.
+                                  type: string
+                              required:
+                              - key
+                              - path
+                              - volumeName
                               type: object
                               x-kubernetes-map-type: atomic
                             resourceFieldRef:
@@ -4363,7 +4694,7 @@ spec:
                           Claims lists the names of resources, defined in spec.resourceClaims,
                           that are used by this container.
 
-                          This is an alpha field and requires enabling the
+                          This field depends on the
                           DynamicResourceAllocation feature gate.
 
                           This field is immutable. It can only be set for containers.
@@ -4435,9 +4766,10 @@ spec:
                         operator:
                           description: |-
                             Operator represents a key's relationship to the value.
-                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                             Exists is equivalent to wildcard for value, so that a pod can
                             tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                           type: string
                         tolerationSeconds:
                           description: |-
@@ -4469,7 +4801,7 @@ spec:
                   where this NetworkFunction instance should be scheduled.
                   If not specified, the scheduler will automatically select a suitable P4Target based on the TargetSelector.
                 type: string
-              targetselector:
+              targetSelector:
                 additionalProperties:
                   type: string
                 description: TargetSelector is used to select P4 targets based on
@@ -4520,6 +4852,10 @@ spec:
               phase:
                 description: Phase indicates the current phase of the NetworkFunction
                 type: string
+              reason:
+                description: Reason provides additional information about why the
+                  NetworkFunction is in its current phase.
+                type: string
             type: object
         required:
         - spec
@@ -4533,7 +4869,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: p4targets.core.loom.io
 spec:
   group: core.loom.io
@@ -4541,10 +4877,20 @@ spec:
     kind: P4Target
     listKind: P4TargetList
     plural: p4targets
+    shortNames:
+    - targets
+    - target
     singular: p4target
-  scope: Cluster
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: P4Target is the Schema for the p4targets API
@@ -4674,7 +5020,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: servicechains.core.loom.io
 spec:
   group: core.loom.io
@@ -5899,6 +6245,26 @@ webhooks:
     service:
       name: loom-webhook-service
       namespace: loom-system
+      path: /mutate-core-loom-io-v1alpha1-networkfunctionconfig
+  failurePolicy: Fail
+  name: mnetworkfunctionconfig-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctionconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: loom-webhook-service
+      namespace: loom-system
       path: /mutate-scheduling-loom-io-v1alpha1-networkfunctiondeployment
   failurePolicy: Fail
   name: mnetworkfunctiondeployment-v1alpha1.kb.io
@@ -5921,6 +6287,26 @@ metadata:
     cert-manager.io/inject-ca-from: loom-system/loom-serving-cert
   name: loom-validating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: loom-webhook-service
+      namespace: loom-system
+      path: /validate-core-loom-io-v1alpha1-networkfunctionconfig
+  failurePolicy: Fail
+  name: vnetworkfunctionconfig-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.loom.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - networkfunctionconfigs
+  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:

@@ -1,0 +1,134 @@
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-client
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-server
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: pkt-logger
+  namespace: default
+  labels:
+    nf: logger
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model
+  configRef:
+    name: pkt-logger-config
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target
+spec:
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: client-server-with-logger
+  namespace: default
+spec:
+  from:
+    name: web-client
+    namespace: default
+  to:
+    name: web-server
+    namespace: default
+  functions:
+  - matchLabels:
+      nf: logger
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "web-server",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-client
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-client
+  template:
+    metadata:
+      labels:
+        app: web-client
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "web-client",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      affinity:
+        podAntiAffinity:
+          # This changed from 'required' to 'preferred'
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - web-server
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: web-client
+          image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]

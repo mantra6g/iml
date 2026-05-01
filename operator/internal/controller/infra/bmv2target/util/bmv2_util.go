@@ -8,8 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/operator/api/infra/v1alpha1"
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
 )
 
@@ -162,7 +162,7 @@ func (c CNIConfig) String() string {
 
 func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 	return CNIConfig{
-		Name: "iml-cni",
+		Name: "loom-cni",
 		CNIArgs: CNIArgs{
 			AppType:    "p4target",
 			TargetName: bmv2Target.Name,

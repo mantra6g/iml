@@ -21,10 +21,11 @@ package util
 
 import (
 	"fmt"
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/util/sets"

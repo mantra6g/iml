@@ -1,0 +1,77 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDEs
+.idea
+.vscode
+*.swp
+*.swo
+*~
+*.iml
+
+# Build and dependencies
+bin/
+dist/
+vendor/
+*.o
+*.a
+*.so
+
+# Test coverage
+coverage.out
+cover.out
+*.cover
+coverage/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+.golintci.yml
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Documentation
+README.md
+*.md
+docs/
+site/
+mkdocs.yml
+.readthedocs.yml
+
+# Makefiles
+Makefile
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Kubernetes
+kustomization.yaml
+chart/
+
+# Editor config
+.editorconfig
+
+# Kubebuilder
+config/
+PROJECT
+
+# Other
+hack/

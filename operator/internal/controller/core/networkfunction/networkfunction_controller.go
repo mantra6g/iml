@@ -18,14 +18,14 @@ package networkfunction
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	nfutils "github.com/mantra6g/iml/operator/internal/controller/core/networkfunction/util"
 	"time"
 
-	corev1alpha1 "github.com/mantra6g/iml/operator/api/core/v1alpha1"
-	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
-	stringutils "github.com/mantra6g/iml/operator/pkg/util/string"
+	nfutils "github.com/mantra6g/iml/operator/internal/controller/core/networkfunction/util"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -68,36 +68,18 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	logger.Info("Reconciling NetworkFunction", "name", nf.Name, "namespace", nf.Namespace)
 
-	// Check if being deleted
-	if !nf.DeletionTimestamp.IsZero() {
-		// Handle deletion
-		if stringutils.ContainsElement(nf.GetFinalizers(), corev1alpha1.NetworkFunctionFinalizer) {
-			// Remove finalizer
-			nf.SetFinalizers(stringutils.RemoveElement(nf.GetFinalizers(), corev1alpha1.NetworkFunctionFinalizer))
-			if err := r.Update(ctx, nf); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// Add finalizer if not present
-	if !stringutils.ContainsElement(nf.Finalizers, corev1alpha1.NetworkFunctionFinalizer) {
-		nf.Finalizers = append(nf.Finalizers, corev1alpha1.NetworkFunctionFinalizer)
-		if err := r.Update(ctx, nf); err != nil {
-			logger.Error(err, "failed to add finalizer to NetworkFunction")
-			return ctrl.Result{}, err
-		}
-		logger.Info("Added finalizer to NetworkFunction", "name", nf.Name)
-	}
-
 	// Schedule the nf to a P4Target if not already bound
 	// TODO: This logic should be handled by a scheduler component in the control plane,
 	//   but for simplicity we do it here for now. We can refactor later to move the scheduling
 	//   logic to a separate component if needed.
 	if nf.Spec.TargetName == "" {
 		err := r.scheduleNetworkFunction(ctx, nf)
-		if err != nil {
+		if errors.Is(err, NoMatchingTargetsError{}) {
+			cond := nfutils.NewScheduledCondition(metav1.ConditionFalse, "Unschedulable", "No matching targets found")
+			nfutils.UpdateNFCondition(&nf.Status, cond)
+			_ = r.updateStatus(ctx, nf)
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		} else if err != nil {
 			logger.Error(err, "failed to schedule NetworkFunction")
 			return ctrl.Result{}, err
 		}
@@ -135,6 +117,17 @@ func (r *NetworkFunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+type NoMatchingTargetsError struct {
+	err error
+}
+
+func (e NoMatchingTargetsError) Error() string {
+	return fmt.Sprintf("no feasible P4Targets found for NetworkFunction")
+}
+func (e NoMatchingTargetsError) Unwrap() error {
+	return e.err
+}
+
 func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
 	ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
 	logger := logf.FromContext(ctx)
@@ -148,8 +141,9 @@ func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
 
 	feasible := filterFeasible(nf, allTargets)
 	if len(feasible) == 0 {
-		logger.Info("No feasible P4Targets found for NetworkFunction", "nf", nf)
-		return fmt.Errorf("no feasible P4Targets found for NetworkFunction")
+		logger.Info("No feasible P4Targets found for NetworkFunction",
+			"nf", nf, "targetsProcessed", len(feasible))
+		return NoMatchingTargetsError{}
 	}
 
 	chosen := r.pickNode(nf, feasible)
@@ -161,29 +155,34 @@ func (r *NetworkFunctionReconciler) updateStatus(ctx context.Context,
 	nf *corev1alpha1.NetworkFunction) error {
 	original := nf.DeepCopy()
 	newStatus := calculateStatus(nf)
-	nf.Status = newStatus
+	nf.Status = *newStatus
 	return r.Status().Patch(ctx, nf, client.MergeFrom(original))
 }
 
 func calculateStatus(nf *corev1alpha1.NetworkFunction,
-) corev1alpha1.NetworkFunctionStatus {
-	status := corev1alpha1.NetworkFunctionStatus{
+) *corev1alpha1.NetworkFunctionStatus {
+	status := &corev1alpha1.NetworkFunctionStatus{
 		ObservedGeneration: nf.Generation,
 	}
 	// Copy conditions to the new status
 	status.Conditions = make([]corev1alpha1.NetworkFunctionCondition, len(nf.Status.Conditions))
 	for i := range nf.Status.Conditions {
-		status.Conditions = append(status.Conditions, nf.Status.Conditions[i])
+		status.Conditions[i] = nf.Status.Conditions[i]
 	}
-	if nf.Spec.TargetName == "" {
+	if status.Phase == "" {
+		status.Phase = corev1alpha1.NetworkFunctionPending
+	}
+	if nf.Spec.TargetName != "" {
+		newCondition := nfutils.NewScheduledCondition(metav1.ConditionTrue, "Scheduled",
+			fmt.Sprintf("The NetworkFunction is scheduled to target %s.", nf.Spec.TargetName))
+		status.Conditions = nfutils.UpdateNFCondition(status, newCondition)
+	}
+	if nfutils.GetScheduledCondition(status) == nil {
 		newCondition := nfutils.NewScheduledCondition(metav1.ConditionFalse,
-			"NotScheduled", "The NetworkFunction has not been scheduled to a target yet.")
-		status.Conditions = nfutils.UpdateNFCondition(nf, newCondition)
+			"SchedulingPending", "The NetworkFunction has not been scheduled to a target yet.")
+		status.Conditions = nfutils.UpdateNFCondition(status, newCondition)
 		return status
 	}
-	newCondition := nfutils.NewScheduledCondition(metav1.ConditionTrue, "Scheduled",
-		fmt.Sprintf("The NetworkFunction is scheduled to target %s.", nf.Spec.TargetName))
-	status.Conditions = nfutils.UpdateNFCondition(nf, newCondition)
 	return status
 }
 

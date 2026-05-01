@@ -36,6 +36,7 @@ metadata:
       [{
         "name": "iml-cni",
         "cni-args": {
+          "app_type":      "application",
           "app_name":      "<application-name>",
           "app_namespace": "<application-namespace>"
         }
@@ -65,6 +66,7 @@ spec:
           [{
             "name": "iml-cni",
             "cni-args": {
+              "app_type":      "application",
               "app_name":      "web-client",
               "app_namespace": "default"
             }
@@ -96,6 +98,7 @@ spec:
           [{
             "name": "iml-cni",
             "cni-args": {
+              "app_type":      "application",
               "app_name":      "web-server",
               "app_namespace": "default"
             }
