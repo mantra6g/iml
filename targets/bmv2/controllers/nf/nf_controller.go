@@ -17,7 +17,6 @@ limitations under the License.
 package nf
 
 import (
-	corev1alpha1 "bmv2-driver/api/core/v1alpha1"
 	"bmv2-driver/managers/nf"
 	"bmv2-driver/managers/nfcfg"
 	"bmv2-driver/managers/p4target"
@@ -26,6 +25,7 @@ import (
 	"net"
 	"time"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"

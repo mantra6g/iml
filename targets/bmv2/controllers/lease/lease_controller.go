@@ -17,11 +17,11 @@ limitations under the License.
 package lease
 
 import (
-	corev1alpha1 "bmv2-driver/api/core/v1alpha1"
 	"bmv2-driver/managers/p4target"
 	"context"
 	"time"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	coordv1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
