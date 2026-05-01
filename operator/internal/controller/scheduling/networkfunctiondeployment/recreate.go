@@ -3,7 +3,7 @@ package networkfunctiondeployment
 import (
 	"context"
 
-	schedulingv1alpha1 "github.com/mantra6g/iml/operator/api/scheduling/v1alpha1"
+	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
 	deploymentutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment/util"
 )
 

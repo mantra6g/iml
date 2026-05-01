@@ -15,13 +15,14 @@ metadata:
   name: web-client-to-web-server
 spec:
   from:
-    appName: web-client
-    appNamespace: default
+    name: web-client
+    namespace: default
   to:
-    appName: web-server
-    appNamespace: default
+    name: web-server
+    namespace: default
   functions:
-    - nf: firewall
+  - matchLabels:
+      nf: firewall
 ```
 
 This manifest creates a service chain named `web-client-to-web-server` that steers traffic 
