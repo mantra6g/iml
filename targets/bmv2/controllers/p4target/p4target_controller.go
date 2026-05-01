@@ -68,6 +68,13 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
+	if err := r.P4TargetManager.EnsureNetworkConfiguration(p4target.NetConfig{
+		TargetCIDR: target.Spec.NfCIDR,
+	}); err != nil {
+		logger.Error(err, "Failed to configure network")
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, r.updateP4TargetStatus(ctx, target)
 }
 
