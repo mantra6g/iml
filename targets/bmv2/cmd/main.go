@@ -27,13 +27,14 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const (
-	defaultSwitchAddr              = "127.0.0.1:9559"
-	deviceID                       = 0
-	electionIDHigh                 = 0
-	electionIDLow                  = 1
+	defaultSwitchAddr                = "127.0.0.1:9559"
+	deviceID                         = 0
+	electionIDHigh                   = 0
+	electionIDLow                    = 1
 	DefaultLeaseRenewIntervalSeconds = 5
 	DefaultLeaseDurationSeconds      = 40
 	DefaultMaxNFSlots                = 8
@@ -78,7 +79,10 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:  scheme,
+		Metrics: metricsserver.Options{BindAddress: ":8081"},
+	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
