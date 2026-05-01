@@ -16,6 +16,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"log/slog"
+	"net/http"
 	"time"
 
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
@@ -123,6 +125,8 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "P4Target")
 	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil)).With("component", "bmv2-driver")
 
 	conn, err := grpc.NewClient(switchAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
