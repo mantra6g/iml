@@ -10,18 +10,15 @@ import (
 	"bmv2-driver/api"
 	p4targetpkg "bmv2-driver/managers/p4target"
 	"bmv2-driver/pkg/p4compile"
+	p4switch "bmv2-driver/pkg/p4switch"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ManagerConfig struct {
-	P4Client        p4v1.P4RuntimeClient
-	DeviceID        uint64
-	ElectionIDHigh  uint64
-	ElectionIDLow   uint64
+	Switch          *p4switch.SwitchClient
 	P4TargetManager p4targetpkg.Manager
 }
 
@@ -44,10 +41,7 @@ type trackedOp struct {
 }
 
 type RealManager struct {
-	p4client        p4v1.P4RuntimeClient
-	deviceID        uint64
-	electionIDHigh  uint64
-	electionIDLow   uint64
+	switchClient    *p4switch.SwitchClient
 	p4targetManager p4targetpkg.Manager
 
 	mu       sync.Mutex
@@ -59,17 +53,14 @@ type RealManager struct {
 var _ Manager = &RealManager{}
 
 func NewManager(cfg ManagerConfig) (Manager, error) {
-	if cfg.P4Client == nil {
-		return nil, fmt.Errorf("P4Runtime client is required")
+	if cfg.Switch == nil {
+		return nil, fmt.Errorf("switch client is required")
 	}
 	if cfg.P4TargetManager == nil {
 		return nil, fmt.Errorf("P4Target manager is required")
 	}
 	return &RealManager{
-		p4client:        cfg.P4Client,
-		deviceID:        cfg.DeviceID,
-		electionIDHigh:  cfg.ElectionIDHigh,
-		electionIDLow:   cfg.ElectionIDLow,
+		switchClient:    cfg.Switch,
 		p4targetManager: cfg.P4TargetManager,
 		programs:        make(map[client.ObjectKey]*api.P4Program),
 		ops:             make(map[client.ObjectKey]*trackedOp),
@@ -128,9 +119,7 @@ func (m *RealManager) GetDeployedNetworkFunctions(ctx context.Context) ([]client
 	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	config, err := m.p4client.GetForwardingPipelineConfig(reqCtx, &p4v1.GetForwardingPipelineConfigRequest{
-		DeviceId: m.deviceID,
-	})
+	config, err := m.switchClient.GetPipeline(reqCtx)
 	if err != nil {
 		return nil, fmt.Errorf("querying switch pipeline: %w", err)
 	}
@@ -242,20 +231,7 @@ func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFuncti
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	req := &p4v1.SetForwardingPipelineConfigRequest{
-		DeviceId:   m.deviceID,
-		ElectionId: &p4v1.Uint128{High: m.electionIDHigh, Low: m.electionIDLow},
-		Action:     p4v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
-		Config: &p4v1.ForwardingPipelineConfig{
-			P4DeviceConfig: program.P4DeviceConfig,
-		},
-	}
-	if program.P4Info != nil {
-		req.Config.P4Info = program.P4Info
-	}
-
-	_, err := m.p4client.SetForwardingPipelineConfig(reqCtx, req)
-	return err
+	return m.switchClient.DeployPipeline(reqCtx, program)
 }
 
 func (m *RealManager) runDeletion(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction) {
@@ -291,13 +267,7 @@ func (m *RealManager) deleteResources(ctx context.Context, nf *corev1alpha1.Netw
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	_, err := m.p4client.SetForwardingPipelineConfig(reqCtx, &p4v1.SetForwardingPipelineConfigRequest{
-		DeviceId:   m.deviceID,
-		ElectionId: &p4v1.Uint128{High: m.electionIDHigh, Low: m.electionIDLow},
-		Action:     p4v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
-		Config:     &p4v1.ForwardingPipelineConfig{},
-	})
-	if err != nil {
+	if err := m.switchClient.ResetPipeline(reqCtx); err != nil {
 		return fmt.Errorf("resetting forwarding pipeline: %w", err)
 	}
 
@@ -307,4 +277,3 @@ func (m *RealManager) deleteResources(ctx context.Context, nf *corev1alpha1.Netw
 	m.mu.Unlock()
 	return nil
 }
-

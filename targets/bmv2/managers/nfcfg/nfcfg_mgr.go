@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"bmv2-driver/api"
+	p4switch "bmv2-driver/pkg/p4switch"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
@@ -14,15 +15,12 @@ import (
 )
 
 type ManagerConfig struct {
-	P4Client       p4v1.P4RuntimeClient
-	DeviceID       uint64
-	ElectionIDHigh uint64
-	ElectionIDLow  uint64
+	Switch *p4switch.SwitchClient
 }
 
 type Manager interface {
-	EnsurePresentConfigForNF(nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error
-	EnsureAbsentConfig(nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error
+	EnsurePresentConfigForNF(ctx context.Context, nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error
+	EnsureAbsentConfig(ctx context.Context, nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error
 	GetAllNetworkFunctionsUsingConfig(nfCfgID client.ObjectKey) ([]client.ObjectKey, error)
 }
 
@@ -33,10 +31,7 @@ type appliedState struct {
 }
 
 type RealManager struct {
-	p4client       p4v1.P4RuntimeClient
-	deviceID       uint64
-	electionIDHigh uint64
-	electionIDLow  uint64
+	switchClient *p4switch.SwitchClient
 
 	mu          sync.RWMutex
 	configToNFs map[client.ObjectKey]map[client.ObjectKey]struct{} // configKey -> set of nfKeys
@@ -46,23 +41,20 @@ type RealManager struct {
 var _ Manager = &RealManager{}
 
 func NewManager(cfg ManagerConfig) (Manager, error) {
-	if cfg.P4Client == nil {
-		return nil, fmt.Errorf("P4Runtime client is required")
+	if cfg.Switch == nil {
+		return nil, fmt.Errorf("switch client is required")
 	}
 	return &RealManager{
-		p4client:       cfg.P4Client,
-		deviceID:       cfg.DeviceID,
-		electionIDHigh: cfg.ElectionIDHigh,
-		electionIDLow:  cfg.ElectionIDLow,
-		configToNFs:    make(map[client.ObjectKey]map[client.ObjectKey]struct{}),
-		nfApplied:      make(map[client.ObjectKey]*appliedState),
+		switchClient: cfg.Switch,
+		configToNFs:  make(map[client.ObjectKey]map[client.ObjectKey]struct{}),
+		nfApplied:    make(map[client.ObjectKey]*appliedState),
 	}, nil
 }
 
 // EnsurePresentConfigForNF applies the table entries from nfConfig to the switch for the given NF.
 // If nfConfig is nil the call is a no-op. If the program is not yet loaded the call returns nil
 // and the reconciler will retry on the next cycle.
-func (m *RealManager) EnsurePresentConfigForNF(nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error {
+func (m *RealManager) EnsurePresentConfigForNF(ctx context.Context, nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error {
 	nfKey := client.ObjectKeyFromObject(nf)
 
 	if nfConfig == nil {
@@ -82,7 +74,7 @@ func (m *RealManager) EnsurePresentConfigForNF(nfConfig *corev1alpha1.NetworkFun
 		return nil // already up to date
 	}
 
-	tables, err := m.fetchTableMetadata()
+	tables, err := m.fetchTableMetadata(ctx)
 	if err != nil {
 		return fmt.Errorf("fetching P4Info: %w", err)
 	}
@@ -96,13 +88,19 @@ func (m *RealManager) EnsurePresentConfigForNF(nfConfig *corev1alpha1.NetworkFun
 	}
 
 	if existing != nil && len(existing.entries) > 0 {
-		if err := m.writeEntries(existing.entries, p4v1.Update_DELETE); err != nil {
+		writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := m.switchClient.EditTableEntries(writeCtx, existing.entries, p4v1.Update_DELETE)
+		cancel()
+		if err != nil {
 			return fmt.Errorf("removing stale entries: %w", err)
 		}
 	}
 
 	if len(entries) > 0 {
-		if err := m.writeEntries(entries, p4v1.Update_INSERT); err != nil {
+		writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := m.switchClient.EditTableEntries(writeCtx, entries, p4v1.Update_INSERT)
+		cancel()
+		if err != nil {
 			return fmt.Errorf("inserting table entries: %w", err)
 		}
 	}
@@ -122,7 +120,7 @@ func (m *RealManager) EnsurePresentConfigForNF(nfConfig *corev1alpha1.NetworkFun
 }
 
 // EnsureAbsentConfig removes the table entries that were applied for the given NF.
-func (m *RealManager) EnsureAbsentConfig(nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error {
+func (m *RealManager) EnsureAbsentConfig(ctx context.Context, nfConfig *corev1alpha1.NetworkFunctionConfig, nf *corev1alpha1.NetworkFunction) error {
 	nfKey := client.ObjectKeyFromObject(nf)
 
 	m.mu.RLock()
@@ -133,14 +131,17 @@ func (m *RealManager) EnsureAbsentConfig(nfConfig *corev1alpha1.NetworkFunctionC
 		return nil
 	}
 
-	tables, err := m.fetchTableMetadata()
+	tables, err := m.fetchTableMetadata(ctx)
 	if err != nil || tables == nil {
 		// Program may have been unloaded; clean up tracking regardless.
 		m.removeTracking(nfKey, nfConfig)
 		return nil
 	}
 
-	if err := m.writeEntries(existing.entries, p4v1.Update_DELETE); err != nil {
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	err = m.switchClient.EditTableEntries(writeCtx, existing.entries, p4v1.Update_DELETE)
+	cancel()
+	if err != nil {
 		return fmt.Errorf("deleting table entries: %w", err)
 	}
 
@@ -161,11 +162,11 @@ func (m *RealManager) GetAllNetworkFunctionsUsingConfig(nfCfgID client.ObjectKey
 	return result, nil
 }
 
-func (m *RealManager) fetchTableMetadata() ([]api.TableMetadata, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (m *RealManager) fetchTableMetadata(ctx context.Context) ([]api.TableMetadata, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	resp, err := m.p4client.GetForwardingPipelineConfig(ctx, &p4v1.GetForwardingPipelineConfigRequest{
+	resp, err := m.switchClient.P4Client.GetForwardingPipelineConfig(reqCtx, &p4v1.GetForwardingPipelineConfigRequest{
 		ResponseType: p4v1.GetForwardingPipelineConfigRequest_P4INFO_AND_COOKIE,
 	})
 	if err != nil {
@@ -175,26 +176,6 @@ func (m *RealManager) fetchTableMetadata() ([]api.TableMetadata, error) {
 		return nil, nil
 	}
 	return api.GetTableMetadata(&api.P4Program{P4Info: resp.Config.P4Info}), nil
-}
-
-func (m *RealManager) writeEntries(entries []*p4v1.TableEntry, updateType p4v1.Update_Type) error {
-	updates := make([]*p4v1.Update, 0, len(entries))
-	for _, e := range entries {
-		updates = append(updates, &p4v1.Update{
-			Type:   updateType,
-			Entity: &p4v1.Entity{Entity: &p4v1.Entity_TableEntry{TableEntry: e}},
-		})
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := m.p4client.Write(ctx, &p4v1.WriteRequest{
-		DeviceId:   m.deviceID,
-		ElectionId: &p4v1.Uint128{High: m.electionIDHigh, Low: m.electionIDLow},
-		Updates:    updates,
-	})
-	return err
 }
 
 func (m *RealManager) removeTracking(nfKey client.ObjectKey, nfConfig *corev1alpha1.NetworkFunctionConfig) {
