@@ -268,8 +268,22 @@ func (m *RealManager) drain(_ context.Context, _ *corev1alpha1.NetworkFunction) 
 	return nil
 }
 
-// deleteResources removes the compiled program artifact from the in-memory store.
-func (m *RealManager) deleteResources(_ context.Context, nf *corev1alpha1.NetworkFunction) error {
+// deleteResources resets the forwarding pipeline on the switch and removes the
+// compiled program artifact from the in-memory store.
+func (m *RealManager) deleteResources(ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	_, err := m.p4client.SetForwardingPipelineConfig(reqCtx, &p4v1.SetForwardingPipelineConfigRequest{
+		DeviceId:   m.deviceID,
+		ElectionId: &p4v1.Uint128{High: m.electionIDHigh, Low: m.electionIDLow},
+		Action:     p4v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
+		Config:     &p4v1.ForwardingPipelineConfig{},
+	})
+	if err != nil {
+		return fmt.Errorf("resetting forwarding pipeline: %w", err)
+	}
+
 	key := client.ObjectKeyFromObject(nf)
 	m.mu.Lock()
 	delete(m.programs, key)
