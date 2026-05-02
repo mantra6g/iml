@@ -103,7 +103,12 @@ func (h *deploymentHandle) Done() <-chan struct{} {
 
 func (h *deploymentHandle) Cancel() error {
 	h.cancel()
-	h.transition(PhaseCanceled, "deployment canceled", context.Canceled)
+	h.mu.RLock()
+	terminal := isTerminal(h.status.Phase)
+	h.mu.RUnlock()
+	if !terminal {
+		h.transition(PhaseCanceled, "deployment canceled", context.Canceled)
+	}
 	return nil
 }
 
