@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/vishvananda/netlink"
@@ -74,7 +75,7 @@ func main() {
 	flag.IntVar(&maxNFSlots, "max-nf-slots",
 		DefaultMaxNFSlots, "Maximum number of network functions this target can host")
 	flag.StringVar(&dataIface, "data-iface",
-		"iml0", "Network interface to discover target IPs from")
+		"iml0", "Comma-separated network interfaces to discover target IPs from")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -252,19 +253,25 @@ func main() {
 	}
 }
 
-func discoverIPs(ifaceName string) ([]net.IP, error) {
-	link, err := netlink.LinkByName(ifaceName)
-	if err != nil {
-		return nil, fmt.Errorf("interface %q not found: %w", ifaceName, err)
-	}
-	addrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list addresses on %q: %w", ifaceName, err)
-	}
-	ips := make([]net.IP, 0, len(addrs))
-	for _, a := range addrs {
-		if a.IP != nil {
-			ips = append(ips, a.IP)
+func discoverIPs(ifaceNames string) ([]net.IP, error) {
+	var ips []net.IP
+	for _, name := range strings.Split(ifaceNames, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		link, err := netlink.LinkByName(name)
+		if err != nil {
+			return nil, fmt.Errorf("interface %q not found: %w", name, err)
+		}
+		addrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list addresses on %q: %w", name, err)
+		}
+		for _, a := range addrs {
+			if a.IP != nil {
+				ips = append(ips, a.IP)
+			}
 		}
 	}
 	return ips, nil
