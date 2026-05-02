@@ -3,20 +3,15 @@ package nf
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	"bmv2-driver/api"
 	p4targetpkg "bmv2-driver/managers/p4target"
+	"bmv2-driver/pkg/p4compile"
 
-	oldproto "github.com/golang/protobuf/proto"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -177,7 +172,12 @@ func (m *RealManager) compile(ctx context.Context, nf *corev1alpha1.NetworkFunct
 	var err error
 
 	if strings.HasPrefix(p4File, "http://") || strings.HasPrefix(p4File, "https://") || strings.HasPrefix(p4File, "s3://") {
-		program, err = compileFromURL(ctx, p4File, nf.Name)
+		result, compileErr := p4compile.CompileFromURL(ctx, p4File)
+		if compileErr != nil {
+			err = compileErr
+		} else {
+			program = &api.P4Program{P4DeviceConfig: result.DeviceConfig, ProgramName: nf.Name, P4Info: result.P4Info}
+		}
 	} else {
 		// Treat as base64-encoded pre-compiled BMv2 JSON device config.
 		program, err = api.LoadP4ProgramFromBase64(p4File, nf.Name)
@@ -277,81 +277,3 @@ func (m *RealManager) deleteResources(_ context.Context, nf *corev1alpha1.Networ
 	return nil
 }
 
-// compileFromURL downloads a P4 source file from the given URL, compiles it
-// with p4c for the bmv2/v1model target, and returns the resulting P4Program.
-func compileFromURL(ctx context.Context, fileURL, programName string) (*api.P4Program, error) {
-	tmpDir, err := os.MkdirTemp("", "p4compile-*")
-	if err != nil {
-		return nil, fmt.Errorf("creating temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	inputPath := tmpDir + "/input.p4"
-	if err := downloadFile(fileURL, inputPath); err != nil {
-		return nil, err
-	}
-	return compileP4File(ctx, inputPath, tmpDir, programName)
-}
-
-func compileP4File(ctx context.Context, inputPath, outDir, programName string) (*api.P4Program, error) {
-	p4infoPath := outDir + "/p4info.bin"
-
-	compileCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(compileCtx, "p4c",
-		"--target", "bmv2",
-		"--arch", "v1model",
-		"--p4runtime-files", p4infoPath,
-		"--p4runtime-format", "binary",
-		"-o", outDir,
-		inputPath,
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("p4c: %s", string(out))
-	}
-
-	jsonBytes, err := os.ReadFile(outDir + "/input.json")
-	if err != nil {
-		return nil, fmt.Errorf("reading compiled JSON: %w", err)
-	}
-
-	p4infoBytes, err := os.ReadFile(p4infoPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading p4info: %w", err)
-	}
-
-	var p4info p4configv1.P4Info
-	if err := oldproto.Unmarshal(p4infoBytes, &p4info); err != nil {
-		return nil, fmt.Errorf("parsing p4info: %w", err)
-	}
-
-	return &api.P4Program{
-		P4DeviceConfig: jsonBytes,
-		ProgramName:    programName,
-		P4Info:         &p4info,
-	}, nil
-}
-
-func downloadFile(fileURL, destPath string) error {
-	resp, err := http.Get(fileURL) //nolint:noctx
-	if err != nil {
-		return fmt.Errorf("downloading %q: %w", fileURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("downloading %q: HTTP %d", fileURL, resp.StatusCode)
-	}
-
-	f, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("creating file: %w", err)
-	}
-	defer f.Close()
-
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return fmt.Errorf("writing file: %w", err)
-	}
-	return nil
-}

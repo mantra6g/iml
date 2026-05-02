@@ -2,18 +2,14 @@ package handlers
 
 import (
 	"bmv2-driver/api"
+	"bmv2-driver/pkg/p4compile"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/exec"
 	"time"
 
-	oldproto "github.com/golang/protobuf/proto"
-	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
 	v1 "github.com/p4lang/p4runtime/go/p4/v1"
 )
 
@@ -46,21 +42,8 @@ func (d *Driver) deployProgram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpDir, err := os.MkdirTemp("", "p4compile-*")
+	compiled, err := p4compile.CompileFromURL(r.Context(), req.P4FileURL)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to create temp dir: "+err.Error())
-		return
-	}
-	defer os.RemoveAll(tmpDir)
-
-	inputPath := tmpDir + "/input.p4"
-	if err := downloadFile(req.P4FileURL, inputPath); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	p4infoPath := tmpDir + "/p4info.bin"
-	if err := compileP4(r.Context(), inputPath, p4infoPath, tmpDir); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if encErr := json.NewEncoder(w).Encode(api.ErrorResponse{Error: err.Error()}); encErr != nil {
@@ -69,23 +52,7 @@ func (d *Driver) deployProgram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonBytes, err := os.ReadFile(tmpDir + "/input.json")
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to read compiled JSON: "+err.Error())
-		return
-	}
-
-	p4infoBytes, err := os.ReadFile(p4infoPath)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to read p4info: "+err.Error())
-		return
-	}
-
-	var p4info p4configv1.P4Info
-	if err := oldproto.Unmarshal(p4infoBytes, &p4info); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to parse p4info: "+err.Error())
-		return
-	}
+	program := &api.P4Program{P4DeviceConfig: compiled.DeviceConfig, ProgramName: req.P4FileURL, P4Info: compiled.P4Info}
 
 	action := v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT
 	if req.DryRun {
@@ -100,8 +67,8 @@ func (d *Driver) deployProgram(w http.ResponseWriter, r *http.Request) {
 		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
 		Action:     action,
 		Config: &v1.ForwardingPipelineConfig{
-			P4Info:         &p4info,
-			P4DeviceConfig: jsonBytes,
+			P4Info:         program.P4Info,
+			P4DeviceConfig: program.P4DeviceConfig,
 		},
 	})
 
@@ -119,7 +86,6 @@ func (d *Driver) deployProgram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	program := &api.P4Program{P4DeviceConfig: jsonBytes, ProgramName: req.P4FileURL, P4Info: &p4info}
 	if !req.DryRun {
 		d.CurrentProgram = program
 	}
@@ -313,45 +279,3 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// downloadFile fetches a URL and writes the body to destPath.
-func downloadFile(url, destPath string) error {
-	resp, err := http.Get(url) //nolint:noctx
-	if err != nil {
-		return fmt.Errorf("failed to download P4 file: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("failed to download P4 file: HTTP %d from %s", resp.StatusCode, url)
-	}
-
-	f, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("failed to create input file: %w", err)
-	}
-	defer f.Close()
-
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return fmt.Errorf("failed to write P4 file: %w", err)
-	}
-	return nil
-}
-
-// compileP4 runs p4c on inputPath and writes the p4info binary to p4infoPath and JSON to outDir.
-func compileP4(ctx context.Context, inputPath, p4infoPath, outDir string) error {
-	compileCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(compileCtx, "p4c",
-		"--target", "bmv2",
-		"--arch", "v1model",
-		"--p4runtime-files", p4infoPath,
-		"--p4runtime-format", "binary",
-		"-o", outDir,
-		inputPath,
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("p4c compilation failed: %s", string(out))
-	}
-	return nil
-}
