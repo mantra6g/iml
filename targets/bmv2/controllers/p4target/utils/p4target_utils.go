@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"slices"
+
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -13,6 +15,12 @@ func StatusChanged(original, target *corev1alpha1.P4Target) bool {
 		return true
 	}
 	if ResourceListsChanged(original.Status.Allocatable, target.Status.Allocatable) {
+		return true
+	}
+	if !slices.Equal(original.Status.TargetIPs, target.Status.TargetIPs) {
+		return true
+	}
+	if !slices.Equal(original.Status.DriverIPs, target.Status.DriverIPs) {
 		return true
 	}
 	return ConditionsChanged(original.Status.Conditions, target.Status.Conditions)
