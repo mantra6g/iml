@@ -153,7 +153,7 @@ func (d *Driver) GetProgramHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if config != nil && config.Config != nil {
+	if config != nil && config.Config != nil && len(config.Config.P4DeviceConfig) > 0 {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(api.P4ProgramResponse{
 			Status: "deployed",
