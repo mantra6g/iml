@@ -92,8 +92,8 @@ type InstallTableEntriesRequest struct {
 
 // TableEntriesOperationResponse is the response body for POST and DELETE /api/tables
 type TableEntriesOperationResponse struct {
-	Status  string `json:"status"`
-	Count   int    `json:"count"`
+	Status string `json:"status"`
+	Count  int    `json:"count"`
 }
 
 // RegisterMetadata describes a P4 register array from P4Info.
@@ -122,4 +122,3 @@ type RegistersResponse struct {
 	Registers []RegisterArrayResponse `json:"registers"`
 	Error     string                  `json:"error,omitempty"`
 }
-

@@ -128,7 +128,7 @@ test-exec-switch: ## Execute shell in the BMv2 switch container.
 
 .PHONY: port-forward
 port-forward: ## Port-forward the bmv2-driver HTTP API to localhost:8080 (background).
-	$(KUBECTL) port-forward pod/bmv2-test 8080:8082 &
+	$(KUBECTL) port-forward pod/bmv2-test 8080:8080 &
 
 .PHONY: port-forward-stop
 port-forward-stop: ## Stop the background port-forward.
@@ -269,7 +269,7 @@ api-verify-program: ## Verify P4 program without deploying (dry-run).
 	@echo "Testing /api/p4/verify endpoint..."
 	@curl -s -X POST http://$(API_HOST)/api/p4/verify \
 		-H "Content-Type: application/json" \
-		-d '{"program": "", "dry_run": true}' | jq . || echo "Error: Could not reach verify endpoint"
+		-d '{"program": "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4", "dry_run": true}' | jq . || echo "Error: Could not reach verify endpoint"
 
 .PHONY: api-all-tests
 api-all-tests: api-health api-tables api-counters api-get-program ## Run all API endpoint tests.
