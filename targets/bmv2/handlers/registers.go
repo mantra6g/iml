@@ -27,7 +27,7 @@ func (d *Driver) ReadRegistersHandler(w http.ResponseWriter, r *http.Request) {
 	grouped := make(map[uint32][]api.RegisterValue)
 	var readErr string
 	for id := range regMeta {
-		stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+		stream, err := d.Switch.P4Client.Read(ctx, &v1.ReadRequest{
 			Entities: []*v1.Entity{
 				{Entity: &v1.Entity_RegisterEntry{RegisterEntry: &v1.RegisterEntry{RegisterId: id}}},
 			},

@@ -9,8 +9,6 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	v1 "github.com/p4lang/p4runtime/go/p4/v1"
 )
 
 // DeployProgramHandler deploys (POST), retrieves (GET), or removes (DELETE) the P4 program.
@@ -54,23 +52,14 @@ func (d *Driver) deployProgram(w http.ResponseWriter, r *http.Request) {
 
 	program := &api.P4Program{P4DeviceConfig: compiled.DeviceConfig, ProgramName: req.P4FileURL, P4Info: compiled.P4Info}
 
-	action := v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT
-	if req.DryRun {
-		action = v1.SetForwardingPipelineConfigRequest_VERIFY
-	}
-
 	pushCtx, pushCancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer pushCancel()
 
-	_, err = d.Client.SetForwardingPipelineConfig(pushCtx, &v1.SetForwardingPipelineConfigRequest{
-		DeviceId:   d.DeviceID,
-		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
-		Action:     action,
-		Config: &v1.ForwardingPipelineConfig{
-			P4Info:         program.P4Info,
-			P4DeviceConfig: program.P4DeviceConfig,
-		},
-	})
+	if req.DryRun {
+		err = d.Switch.VerifyPipeline(pushCtx, program)
+	} else {
+		err = d.Switch.DeployPipeline(pushCtx, program)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -113,13 +102,7 @@ func (d *Driver) undeployProgram(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	_, err := d.Client.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
-		DeviceId:   d.DeviceID,
-		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
-		Action:     v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
-		Config:     &v1.ForwardingPipelineConfig{},
-	})
-	if err != nil {
+	if err := d.Switch.ResetPipeline(ctx); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		if err := json.NewEncoder(w).Encode(api.ErrorResponse{Error: "failed to reset forwarding pipeline: " + err.Error()}); err != nil {
 			log.Printf("failed to encode error response: %v", err)
@@ -142,7 +125,7 @@ func (d *Driver) GetProgramHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	config, err := d.Client.GetForwardingPipelineConfig(ctx, &v1.GetForwardingPipelineConfigRequest{})
+	config, err := d.Switch.GetPipeline(ctx)
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -212,12 +195,7 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	_, err := d.Client.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
-		Action: v1.SetForwardingPipelineConfigRequest_VERIFY,
-		Config: &v1.ForwardingPipelineConfig{
-			P4DeviceConfig: d.CurrentProgram.P4DeviceConfig,
-		},
-	})
+	err := d.Switch.VerifyPipeline(ctx, d.CurrentProgram)
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -244,4 +222,3 @@ func (d *Driver) VerifyProgramHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failed to encode verify response: %v", err)
 	}
 }
-
