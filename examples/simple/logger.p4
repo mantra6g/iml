@@ -88,7 +88,7 @@ parser MyParser(packet_in packet,
 	state start {
 		packet.extract(hdr.ethernet);
 		transition select(hdr.ethernet.ether_type) {
-			IPV6_ETHERTYPE: parse_outer_ipv6;
+			ETHERTYPE_IPV6: parse_outer_ipv6;
 			default: accept;
 		}
 	}
@@ -108,7 +108,7 @@ parser MyParser(packet_in packet,
 
 	state parse_srh_segments {
 		packet.extract(hdr.segment_list.next);
-		transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.last_entry) {
+		transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.first_segment) {
 			true: parse_srh_segments; // Loop to extract all segments
 			false: parse_inner_header;
 		}
