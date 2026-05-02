@@ -26,7 +26,7 @@ type ManagerConfig struct {
 }
 
 type Manager interface {
-	GetDeployedNetworkFunctions() []client.ObjectKey
+	GetDeployedNetworkFunctions(ctx context.Context) ([]client.ObjectKey, error)
 	EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction) DeploymentHandle
 	EnsureAbsent(ctx context.Context, nf *corev1alpha1.NetworkFunction) DeploymentHandle
 }
@@ -124,14 +124,31 @@ func (m *RealManager) EnsureAbsent(ctx context.Context, nf *corev1alpha1.Network
 	return h
 }
 
-func (m *RealManager) GetDeployedNetworkFunctions() []client.ObjectKey {
+func (m *RealManager) GetDeployedNetworkFunctions(ctx context.Context) ([]client.ObjectKey, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	config, err := m.p4client.GetForwardingPipelineConfig(reqCtx, &p4v1.GetForwardingPipelineConfigRequest{
+		DeviceId: m.deviceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("querying switch pipeline: %w", err)
+	}
+
+	if config == nil || config.Config == nil || len(config.Config.P4DeviceConfig) == 0 {
+		return nil, nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	deployed := make([]client.ObjectKey, 0, len(m.ops))
 	for objKey, op := range m.ops {
 		if op.opType == opPresent && op.handle.status.Phase == PhaseReady {
 			deployed = append(deployed, objKey)
 		}
 	}
-	return deployed
+	return deployed, nil
 }
 
 func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction) {
