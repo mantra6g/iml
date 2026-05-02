@@ -321,6 +321,10 @@ func downloadFile(url, destPath string) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("failed to download P4 file: HTTP %d from %s", resp.StatusCode, url)
+	}
+
 	f, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("failed to create input file: %w", err)
