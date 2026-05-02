@@ -201,8 +201,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 	}
-	//TODO: What do we do now with this IP? How should the manager retrieve this IP?
-
 	var nfConfig *corev1alpha1.NetworkFunctionConfig
 	if netfunc.Spec.ConfigRef != nil {
 		nfConfig = &corev1alpha1.NetworkFunctionConfig{}

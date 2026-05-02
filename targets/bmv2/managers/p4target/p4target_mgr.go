@@ -2,17 +2,20 @@ package p4target
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"sync"
 	"time"
 
+	"github.com/vishvananda/netlink"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"golang.org/x/sys/unix"
 
 	"bmv2-driver/pkg/ipam"
 )
@@ -33,6 +36,7 @@ type ManagerConfig struct {
 	DriverIP   net.IP
 	MaxNFSlots int
 	P4Client   p4v1.P4RuntimeClient
+	NFIface    string // kernel interface to assign NF IPs to (e.g. "nf0")
 }
 
 type Manager interface {
@@ -65,6 +69,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		driverIP:     cfg.DriverIP,
 		maxNFSlots:   cfg.MaxNFSlots,
 		p4client:     cfg.P4Client,
+		nfIface:      cfg.NFIface,
 		allocatedIPs: make(map[netip.Addr]struct{}),
 	}, nil
 }
@@ -78,6 +83,7 @@ type RealManager struct {
 	driverIP   net.IP
 	maxNFSlots int
 	p4client   p4v1.P4RuntimeClient
+	nfIface    string
 
 	mu           sync.RWMutex
 	cidr         netip.Prefix
@@ -127,7 +133,32 @@ func (r *RealManager) AllocateNetworkFunctionIP() (net.IP, error) {
 		return nil, err
 	}
 	r.allocatedIPs[addr] = struct{}{}
-	return net.IP(addr.Unmap().AsSlice()), nil
+	ip := net.IP(addr.Unmap().AsSlice())
+
+	if r.nfIface != "" {
+		if err := assignIPToIface(ip, r.nfIface); err != nil {
+			return nil, fmt.Errorf("assigning IP %s to %s: %w", ip, r.nfIface, err)
+		}
+	}
+	return ip, nil
+}
+
+func assignIPToIface(ip net.IP, ifaceName string) error {
+	link, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		return fmt.Errorf("interface %q not found: %w", ifaceName, err)
+	}
+	bits := 32
+	if ip.To4() == nil {
+		bits = 128
+	}
+	addr := &netlink.Addr{
+		IPNet: &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)},
+	}
+	if err := netlink.AddrAdd(link, addr); err != nil && !errors.Is(err, unix.EEXIST) {
+		return err
+	}
+	return nil
 }
 
 func (r *RealManager) GetCapacity() corev1.ResourceList {
