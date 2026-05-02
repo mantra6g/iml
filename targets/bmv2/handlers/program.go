@@ -111,54 +111,20 @@ func (d *Driver) undeployProgram(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	stream, err := d.Client.Read(ctx, &v1.ReadRequest{
-		DeviceId: d.DeviceID,
-		Entities: []*v1.Entity{{
-			Entity: &v1.Entity_TableEntry{TableEntry: &v1.TableEntry{}},
-		}},
-	})
-
 	w.Header().Set("Content-Type", "application/json")
 
+	_, err := d.Client.SetForwardingPipelineConfig(ctx, &v1.SetForwardingPipelineConfigRequest{
+		DeviceId:   d.DeviceID,
+		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
+		Action:     v1.SetForwardingPipelineConfigRequest_VERIFY_AND_COMMIT,
+		Config:     &v1.ForwardingPipelineConfig{},
+	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		if err := json.NewEncoder(w).Encode(api.ErrorResponse{Error: "failed to read table entries: " + err.Error()}); err != nil {
+		if err := json.NewEncoder(w).Encode(api.ErrorResponse{Error: "failed to reset forwarding pipeline: " + err.Error()}); err != nil {
 			log.Printf("failed to encode error response: %v", err)
 		}
 		return
-	}
-
-	var deletes []*v1.Update
-	for {
-		resp, err := stream.Recv()
-		if err != nil {
-			break
-		}
-		for _, entity := range resp.GetEntities() {
-			if te := entity.GetTableEntry(); te != nil {
-				deletes = append(deletes, &v1.Update{
-					Type:   v1.Update_DELETE,
-					Entity: &v1.Entity{Entity: &v1.Entity_TableEntry{TableEntry: te}},
-				})
-			}
-		}
-	}
-
-	if len(deletes) > 0 {
-		writeCtx, writeCancel := context.WithTimeout(r.Context(), 10*time.Second)
-		defer writeCancel()
-		_, err = d.Client.Write(writeCtx, &v1.WriteRequest{
-			DeviceId:   d.DeviceID,
-			ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
-			Updates:    deletes,
-		})
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			if err := json.NewEncoder(w).Encode(api.ErrorResponse{Error: "failed to delete table entries: " + err.Error()}); err != nil {
-				log.Printf("failed to encode error response: %v", err)
-			}
-			return
-		}
 	}
 
 	d.CurrentProgram = nil
@@ -166,7 +132,7 @@ func (d *Driver) undeployProgram(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(api.ProgramDeploymentResponse{
 		Status:  "undeployed",
-		Message: fmt.Sprintf("removed %d table entries", len(deletes)),
+		Message: "forwarding pipeline reset",
 	}); err != nil {
 		log.Printf("failed to encode response: %v", err)
 	}
