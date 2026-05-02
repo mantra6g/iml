@@ -17,7 +17,6 @@ import (
 	"bmv2-driver/pkg/ipam"
 )
 
-
 type Condition struct {
 	Status  metav1.ConditionStatus
 	Reason  string
@@ -30,7 +29,7 @@ type NetConfig struct {
 
 type ManagerConfig struct {
 	Name       string
-	TargetIP   net.IP
+	TargetIPs  []net.IP
 	DriverIP   net.IP
 	MaxNFSlots int
 	P4Client   p4v1.P4RuntimeClient
@@ -44,7 +43,7 @@ type Manager interface {
 	GetReadyCondition() corev1alpha1.P4TargetCondition
 	GetNetworkConfiguredCondition() corev1alpha1.P4TargetCondition
 	GetOccupiedCondition() corev1alpha1.P4TargetCondition
-	GetTargetIP() net.IP
+	GetTargetIPs() []net.IP
 	GetDriverIP() net.IP
 	EnsureNetworkConfiguration(NetConfig) error
 	AllocateNetworkFunctionIP() (net.IP, error)
@@ -62,7 +61,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	}
 	return &RealManager{
 		name:         cfg.Name,
-		targetIP:     cfg.TargetIP,
+		targetIPs:    cfg.TargetIPs,
 		driverIP:     cfg.DriverIP,
 		maxNFSlots:   cfg.MaxNFSlots,
 		p4client:     cfg.P4Client,
@@ -75,7 +74,7 @@ var _ Manager = &RealManager{}
 
 type RealManager struct {
 	name       string
-	targetIP   net.IP
+	targetIPs  []net.IP
 	driverIP   net.IP
 	maxNFSlots int
 	p4client   p4v1.P4RuntimeClient
@@ -88,7 +87,7 @@ type RealManager struct {
 
 func (r *RealManager) GetName() string { return r.name }
 
-func (r *RealManager) GetTargetIP() net.IP { return r.targetIP }
+func (r *RealManager) GetTargetIPs() []net.IP { return r.targetIPs }
 
 func (r *RealManager) GetDriverIP() net.IP { return r.driverIP }
 

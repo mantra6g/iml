@@ -33,6 +33,7 @@ spec:
   - name: bmv2-driver
     image: bmv2-driver:local
     imagePullPolicy: Never
+    args: ["--data-iface=eth0"]
     resources:
       requests:
         cpu: 100m

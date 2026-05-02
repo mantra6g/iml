@@ -16,6 +16,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/vishvananda/netlink"
+
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
@@ -56,7 +58,7 @@ func init() {
 func main() {
 	var leaseRenewIntervalSeconds, leaseDurationSeconds uint
 	var maxNFSlots int
-	var p4targetName, switchAddr, targetIP, driverIP string
+	var p4targetName, switchAddr, driverIP, dataIface string
 
 	flag.UintVar(&leaseRenewIntervalSeconds, "lease-renew-interval-seconds",
 		DefaultLeaseRenewIntervalSeconds, "Interval at which to renew the Lease for this P4Target")
@@ -66,18 +68,25 @@ func main() {
 		"bmv2-switch", "Name of the P4Target custom resource to manage")
 	flag.StringVar(&switchAddr, "switch-addr",
 		defaultSwitchAddr, "Address of the P4Runtime gRPC server on the BMv2 switch")
-	flag.StringVar(&targetIP, "target-ip",
-		"", "IP address of the BMv2 switch (reported in P4Target status)")
 	flag.StringVar(&driverIP, "driver-ip",
 		"", "IP address of this driver (reported in P4Target status)")
 	flag.IntVar(&maxNFSlots, "max-nf-slots",
 		DefaultMaxNFSlots, "Maximum number of network functions this target can host")
+	flag.StringVar(&dataIface, "data-iface",
+		"iml0", "Network interface to discover target IPs from")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	targetIPs, err := discoverIPs(dataIface)
+	if err != nil {
+		setupLog.Error(err, "failed to discover target IPs", "iface", dataIface)
+		os.Exit(1)
+	}
+	setupLog.Info(fmt.Sprintf("Discovered target IPs on %s: %v", dataIface, targetIPs))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:  scheme,
@@ -163,7 +172,7 @@ func main() {
 		Name:       p4targetName,
 		P4Client:   c,
 		MaxNFSlots: maxNFSlots,
-		TargetIP:   net.ParseIP(targetIP),
+		TargetIPs:  targetIPs,
 		DriverIP:   net.ParseIP(driverIP),
 	})
 	if err != nil {
@@ -235,4 +244,22 @@ func main() {
 		setupLog.Error(err, "could not start manager")
 		os.Exit(1)
 	}
+}
+
+func discoverIPs(ifaceName string) ([]net.IP, error) {
+	link, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		return nil, fmt.Errorf("interface %q not found: %w", ifaceName, err)
+	}
+	addrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list addresses on %q: %w", ifaceName, err)
+	}
+	ips := make([]net.IP, 0, len(addrs))
+	for _, a := range addrs {
+		if a.IP != nil {
+			ips = append(ips, a.IP)
+		}
+	}
+	return ips, nil
 }

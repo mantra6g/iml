@@ -104,6 +104,14 @@ func (r *Reconciler) calculateP4TargetStatus() corev1alpha1.P4TargetStatus {
 	targetStatus := corev1alpha1.P4TargetStatus{}
 	targetStatus.Capacity = r.P4TargetManager.GetCapacity()
 	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
+
+	for _, ip := range r.P4TargetManager.GetTargetIPs() {
+		targetStatus.TargetIPs = append(targetStatus.TargetIPs, ip.String())
+	}
+	if driverIP := r.P4TargetManager.GetDriverIP(); driverIP != nil {
+		targetStatus.DriverIPs = []string{driverIP.String()}
+	}
+
 	targetStatus.Conditions = []corev1alpha1.P4TargetCondition{}
 	targetStatus.Conditions = append(targetStatus.Conditions, r.P4TargetManager.GetReadyCondition())
 	targetStatus.Conditions = append(targetStatus.Conditions, r.P4TargetManager.GetHealthyCondition())

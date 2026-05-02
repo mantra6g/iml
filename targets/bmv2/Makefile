@@ -128,7 +128,7 @@ test-exec-switch: ## Execute shell in the BMv2 switch container.
 
 .PHONY: port-forward
 port-forward: ## Port-forward the bmv2-driver HTTP API to localhost:8080 (background).
-	$(KUBECTL) port-forward pod/bmv2-test 8080:8080 &
+	$(KUBECTL) port-forward pod/bmv2-test 8080:8082 &
 
 .PHONY: port-forward-stop
 port-forward-stop: ## Stop the background port-forward.
