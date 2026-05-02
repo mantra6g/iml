@@ -180,13 +180,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	nfMgr, err := nfmgr.NewManager()
+	nfMgr, err := nfmgr.NewManager(nfmgr.ManagerConfig{
+		P4Client:        c,
+		DeviceID:        deviceID,
+		ElectionIDHigh:  electionIDHigh,
+		ElectionIDLow:   electionIDLow,
+		P4TargetManager: p4targetMgr,
+	})
 	if err != nil {
 		setupLog.Error(err, "unable to create nf manager")
 		os.Exit(1)
 	}
 
-	nfcfgMgr, err := nfcfgmgr.NewManager()
+	nfcfgMgr, err := nfcfgmgr.NewManager(nfcfgmgr.ManagerConfig{
+		P4Client:       c,
+		DeviceID:       deviceID,
+		ElectionIDHigh: electionIDHigh,
+		ElectionIDLow:  electionIDLow,
+	})
 	if err != nil {
 		setupLog.Error(err, "unable to create nfcfg manager")
 		os.Exit(1)
