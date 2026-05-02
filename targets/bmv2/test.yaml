@@ -29,11 +29,22 @@ metadata:
   name: bmv2-test
 spec:
   restartPolicy: OnFailure
+  initContainers:
+  - name: iml0-setup
+    image: alpine:3.19
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        ip link add iml0 type dummy
+        ip addr add 10.0.1.1/24 dev iml0
+        ip link set iml0 up
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]
   containers:
   - name: bmv2-driver
     image: bmv2-driver:local
     imagePullPolicy: Never
-    args: ["--data-iface=eth0"]
     resources:
       requests:
         cpu: 100m
@@ -55,6 +66,8 @@ spec:
     args:
       - "--no-p4"
       - "--log-console"
+      - "-i"
+      - "0@iml0"
       - "--"
       - "--grpc-server-addr=0.0.0.0:9559"
       - "--cpu-port=255"
