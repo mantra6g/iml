@@ -7,9 +7,6 @@ import (
 
 type Phase string
 
-// TODO: make sure to add or remove any phases that are relevant for your deployment process.
-//
-//	The ones listed here are just examples.
 const (
 	// deploy phases
 	PhaseCompiling Phase = "Compiling"
