@@ -199,7 +199,7 @@ p4-all: p4-clean p4-compile ## Clean and recompile all P4 programs.
 deploy: docker-build kind-load test-up ## Build, load image, and deploy test pod.
 
 .PHONY: undeploy
-undeploy: test-down ## Remove test pod.
+undeploy: test-down docker-clean ## Remove test pod.
 
 .PHONY: redeploy
 redeploy: undeploy deploy ## Redeploy test pod.
