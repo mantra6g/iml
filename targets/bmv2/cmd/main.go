@@ -66,7 +66,7 @@ func main() {
 	flag.UintVar(&leaseDurationSeconds, "lease-duration-seconds",
 		DefaultLeaseDurationSeconds, "Duration of the P4Runtime master lease")
 	flag.StringVar(&p4targetName, "p4target-name",
-		"bmv2-switch", "Name of the P4Target custom resource to manage")
+		"bmv2-target", "Name of the P4Target custom resource to manage")
 	flag.StringVar(&switchAddr, "switch-addr",
 		defaultSwitchAddr, "Address of the P4Runtime gRPC server on the BMv2 switch")
 	flag.StringVar(&driverIP, "driver-ip",
