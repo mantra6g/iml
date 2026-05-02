@@ -212,7 +212,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 	}
-	err := r.NFConfigManager.EnsurePresentConfigForNF(nfConfig, netfunc)
+	err := r.NFConfigManager.EnsurePresentConfigForNF(ctx, nfConfig, netfunc)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

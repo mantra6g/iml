@@ -8,14 +8,13 @@ import (
 	"net/http"
 	"time"
 
-	v1 "github.com/p4lang/p4runtime/go/p4/v1"
 )
 
 func (d *Driver) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	_, err := d.Client.GetForwardingPipelineConfig(ctx, &v1.GetForwardingPipelineConfigRequest{})
+	_, err := d.Switch.GetPipeline(ctx)
 
 	w.Header().Set("Content-Type", "application/json")
 
