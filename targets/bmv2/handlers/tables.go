@@ -33,7 +33,7 @@ func (d *Driver) ReadTableEntriesHandler(w http.ResponseWriter, r *http.Request)
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+	stream, err := d.Switch.P4Client.Read(ctx, &v1.ReadRequest{
 		Entities: []*v1.Entity{
 			{Entity: &v1.Entity_TableEntry{TableEntry: &v1.TableEntry{}}},
 		},
@@ -78,22 +78,10 @@ func (d *Driver) InstallTableEntriesHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	updates := make([]*v1.Update, 0, len(entries))
-	for _, entry := range entries {
-		updates = append(updates, &v1.Update{
-			Type:   v1.Update_INSERT,
-			Entity: &v1.Entity{Entity: &v1.Entity_TableEntry{TableEntry: entry}},
-		})
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err = d.Client.Write(ctx, &v1.WriteRequest{
-		DeviceId:   d.DeviceID,
-		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
-		Updates:    updates,
-	})
+	err = d.Switch.EditTableEntries(ctx, entries, v1.Update_INSERT)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
@@ -121,22 +109,10 @@ func (d *Driver) DeleteTableEntriesHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	updates := make([]*v1.Update, 0, len(entries))
-	for _, entry := range entries {
-		updates = append(updates, &v1.Update{
-			Type:   v1.Update_DELETE,
-			Entity: &v1.Entity{Entity: &v1.Entity_TableEntry{TableEntry: entry}},
-		})
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err = d.Client.Write(ctx, &v1.WriteRequest{
-		DeviceId:   d.DeviceID,
-		ElectionId: &v1.Uint128{High: d.ElectionIDHigh, Low: d.ElectionIDLow},
-		Updates:    updates,
-	})
+	err = d.Switch.EditTableEntries(ctx, entries, v1.Update_DELETE)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {

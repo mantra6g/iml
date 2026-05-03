@@ -45,7 +45,7 @@ spec:
   containers:
   - name: bmv2-driver
     image: bmv2-driver:local
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Never
     securityContext:
       capabilities:
         add: ["NET_ADMIN"]

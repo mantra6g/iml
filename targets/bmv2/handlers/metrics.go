@@ -18,7 +18,7 @@ func (d *Driver) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	counterNames := d.buildCounterNameMap()
 
-	stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+	stream, err := d.Switch.P4Client.Read(ctx, &v1.ReadRequest{
 		Entities: []*v1.Entity{
 			{Entity: &v1.Entity_CounterEntry{CounterEntry: &v1.CounterEntry{}}},
 		},

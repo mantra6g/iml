@@ -9,6 +9,7 @@ import (
 	nfmgr "bmv2-driver/managers/nf"
 	nfcfgmgr "bmv2-driver/managers/nfcfg"
 	p4targetmgr "bmv2-driver/managers/p4target"
+	p4switch "bmv2-driver/pkg/p4switch"
 	"context"
 	"flag"
 	"fmt"
@@ -65,7 +66,7 @@ func main() {
 	flag.UintVar(&leaseDurationSeconds, "lease-duration-seconds",
 		DefaultLeaseDurationSeconds, "Duration of the P4Runtime master lease")
 	flag.StringVar(&p4targetName, "p4target-name",
-		"bmv2-switch", "Name of the P4Target custom resource to manage")
+		"bmv2-target", "Name of the P4Target custom resource to manage")
 	flag.StringVar(&switchAddr, "switch-addr",
 		defaultSwitchAddr, "Address of the P4Runtime gRPC server on the BMv2 switch")
 	flag.StringVar(&driverIP, "driver-ip",
@@ -180,11 +181,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create the switch client so it can be shared between handlers and managers
+	switchClient := p4switch.NewSwitchClient(c, deviceID, electionIDHigh, electionIDLow)
+
 	nfMgr, err := nfmgr.NewManager(nfmgr.ManagerConfig{
-		P4Client:        c,
-		DeviceID:        deviceID,
-		ElectionIDHigh:  electionIDHigh,
-		ElectionIDLow:   electionIDLow,
+		Switch:          switchClient,
 		P4TargetManager: p4targetMgr,
 	})
 	if err != nil {
@@ -193,10 +194,7 @@ func main() {
 	}
 
 	nfcfgMgr, err := nfcfgmgr.NewManager(nfcfgmgr.ManagerConfig{
-		P4Client:       c,
-		DeviceID:       deviceID,
-		ElectionIDHigh: electionIDHigh,
-		ElectionIDLow:  electionIDLow,
+		Switch: switchClient,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create nfcfg manager")
@@ -237,12 +235,9 @@ func main() {
 	}
 
 	driver := &handlers.Driver{
-		Client:         c,
-		Conn:           conn,
-		DeviceID:       deviceID,
-		ElectionIDHigh: electionIDHigh,
-		ElectionIDLow:  electionIDLow,
-		Log:            ctrl.Log.WithName("driver"),
+		Switch: switchClient,
+		Conn:   conn,
+		Log:    ctrl.Log.WithName("driver"),
 	}
 
 	server := bmv2http.NewServer("0.0.0.0:8080", driver, ctrl.Log.WithName("http-server"))

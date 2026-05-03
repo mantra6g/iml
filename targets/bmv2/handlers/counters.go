@@ -15,7 +15,7 @@ func (d *Driver) ReadCountersHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	stream, err := d.Client.Read(ctx, &v1.ReadRequest{
+	stream, err := d.Switch.P4Client.Read(ctx, &v1.ReadRequest{
 		Entities: []*v1.Entity{
 			{Entity: &v1.Entity_CounterEntry{CounterEntry: &v1.CounterEntry{}}},
 		},
