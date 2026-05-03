@@ -73,13 +73,13 @@ func (m *mockP4Client) setCallCount() int {
 
 type mockReadStream struct{}
 
-func (m *mockReadStream) Recv() (*p4v1.ReadResponse, error)    { return nil, io.EOF }
-func (m *mockReadStream) Header() (metadata.MD, error)        { return nil, nil }
-func (m *mockReadStream) Trailer() metadata.MD                { return nil }
-func (m *mockReadStream) CloseSend() error                    { return nil }
-func (m *mockReadStream) Context() context.Context            { return context.Background() }
-func (m *mockReadStream) SendMsg(_ any) error                 { return nil }
-func (m *mockReadStream) RecvMsg(_ any) error                 { return nil }
+func (m *mockReadStream) Recv() (*p4v1.ReadResponse, error) { return nil, io.EOF }
+func (m *mockReadStream) Header() (metadata.MD, error)      { return nil, nil }
+func (m *mockReadStream) Trailer() metadata.MD              { return nil }
+func (m *mockReadStream) CloseSend() error                  { return nil }
+func (m *mockReadStream) Context() context.Context          { return context.Background() }
+func (m *mockReadStream) SendMsg(_ any) error               { return nil }
+func (m *mockReadStream) RecvMsg(_ any) error               { return nil }
 
 // ---------------------------------------------------------------------------
 // Mock P4Target manager
@@ -107,8 +107,8 @@ func (m *mockP4TargetManager) GetNetworkConfiguredCondition() corev1alpha1.P4Tar
 func (m *mockP4TargetManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 	return corev1alpha1.P4TargetCondition{}
 }
-func (m *mockP4TargetManager) GetTargetIPs() []net.IP           { return nil }
-func (m *mockP4TargetManager) GetDriverIP() net.IP              { return nil }
+func (m *mockP4TargetManager) GetTargetIPs() []net.IP { return nil }
+func (m *mockP4TargetManager) GetDriverIP() net.IP    { return nil }
 func (m *mockP4TargetManager) EnsureNetworkConfiguration(_ p4targetpkg.NetConfig) error {
 	return nil
 }
@@ -161,7 +161,7 @@ func TestEnsurePresent_DrivesToPhaseReady(t *testing.T) {
 	mgr := newTestManagerWith(mock, &mockP4TargetManager{})
 	nf := newTestNF("test-nf", "test-ns")
 
-	handle := mgr.EnsurePresent(context.Background(), nf)
+	handle := mgr.EnsurePresent(context.Background(), nf, net.ParseIP("10.100.0.2"))
 	waitDone(t, handle)
 
 	if handle.Status().Phase != PhaseReady {
@@ -183,7 +183,7 @@ func TestEnsureAbsent_ResetsForwardingPipeline(t *testing.T) {
 	nf := newTestNF("test-nf", "test-ns")
 
 	// Deploy first.
-	deployHandle := mgr.EnsurePresent(context.Background(), nf)
+	deployHandle := mgr.EnsurePresent(context.Background(), nf, net.ParseIP("10.100.0.2"))
 	waitDone(t, deployHandle)
 	if deployHandle.Status().Phase != PhaseReady {
 		t.Fatalf("setup: expected PhaseReady, got %s", deployHandle.Status().Phase)
@@ -233,7 +233,7 @@ func TestGetDeployedNetworkFunctions_AfterRestart(t *testing.T) {
 	mgr := newTestManagerWith(mock, &mockP4TargetManager{})
 	nf := newTestNF("test-nf", "test-ns")
 
-	handle := mgr.EnsurePresent(context.Background(), nf)
+	handle := mgr.EnsurePresent(context.Background(), nf, net.ParseIP("10.100.0.2"))
 	waitDone(t, handle)
 
 	if handle.Status().Phase != PhaseReady {

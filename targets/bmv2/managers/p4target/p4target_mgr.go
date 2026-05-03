@@ -34,6 +34,7 @@ type ManagerConfig struct {
 	DriverIP   net.IP
 	MaxNFSlots int
 	P4Client   p4v1.P4RuntimeClient
+	BridgeName string
 }
 
 type Manager interface {
@@ -66,6 +67,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		driverIP:     cfg.DriverIP,
 		maxNFSlots:   cfg.MaxNFSlots,
 		p4client:     cfg.P4Client,
+		bridgeName:   cfg.BridgeName,
 		allocatedIPs: make(map[netip.Addr]struct{}),
 	}, nil
 }
@@ -79,6 +81,7 @@ type RealManager struct {
 	driverIP   net.IP
 	maxNFSlots int
 	p4client   p4v1.P4RuntimeClient
+	bridgeName string
 
 	mu           sync.RWMutex
 	cidr         netip.Prefix
@@ -113,8 +116,15 @@ func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	r.cidr = cidr
 	r.ipAllocator = alloc
 	r.allocatedIPs = make(map[netip.Addr]struct{})
-	// TODO: assign an IP from the nfCIDR and configure the bridge
-	//   configureNFBridge(bridgeIP, nfCIDR)
+	if r.bridgeName != "" {
+		bridgeIP, err := alloc.Next()
+		if err != nil {
+			return fmt.Errorf("failed to allocate bridge IP from %s: %w", cidr, err)
+		}
+		if err := r.configureNFBridge(bridgeIP, cidr); err != nil {
+			return fmt.Errorf("failed to configure NF bridge: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -299,7 +309,7 @@ func (r *RealManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 // in the same subnet as the NF interfaces, and also to ensure that it can act as a kind of
 // gateway for the NFs to forward traffic back to the host.
 func (r *RealManager) configureNFBridge(bridgeIP netip.Addr, nfCIDR netip.Prefix) error {
-	nfBridge, err := netlink.LinkByName("br0")
+	nfBridge, err := netlink.LinkByName(r.bridgeName)
 	if err != nil {
 		return err
 	}
