@@ -21,9 +21,11 @@ import (
 	"bmv2-driver/controllers/p4target/utils"
 	"bmv2-driver/managers/p4target"
 	"context"
+	"os"
 	"time"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -63,6 +65,23 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	podName := os.Getenv("POD_NAME")
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podName == "" || podNamespace == "" {
+		logger.Error(nil, "POD_NAME or POD_NAMESPACE environment variable is not set")
+		panic("POD_NAME or POD_NAMESPACE environment variable is not set")
+	}
+
+	targetPod := &v1.Pod{}
+	if err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: podNamespace}, targetPod); err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(1).Info("P4Target Pod not found. Requeueing after 10 seconds.")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		logger.Error(err, "Failed to get P4Target Pod")
+		return ctrl.Result{}, err
+	}
+
 	if len(target.Spec.NfCIDR) == 0 {
 		logger.V(1).Info("P4Target does not have any IP address. Requeueing after 10 seconds.")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
@@ -75,7 +94,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, r.updateP4TargetStatus(ctx, target)
+	return ctrl.Result{}, r.updateP4TargetStatus(ctx, target, targetPod)
 }
 
 func (r *Reconciler) createP4Target(ctx context.Context) error {
@@ -91,17 +110,18 @@ func (r *Reconciler) createP4Target(ctx context.Context) error {
 	return r.Create(ctx, target)
 }
 
-func (r *Reconciler) updateP4TargetStatus(ctx context.Context, target *corev1alpha1.P4Target) error {
+func (r *Reconciler) updateP4TargetStatus(ctx context.Context, target *corev1alpha1.P4Target, targetPod *v1.Pod) error {
 	original := target.DeepCopy()
-	target.Status = r.calculateP4TargetStatus()
+	target.Status = r.calculateP4TargetStatus(targetPod)
 	if utils.StatusChanged(original, target) {
 		return r.Status().Patch(ctx, target, client.MergeFrom(original))
 	}
 	return nil
 }
 
-func (r *Reconciler) calculateP4TargetStatus() corev1alpha1.P4TargetStatus {
+func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4TargetStatus {
 	targetStatus := corev1alpha1.P4TargetStatus{}
+	targetStatus.NodeName = targetPod.Spec.NodeName
 	targetStatus.Capacity = r.P4TargetManager.GetCapacity()
 	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
 

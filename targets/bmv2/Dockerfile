@@ -36,6 +36,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /
 COPY --from=builder /workspace/driver .
-USER 65532:65532
 
 ENTRYPOINT ["/driver"]
