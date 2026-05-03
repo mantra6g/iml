@@ -21,6 +21,7 @@ type IMLCNIConfig struct {
 			TargetName   string  `json:"target_name,omitempty"`
 			AppName      string  `json:"app_name,omitempty"`
 			AppNamespace string  `json:"app_namespace,omitempty"`
+			NFInterfaces uint8   `json:"nf_interfaces,omitempty"`
 		} `json:"cni,omitempty"`
 	} `json:"args,omitempty"`
 }

@@ -48,6 +48,20 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 	}
 	subnet.IP6Allocator = routingIP6Allocator
 
+	routerVrf := &netlink.Vrf{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: RoutingVRFName,
+		},
+		Table: tableID,
+	}
+	if err = netlink.LinkAdd(routerVrf); err != nil {
+		return nil, fmt.Errorf("failed to add router VRF: %w", err)
+	}
+	if err = netlink.LinkSetUp(routerVrf); err != nil {
+		return nil, fmt.Errorf("failed to set up router VRF: %w", err)
+	}
+	subnet.Vrf = routerVrf
+
 	bridgeName, err := util.GenerateRandomName("br", 8)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate bridge name: %w", err)
@@ -62,6 +76,10 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 		return nil, fmt.Errorf("failed to add bridge to netlink: %w", err)
 	}
 	subnet.Bridge = bridge
+	err = netlink.LinkSetMaster(bridge, routerVrf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set master for bridge %s: %w", bridgeName, err)
+	}
 	err = netlink.LinkSetUp(bridge)
 	if err != nil {
 		return nil, fmt.Errorf("failed to bridge %s up: %w", bridgeName, err)
@@ -72,20 +90,6 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 		return nil, fmt.Errorf("failed to add address %s to bridge %s: %w", network.String(), bridgeName, err)
 	}
 	subnet.Gateway = gwIPv6.IP
-
-	routerVrf := &netlink.Vrf{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: RoutingVRFName,
-		},
-		Table: tableID,
-	}
-	if err = netlink.LinkAdd(routerVrf); err != nil {
-		return nil, fmt.Errorf("failed to add router VRF: %w", err)
-	}
-	if err = netlink.LinkSetUp(routerVrf); err != nil {
-		return nil, fmt.Errorf("failed to set up router VRF: %w", err)
-	}
-	subnet.Vrf = routerVrf
 
 	decapIface := &netlink.Dummy{
 		LinkAttrs: netlink.LinkAttrs{

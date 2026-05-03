@@ -10,6 +10,7 @@ import (
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
+	"github.com/vishvananda/netlink"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -112,6 +113,8 @@ func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	r.cidr = cidr
 	r.ipAllocator = alloc
 	r.allocatedIPs = make(map[netip.Addr]struct{})
+	// TODO: assign an IP and configure the bridge
+	//   configureNFBridge(bridgeIP, nfCIDR)
 	return nil
 }
 
@@ -289,4 +292,87 @@ func (r *RealManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 		Reason:            "SlotsAvailable",
 		Message:           fmt.Sprintf("%d/%d slots used", used, r.maxNFSlots),
 	}
+}
+
+// configureNFBridge configures the bridge interface with the given IP and subnet mask based
+// on the allocated CIDR for the target. This is needed to ensure that the bridge has an IP
+// in the same subnet as the NF interfaces, and also to ensure that it can act as a kind of
+// gateway for the NFs to forward traffic back to the host.
+func (r *RealManager) configureNFBridge(bridgeIP netip.Addr, nfCIDR netip.Prefix) error {
+	nfBridge, err := netlink.LinkByName("br0")
+	if err != nil {
+		return err
+	}
+	// List and remove old addresses, except for link-local and loopback addresses
+	previousAddresses, err := netlink.AddrList(nfBridge, netlink.FAMILY_ALL)
+	if err != nil {
+		return fmt.Errorf("failed to list existing addresses on bridge: %w", err)
+	}
+	for _, addr := range previousAddresses {
+		if addr.IP.IsLinkLocalUnicast() || addr.IP.IsLoopback() || addr.IP.IsLinkLocalMulticast() {
+			continue
+		}
+		if err := netlink.AddrDel(nfBridge, &addr); err != nil {
+			return fmt.Errorf("failed to remove old address %s from bridge: %w", addr.IP.String(), err)
+		}
+	}
+	// Add the new address for the bridge based on the allocated CIDR
+	newBridgeAddr := &netlink.Addr{
+		IPNet: &net.IPNet{
+			IP:   bridgeIP.Unmap().AsSlice(),
+			Mask: net.CIDRMask(nfCIDR.Bits(), bridgeIP.BitLen()),
+		},
+	}
+	err = netlink.AddrAdd(nfBridge, newBridgeAddr)
+	if err != nil {
+		return fmt.Errorf("failed to add new address %s to bridge: %w", newBridgeAddr.IPNet.String(), err)
+	}
+	return nil
+}
+
+// configureTrafficForwardingToNetworkFunctionInterface sets up the necessary routes and neighbor entries to ensure
+// that traffic to the NF IP gets forwarded to the NF interface via the bridge. This is needed because the NF interface
+// will have an IP in the same subnet as the bridge, so we need to ensure that traffic to that IP gets forwarded to the
+// correct interface.
+// In order for the return traffic to work correctly, we assume that the NF will reflect the packet back to
+// the MAC address of the bridge interface. When doing so, the source and destination MAC addresses will be swapped,
+// which allows the traffic to be correctly forwarded back to the bridge. For the destination IP, this will
+// either be determined by the NF itself, or it will be the next segment in the SRv6 path; in both cases, this MUST
+// be set by the NF. Afterwards, the packet will be routed by the bridge back to the iml0 interface out of the container
+// and back to the routing VRF in the host.
+func (r *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP netip.Addr, nfInterface string) error {
+	// Get the bridge interface
+	nfBridge, err := netlink.LinkByName("br0")
+	if err != nil {
+		return fmt.Errorf("failed to get bridge interface: %w", err)
+	}
+	// Add a route to the NF IP via the bridge interface. We need this route to ensure that traffic to the NF IP gets
+	// forwarded to the bridge, which will then forward it to the NF interface based on
+	// the neighbor entry we will add below.
+	// TODO: delete this route when the NF is deleted or its IP is released back to the pool
+	route := &netlink.Route{
+		Dst:       &net.IPNet{IP: nfIP.Unmap().AsSlice(), Mask: net.CIDRMask(nfIP.BitLen(), nfIP.BitLen())},
+		LinkIndex: nfBridge.Attrs().Index,
+	}
+	if err := netlink.RouteAdd(route); err != nil {
+		return fmt.Errorf("failed to add route for NF IP %s via bridge: %w", nfIP.String(), err)
+	}
+	// Add a neighbor entry to forward traffic to the NF interface.
+	// This is needed because the NF interface will have an IP in the same subnet as the bridge,
+	// so we need to ensure that traffic to that IP gets forwarded to the correct interface.
+	// TODO: delete this neighbor entry when the NF is deleted or its IP is released back to the pool
+	nfLink, err := netlink.LinkByName(nfInterface)
+	if err != nil {
+		return fmt.Errorf("failed to get NF interface: %w", err)
+	}
+	neighbor := &netlink.Neigh{
+		LinkIndex:    nfBridge.Attrs().Index,
+		State:        netlink.NUD_PERMANENT,
+		IP:           nfIP.Unmap().AsSlice(),
+		HardwareAddr: nfLink.Attrs().HardwareAddr,
+	}
+	if err := netlink.NeighAdd(neighbor); err != nil {
+		return fmt.Errorf("failed to add neighbor entry for NF IP %s: %w", nfIP.String(), err)
+	}
+	return nil
 }
