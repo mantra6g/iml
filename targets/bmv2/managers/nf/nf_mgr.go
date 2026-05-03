@@ -1,6 +1,7 @@
 package nf
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -216,7 +217,9 @@ func (m *RealManager) preCheck(_ context.Context, _ *corev1alpha1.NetworkFunctio
 	return nil
 }
 
-// deploy pushes the compiled P4 program to the BMv2 switch.
+// deploy pushes the compiled P4 program to the BMv2 switch. If the switch
+// already has an identical program loaded (e.g. after a driver restart), the
+// SetForwardingPipelineConfig RPC is skipped to avoid unnecessary disruption.
 func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
 	key := client.ObjectKeyFromObject(nf)
 
@@ -230,6 +233,12 @@ func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFuncti
 
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+
+	existing, err := m.switchClient.GetPipeline(reqCtx)
+	if err == nil && existing.GetConfig() != nil &&
+		bytes.Equal(existing.Config.P4DeviceConfig, program.P4DeviceConfig) {
+		return nil
+	}
 
 	return m.switchClient.DeployPipeline(reqCtx, program)
 }
