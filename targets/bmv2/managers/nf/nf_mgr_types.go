@@ -103,17 +103,16 @@ func (h *deploymentHandle) Done() <-chan struct{} {
 
 func (h *deploymentHandle) Cancel() error {
 	h.cancel()
-	h.mu.RLock()
-	terminal := isTerminal(h.status.Phase)
-	h.mu.RUnlock()
-	if !terminal {
-		h.transition(PhaseCanceled, "deployment canceled", context.Canceled)
-	}
+	h.transition(PhaseCanceled, "deployment canceled", context.Canceled)
 	return nil
 }
 
 func (h *deploymentHandle) transition(phase Phase, msg string, err error) {
 	h.mu.Lock()
+	if isTerminal(h.status.Phase) {
+		h.mu.Unlock()
+		return
+	}
 	h.status = DeploymentStatus{
 		Phase:   phase,
 		Message: msg,
@@ -129,14 +128,11 @@ func (h *deploymentHandle) transition(phase Phase, msg string, err error) {
 }
 
 func (h *deploymentHandle) emitEvent(phase Phase, msg string, err error) {
-	evt := DeploymentEvent{
-		Phase:   phase,
-		Message: msg,
-		Err:     err,
-	}
-
+	// recover guards against the narrow race where finish() closes h.events
+	// between the terminal check in transition() and this send.
+	defer func() { recover() }()
 	select {
-	case h.events <- evt:
+	case h.events <- DeploymentEvent{Phase: phase, Message: msg, Err: err}:
 	default:
 		// Drop if buffer full (critical: never block manager)
 	}
