@@ -68,6 +68,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	}, nil
 }
 
+// TODO: with the NfCIDR IP do the traffic forwarding to the nf. which is done in runDeployment using configureTrafficForwardingToNetworkFunctionInterface.
 func (m *RealManager) EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction) DeploymentHandle {
 	key := client.ObjectKeyFromObject(nf)
 
@@ -141,6 +142,7 @@ func (m *RealManager) GetDeployedNetworkFunctions(ctx context.Context) ([]client
 	return deployed, nil
 }
 
+// TODO: Add a new phase PhaseNetworkSetup which runs configureTrafficForwardingToNetworkFunctionInterface function.
 func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -284,5 +286,53 @@ func (m *RealManager) deleteResources(ctx context.Context, nf *corev1alpha1.Netw
 	m.mu.Lock()
 	delete(m.programs, key)
 	m.mu.Unlock()
+	return nil
+}
+
+
+// configureTrafficForwardingToNetworkFunctionInterface sets up the necessary routes and neighbor entries to ensure
+// that traffic to the NF IP gets forwarded to the NF interface via the bridge. This is needed because the NF interface
+// will have an IP in the same subnet as the bridge, so we need to ensure that traffic to that IP gets forwarded to the
+// correct interface.
+// In order for the return traffic to work correctly, we assume that the NF will reflect the packet back to
+// the MAC address of the bridge interface. When doing so, the source and destination MAC addresses will be swapped,
+// which allows the traffic to be correctly forwarded back to the bridge. For the destination IP, this will
+// either be determined by the NF itself, or it will be the next segment in the SRv6 path; in both cases, this MUST
+// be set by the NF. Afterwards, the packet will be routed by the bridge back to the iml0 interface out of the container
+// and back to the routing VRF in the host.
+func (r *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP netip.Addr, nfInterface string) error {
+	// Get the bridge interface
+	nfBridge, err := netlink.LinkByName("br0")
+	if err != nil {
+		return fmt.Errorf("failed to get bridge interface: %w", err)
+	}
+	// Add a route to the NF IP via the bridge interface. We need this route to ensure that traffic to the NF IP gets
+	// forwarded to the bridge, which will then forward it to the NF interface based on
+	// the neighbor entry we will add below.
+	// TODO: delete this route when the NF is deleted or its IP is released back to the pool
+	route := &netlink.Route{
+		Dst:       &net.IPNet{IP: nfIP.Unmap().AsSlice(), Mask: net.CIDRMask(nfIP.BitLen(), nfIP.BitLen())},
+		LinkIndex: nfBridge.Attrs().Index,
+	}
+	if err := netlink.RouteAdd(route); err != nil {
+		return fmt.Errorf("failed to add route for NF IP %s via bridge: %w", nfIP.String(), err)
+	}
+	// Add a neighbor entry to forward traffic to the NF interface.
+	// This is needed because the NF interface will have an IP in the same subnet as the bridge,
+	// so we need to ensure that traffic to that IP gets forwarded to the correct interface.
+	// TODO: delete this neighbor entry when the NF is deleted or its IP is released back to the pool
+	nfLink, err := netlink.LinkByName(nfInterface)
+	if err != nil {
+		return fmt.Errorf("failed to get NF interface: %w", err)
+	}
+	neighbor := &netlink.Neigh{
+		LinkIndex:    nfBridge.Attrs().Index,
+		State:        netlink.NUD_PERMANENT,
+		IP:           nfIP.Unmap().AsSlice(),
+		HardwareAddr: nfLink.Attrs().HardwareAddr,
+	}
+	if err := netlink.NeighAdd(neighbor); err != nil {
+		return fmt.Errorf("failed to add neighbor entry for NF IP %s: %w", nfIP.String(), err)
+	}
 	return nil
 }
