@@ -59,7 +59,7 @@ func init() {
 func main() {
 	var leaseRenewIntervalSeconds, leaseDurationSeconds uint
 	var maxNFSlots int
-	var p4targetName, switchAddr, driverIP, dataIface string
+	var p4targetName, switchAddr, driverIP, dataIface, nfIface string
 
 	flag.UintVar(&leaseRenewIntervalSeconds, "lease-renew-interval-seconds",
 		DefaultLeaseRenewIntervalSeconds, "Interval at which to renew the Lease for this P4Target")
@@ -75,6 +75,8 @@ func main() {
 		DefaultMaxNFSlots, "Maximum number of network functions this target can host")
 	flag.StringVar(&dataIface, "data-iface",
 		"iml0", "Network interface to discover target IPs from")
+	flag.StringVar(&nfIface, "nf-iface",
+		"nf0", "Network interface connected to the NF data plane (used for traffic forwarding setup)")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -175,6 +177,7 @@ func main() {
 		MaxNFSlots: maxNFSlots,
 		TargetIPs:  targetIPs,
 		DriverIP:   net.ParseIP(driverIP),
+		BridgeName: "br0",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create p4target manager")
@@ -187,6 +190,7 @@ func main() {
 	nfMgr, err := nfmgr.NewManager(nfmgr.ManagerConfig{
 		Switch:          switchClient,
 		P4TargetManager: p4targetMgr,
+		NFInterface:     nfIface,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create nf manager")

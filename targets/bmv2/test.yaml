@@ -49,7 +49,7 @@ spec:
     securityContext:
       capabilities:
         add: ["NET_ADMIN"]
-    args: ["--data-iface=eth0"]
+    args: ["--data-iface=iml0"]
     resources:
       requests:
         cpu: 100m
