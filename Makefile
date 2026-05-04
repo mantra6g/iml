@@ -63,7 +63,7 @@ help: ## Display this help.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build-all
-docker-build-all: docker-build-iml docker-build-targets docker-build-examples ## Build docker images for iml, all targets and examples.
+docker-build-all: docker-build-iml docker-build-targets docker-build-examples docker-build-bmv2 ## Build docker images for iml, all targets and examples.
 
 .PHONY: docker-build-iml
 docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator ## Build docker images for the cni, daemon and operator.
@@ -81,12 +81,11 @@ docker-build-operator: ## Build docker image for the operator.
 	$(CONTAINER_TOOL) build -t ${IMG_OPERATOR} --target operator .
 
 .PHONY: docker-build-targets
-docker-build-targets: ## Build docker images for the targets.
-#docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
+docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
 
-#.PHONY: docker-build-bmv2
-#docker-build-bmv2: ## Build docker image for the bmv2 target.
-#	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
+.PHONY: docker-build-bmv2
+docker-build-bmv2: ## Build docker image for the bmv2 target.
+	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
 
 .PHONY: docker-build-examples
 docker-build-examples: ## Build docker images for the examples.

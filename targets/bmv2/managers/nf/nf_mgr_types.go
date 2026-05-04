@@ -12,10 +12,11 @@ type Phase string
 //	The ones listed here are just examples.
 const (
 	// deploy phases
-	PhaseCompiling Phase = "Compiling"
-	PhasePreCheck  Phase = "PreCheck"
-	PhaseDeploying Phase = "Deploying"
-	PhaseReady     Phase = "Ready"
+	PhaseCompiling    Phase = "Compiling"
+	PhasePreCheck     Phase = "PreCheck"
+	PhaseDeploying    Phase = "Deploying"
+	PhaseNetworkSetup Phase = "NetworkSetup"
+	PhaseReady        Phase = "Ready"
 
 	// delete phases
 	PhaseDraining Phase = "Draining"

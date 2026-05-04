@@ -200,8 +200,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+	} else {
+		funcIP = net.ParseIP(netfunc.Status.AssignedIP)
 	}
-	//TODO: What do we do now with this IP? How should the manager retrieve this IP?
 
 	var nfConfig *corev1alpha1.NetworkFunctionConfig
 	if netfunc.Spec.ConfigRef != nil {
@@ -217,7 +218,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	nfHandle := r.NFManager.EnsurePresent(ctx, netfunc)
+	nfHandle := r.NFManager.EnsurePresent(ctx, netfunc, funcIP)
 	status := nfHandle.Status()
 	err = r.updateStatus(netfunc, status, funcIP)
 	if err != nil {
