@@ -20,19 +20,20 @@ import (
 	"context"
 	"fmt"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
+	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
+	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
-	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
-	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // BMv2TargetReconciler reconciles a BMv2Target object
@@ -55,6 +56,7 @@ type BMv2TargetReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
+	logger.V(1).Info("Reconciling BMv2Target")
 
 	bmv2Target := &infrav1alpha1.BMv2Target{}
 	err := r.Get(ctx, req.NamespacedName, bmv2Target)
@@ -73,10 +75,17 @@ func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	p4target, err := r.ensureP4Target(ctx, bmv2Target)
-	if err != nil {
-		logger.Error(err, "failed to ensure p4target has correct defaults and finalizers")
-		return ctrl.Result{}, err
+	// Commenting this out because this should be created by the BMv2 driver.
+	//p4target, err := r.ensureP4Target(ctx, bmv2Target)
+	//if err != nil {
+	//	logger.Error(err, "failed to ensure p4target has correct defaults and finalizers")
+	//	return ctrl.Result{}, err
+	//}
+
+	p4target := &corev1alpha1.P4Target{}
+	err = r.Get(ctx, client.ObjectKey{Name: bmv2Target.Name}, p4target)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("failed to get P4Target: %w", err)
 	}
 
 	err = r.updateStatus(ctx, bmv2Target, p4target, dep)
@@ -93,7 +102,8 @@ func (r *BMv2TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1alpha1.BMv2Target{}).
 		Owns(&corev1alpha1.P4Target{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.Deployment{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named("infra-bmv2target").
 		Complete(r)
 }
@@ -157,13 +167,13 @@ func calculateStatus(bmv2Target *infrav1alpha1.BMv2Target,
 		status.Conditions = append(status.Conditions, bmv2Target.Status.Conditions[i])
 	}
 	if dep == nil {
-		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
+		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionUnknown,
 			"DeploymentNotFound", "The Deployment for this BMv2Target was not found.")
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
 	}
 	if p4target == nil {
-		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
+		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionUnknown,
 			"P4TargetNotFound", "The P4Target for this BMv2Target was not found.")
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status

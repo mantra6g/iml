@@ -42,7 +42,8 @@ var logger = logf.Log.WithName("networkfunctiondeployment-resource")
 func SetupNetworkFunctionDeploymentWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &schedulingv1alpha1.NetworkFunctionDeployment{}).
 		WithValidator(&CustomValidator{
-			Client: mgr.GetClient(),
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
 		}).WithDefaulter(&CustomDefaulter{}).
 		Complete()
 }
@@ -96,7 +97,8 @@ func (d *CustomDefaulter) Default(_ context.Context, deployment *schedulingv1alp
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type CustomValidator struct {
 	// TODO(user): Add more fields as needed for validation
-	Client client.Client
+	Client    client.Client
+	APIReader client.Reader
 }
 
 var _ admission.Validator[*schedulingv1alpha1.NetworkFunctionDeployment] = &CustomValidator{}
@@ -121,7 +123,7 @@ func (v *CustomValidator) ValidateCreate(
 	}
 
 	deploymentList := &appsv1.DeploymentList{}
-	err = v.Client.List(ctx, deploymentList, client.InNamespace(deployment.GetNamespace()))
+	err = v.APIReader.List(ctx, deploymentList, client.InNamespace(deployment.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +143,9 @@ func (v *CustomValidator) ValidateUpdate(
 	_ context.Context, oldDep, newDep *schedulingv1alpha1.NetworkFunctionDeployment,
 ) (admission.Warnings, error) {
 	logger.Info("Validation for NetworkFunctionDeployment upon update", "name", newDep.GetName())
-
+	if oldDep.Generation == newDep.Generation {
+		return nil, nil
+	}
 	if !reflect.DeepEqual(oldDep.Spec.Selector, newDep.Spec.Selector) {
 		return nil, fmt.Errorf("spec.selector is immutable and cannot be changed")
 	}

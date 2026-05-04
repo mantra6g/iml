@@ -34,13 +34,14 @@ import (
 )
 
 const (
-	defaultSwitchAddr                = "127.0.0.1:9559"
-	deviceID                         = 0
-	electionIDHigh                   = 0
-	electionIDLow                    = 1
-	DefaultLeaseRenewIntervalSeconds = 5
-	DefaultLeaseDurationSeconds      = 40
-	DefaultMaxNFSlots                = 8
+	defaultSwitchAddr                  = "127.0.0.1:9559"
+	deviceID                           = 0
+	electionIDHigh                     = 0
+	electionIDLow                      = 1
+	DefaultLeaseRenewIntervalSeconds   = 5
+	DefaultLeaseDurationSeconds        = 40
+	DefaultStatusUpdateIntervalSeconds = 10
+	DefaultMaxNFSlots                  = 8
 )
 
 var (
@@ -57,7 +58,7 @@ func init() {
 }
 
 func main() {
-	var leaseRenewIntervalSeconds, leaseDurationSeconds uint
+	var leaseRenewIntervalSeconds, leaseDurationSeconds, statusUpdateIntervalSeconds uint
 	var maxNFSlots int
 	var p4targetName, switchAddr, driverIP, dataIface, nfIface string
 
@@ -65,6 +66,8 @@ func main() {
 		DefaultLeaseRenewIntervalSeconds, "Interval at which to renew the Lease for this P4Target")
 	flag.UintVar(&leaseDurationSeconds, "lease-duration-seconds",
 		DefaultLeaseDurationSeconds, "Duration of the P4Runtime master lease")
+	flag.UintVar(&statusUpdateIntervalSeconds, "status-update-interval-seconds",
+		DefaultStatusUpdateIntervalSeconds, "Interval at which to update P4Target status")
 	flag.StringVar(&p4targetName, "p4target-name",
 		"bmv2-target", "Name of the P4Target custom resource to manage")
 	flag.StringVar(&switchAddr, "switch-addr",
@@ -211,6 +214,7 @@ func main() {
 		RenewInterval:   time.Duration(leaseRenewIntervalSeconds) * time.Second,
 		LeaseDuration:   time.Duration(leaseDurationSeconds) * time.Second,
 		P4TargetManager: p4targetMgr,
+		Log:             ctrl.Log.WithName("lease-renewer"),
 	}
 	if err = mgr.Add(renewer); err != nil {
 		setupLog.Error(err, "unable to add renewer as dependency of manager")
@@ -221,6 +225,8 @@ func main() {
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
 		P4TargetManager: p4targetMgr,
+		PullInterval:    time.Duration(DefaultStatusUpdateIntervalSeconds) * time.Second,
+		Log:             ctrl.Log.WithName("p4target-status-updater"),
 	}
 	if err = mgr.Add(statusUpdater); err != nil {
 		setupLog.Error(err, "unable to add status updater as dependency of manager")
