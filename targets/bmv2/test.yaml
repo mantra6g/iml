@@ -6,6 +6,9 @@ rules:
 - apiGroups: ["core.loom.io", "infra.loom.io", "scheduling.loom.io"]
   resources: ["*"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -44,7 +47,7 @@ spec:
   restartPolicy: OnFailure
   containers:
   - name: bmv2-driver
-    image: bmv2-driver:local
+    image: mantra6g/bmv2-driver:local
     imagePullPolicy: Never
     securityContext:
       capabilities:

@@ -3,14 +3,12 @@ package util
 import (
 	"encoding/json"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
@@ -32,6 +30,23 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container := &containers[containerIndex]
 	container.Name = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_NAME
 	container.Image = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_IMAGE
+	if container.SecurityContext == nil {
+		container.SecurityContext = &corev1.SecurityContext{}
+	}
+	if container.SecurityContext.Capabilities == nil {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{}
+	}
+	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
+	container.Command = []string{"simple_switch_grpc"}
+	container.Args = []string{
+		"--no-p4",
+		"--log-console",
+		"-i",
+		"0@nf0",
+		"--",
+		"--grpc-server-addr=0.0.0.0:9559",
+		"--cpu-port=255",
+	}
 	return containers
 }
 
@@ -54,33 +69,16 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container := &containers[containerIndex]
 	container.Name = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_NAME
 	container.Image = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_IMAGE
-	if container.Ports == nil {
-		container.Ports = []corev1.ContainerPort{}
+	if container.SecurityContext == nil {
+		container.SecurityContext = &corev1.SecurityContext{}
 	}
-	containerPortExists := false
-	for i, port := range container.Ports {
-		if port.Name == "health" {
-			container.Ports[i].ContainerPort = infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT
-			containerPortExists = true
-			break
-		}
+	if container.SecurityContext.Capabilities == nil {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{}
 	}
-	if !containerPortExists {
-		container.Ports = append(container.Ports, corev1.ContainerPort{
-			Name:          "health",
-			ContainerPort: infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT,
-		})
+	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+	container.Args = []string{
+		"--p4target-name", bmv2Target.Name,
 	}
-	if container.ReadinessProbe == nil {
-		container.ReadinessProbe = &corev1.Probe{}
-	}
-	container.ReadinessProbe.ProbeHandler.HTTPGet = &corev1.HTTPGetAction{
-		Path: infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PATH,
-		Port: intstr.FromInt32(infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT),
-	}
-	container.ReadinessProbe.InitialDelaySeconds = 5
-	container.ReadinessProbe.PeriodSeconds = 5
-
 	return containers
 }
 
@@ -115,6 +113,7 @@ func EnsureBMv2PodSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	if spec == nil {
 		spec = &corev1.PodSpec{}
 	}
+	spec.ServiceAccountName = infrav1alpha1.BMV2_DRIVER_SERVICE_ACCOUNT_NAME
 	if spec.Containers == nil {
 		spec.Containers = []corev1.Container{}
 	}
@@ -146,13 +145,15 @@ func EnsureBMv2DeploymentFinalizers(bmv2Target *infrav1alpha1.BMv2Target,
 }
 
 type CNIConfig struct {
-	Name    string  `json:"name"`
-	CNIArgs CNIArgs `json:"cni-args"`
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
+	CNIArgs   CNIArgs `json:"cni-args"`
 }
 
 type CNIArgs struct {
-	AppType    string `json:"app_type"`
-	TargetName string `json:"target_name"`
+	AppType      string `json:"app_type"`
+	TargetName   string `json:"target_name"`
+	NFInterfaces uint8  `json:"nf_interfaces"`
 }
 
 func (c CNIConfig) String() string {
@@ -162,10 +163,12 @@ func (c CNIConfig) String() string {
 
 func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 	return CNIConfig{
-		Name: "loom-cni",
+		Name:      "loom-cni",
+		Namespace: "loom-system",
 		CNIArgs: CNIArgs{
-			AppType:    "p4target",
-			TargetName: bmv2Target.Name,
+			AppType:      "p4target",
+			TargetName:   bmv2Target.Name,
+			NFInterfaces: 1,
 		},
 	}
 }

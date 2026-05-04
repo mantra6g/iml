@@ -73,10 +73,17 @@ func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	p4target, err := r.ensureP4Target(ctx, bmv2Target)
-	if err != nil {
-		logger.Error(err, "failed to ensure p4target has correct defaults and finalizers")
-		return ctrl.Result{}, err
+	// Commenting this out because this should be created by the BMv2 driver.
+	//p4target, err := r.ensureP4Target(ctx, bmv2Target)
+	//if err != nil {
+	//	logger.Error(err, "failed to ensure p4target has correct defaults and finalizers")
+	//	return ctrl.Result{}, err
+	//}
+
+	p4target := &corev1alpha1.P4Target{}
+	err = r.Get(ctx, client.ObjectKey{Name: bmv2Target.Name}, p4target)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("failed to get P4Target: %w", err)
 	}
 
 	err = r.updateStatus(ctx, bmv2Target, p4target, dep)
@@ -157,13 +164,13 @@ func calculateStatus(bmv2Target *infrav1alpha1.BMv2Target,
 		status.Conditions = append(status.Conditions, bmv2Target.Status.Conditions[i])
 	}
 	if dep == nil {
-		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
+		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionUnknown,
 			"DeploymentNotFound", "The Deployment for this BMv2Target was not found.")
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
 	}
 	if p4target == nil {
-		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionFalse,
+		newReadyCondition := bmv2utils.NewReadyCondition(metav1.ConditionUnknown,
 			"P4TargetNotFound", "The P4Target for this BMv2Target was not found.")
 		status.Conditions = bmv2utils.UpdateBMv2TargetCondition(bmv2Target, newReadyCondition)
 		return status
