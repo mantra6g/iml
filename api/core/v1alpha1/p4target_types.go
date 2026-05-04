@@ -24,7 +24,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-const P4TargetLeaseNamespace = "p4target-leases"
+const P4TargetLeaseNamespace = "loom-system"
 
 const P4TargetArchitectureLabel = "p4target.loom.io/arch"
 const P4TargetNameLabel = "p4target.loom.io/name"
@@ -125,8 +125,7 @@ type P4TargetStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
-// +kubebuilder:resource:shortName=targets;target
+// +kubebuilder:resource:scope=Cluster,shortName={targets,target}
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

@@ -24,6 +24,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Reconciler reconciles a P4Target object
@@ -41,6 +41,7 @@ type Reconciler struct {
 	Scheme          *runtime.Scheme
 	P4TargetManager p4target.Manager
 	PullInterval    time.Duration
+	Log             logr.Logger
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -49,13 +50,15 @@ type Reconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
-	logger := logf.FromContext(ctx)
+	logger := r.Log
+	logger.V(1).Info("Reconciling P4Target")
 
 	target := &corev1alpha1.P4Target{}
 	if err := r.Get(ctx, types.NamespacedName{Name: r.P4TargetManager.GetName()}, target); err != nil {
 		if errors.IsNotFound(err) {
 			err = r.createP4Target(ctx)
 			if err != nil {
+				logger.Error(err, "Failed to create P4Target")
 				return ctrl.Result{}, err
 			}
 			logger.Info("P4Target created")
@@ -141,6 +144,7 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 }
 
 func (r *Reconciler) Start(ctx context.Context) error {
+	r.Log.V(1).Info("Starting P4Target controller")
 	backoff := lease.InitialBackoff
 	timer := time.NewTimer(0) // run immediately
 	defer timer.Stop()

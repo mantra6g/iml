@@ -20,19 +20,20 @@ import (
 	"context"
 	"fmt"
 
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
+	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
+	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
-	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
-	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // BMv2TargetReconciler reconciles a BMv2Target object
@@ -55,6 +56,7 @@ type BMv2TargetReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
+	logger.V(1).Info("Reconciling BMv2Target")
 
 	bmv2Target := &infrav1alpha1.BMv2Target{}
 	err := r.Get(ctx, req.NamespacedName, bmv2Target)
@@ -100,7 +102,8 @@ func (r *BMv2TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1alpha1.BMv2Target{}).
 		Owns(&corev1alpha1.P4Target{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.Deployment{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named("infra-bmv2target").
 		Complete(r)
 }

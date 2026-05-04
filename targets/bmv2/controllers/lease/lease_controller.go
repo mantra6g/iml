@@ -21,7 +21,7 @@ import (
 	"context"
 	"time"
 
-	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	"github.com/go-logr/logr"
 	coordv1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,8 +31,9 @@ import (
 )
 
 const (
-	InitialBackoff = 1 * time.Second
-	MaxBackoff     = 16 * time.Second
+	P4TargetLeaseNamespace = "loom-system"
+	InitialBackoff         = 1 * time.Second
+	MaxBackoff             = 16 * time.Second
 )
 
 type Result struct {
@@ -49,13 +50,14 @@ type Renewer struct {
 	RenewInterval   time.Duration
 	LeaseDuration   time.Duration
 	P4TargetManager p4target.Manager
+	Log             logr.Logger
 }
 
 func (r *Renewer) createLease(ctx context.Context, now metav1.MicroTime) error {
 	lease := &coordv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.P4TargetManager.GetName(),
-			Namespace: corev1alpha1.P4TargetLeaseNamespace,
+			Namespace: P4TargetLeaseNamespace,
 		},
 		Spec: coordv1.LeaseSpec{
 			HolderIdentity:       new(r.P4TargetManager.GetName()),
@@ -84,19 +86,23 @@ func (r *Renewer) updateLease(ctx context.Context, lease *coordv1.Lease, now met
 }
 
 func (r *Renewer) Reconcile(ctx context.Context) (Result, error) {
+	logger := r.Log
+	logger.V(1).Info("Reconciling BMv2 Lease")
 	now := metav1.MicroTime{Time: time.Now()}
 
 	lease := &coordv1.Lease{}
 	err := r.Get(ctx, types.NamespacedName{
 		Name:      r.P4TargetManager.GetName(),
-		Namespace: corev1alpha1.P4TargetLeaseNamespace,
+		Namespace: P4TargetLeaseNamespace,
 	}, lease)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			err = r.createLease(ctx, now)
 			if err != nil {
+				logger.Error(err, "Failed to create Lease")
 				return Result{}, err
 			}
+			logger.Info("Lease created successfully", "lease", client.ObjectKeyFromObject(lease))
 			return Result{RecheckAfter: 2 * time.Second}, nil
 		}
 		return Result{}, err

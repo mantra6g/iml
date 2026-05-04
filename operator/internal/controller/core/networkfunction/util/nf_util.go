@@ -54,7 +54,7 @@ func NewScheduledCondition(status metav1.ConditionStatus, reason, message string
 func UpdateNFCondition(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 	newCondition schedulingv1alpha1.NetworkFunctionCondition) []schedulingv1alpha1.NetworkFunctionCondition {
 	existingCondition := GetNFCondition(newCondition.Type, nfStatus)
-	if existingCondition != nil && existingCondition.Status == newCondition.Status {
+	if existingCondition != nil && ConditionsAreEqual(*existingCondition, newCondition) {
 		return CopyConditions(nfStatus) // If the status hasn't changed, we don't need to update the LastTransitionTime
 	}
 	newConditions := RemoveNFCondition(nfStatus, newCondition.Type)
@@ -65,4 +65,54 @@ func UpdateNFCondition(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 func GetScheduledCondition(nfStatus *schedulingv1alpha1.NetworkFunctionStatus,
 ) *schedulingv1alpha1.NetworkFunctionCondition {
 	return GetNFCondition(schedulingv1alpha1.NetworkFunctionScheduled, nfStatus)
+}
+
+func StatusesAreEqual(oldStatus, newStatus *schedulingv1alpha1.NetworkFunctionStatus) bool {
+	if oldStatus == nil || newStatus == nil {
+		return oldStatus == nil && newStatus == nil
+	}
+	if oldStatus.ObservedGeneration != newStatus.ObservedGeneration {
+		return false
+	}
+	if oldStatus.AssignedIP != newStatus.AssignedIP {
+		return false
+	}
+	if oldStatus.Phase != newStatus.Phase {
+		return false
+	}
+	if oldStatus.Reason != newStatus.Reason {
+		return false
+	}
+	return ConditionsSlicesAreEqual(oldStatus.Conditions, newStatus.Conditions)
+}
+
+func ConditionsSlicesAreEqual(conds1, conds2 []schedulingv1alpha1.NetworkFunctionCondition) bool {
+	if len(conds1) != len(conds2) {
+		return false
+	}
+	// They might be in different order, so we semantically compare them
+	for _, cond1 := range conds1 {
+		found := false
+		var foundCond = &schedulingv1alpha1.NetworkFunctionCondition{}
+		for _, cond2 := range conds2 {
+			if cond1.Type == cond2.Type {
+				found = true
+				foundCond = &cond2
+			}
+		}
+		if !found {
+			return false
+		}
+		if !ConditionsAreEqual(cond1, *foundCond) {
+			return false
+		}
+	}
+	return true
+}
+
+func ConditionsAreEqual(cond1, cond2 schedulingv1alpha1.NetworkFunctionCondition) bool {
+	return cond1.Type == cond2.Type &&
+		cond1.Status == cond2.Status &&
+		cond1.Reason == cond2.Reason &&
+		cond1.Message == cond2.Message
 }

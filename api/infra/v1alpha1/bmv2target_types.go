@@ -30,7 +30,7 @@ const BMV2_DATAPLANE_CONTAINER_NAME = "bmv2-switch"
 const BMV2_DATAPLANE_CONTAINER_IMAGE = "p4lang/behavioral-model:latest"
 const BMV2_CONTROLPLANE_CONTAINER_NAME = "bmv2-driver"
 const BMV2_CONTROLPLANE_CONTAINER_IMAGE = "mantra6g/bmv2-driver:latest"
-const BMV2_DRIVER_SERVICE_ACCOUNT_NAME = "bmv2-driver"
+const BMV2_DRIVER_SERVICE_ACCOUNT_NAME = "loom-bmv2-driver"
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.

@@ -30,6 +30,7 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container := &containers[containerIndex]
 	container.Name = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_NAME
 	container.Image = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_IMAGE
+	container.ImagePullPolicy = corev1.PullIfNotPresent
 	if container.SecurityContext == nil {
 		container.SecurityContext = &corev1.SecurityContext{}
 	}
@@ -69,6 +70,7 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container := &containers[containerIndex]
 	container.Name = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_NAME
 	container.Image = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_IMAGE
+	container.ImagePullPolicy = corev1.PullIfNotPresent
 	if container.SecurityContext == nil {
 		container.SecurityContext = &corev1.SecurityContext{}
 	}
@@ -79,7 +81,75 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container.Args = []string{
 		"--p4target-name", bmv2Target.Name,
 	}
+	container.Env = EnsureDriverEnvVars(bmv2Target, container.Env)
 	return containers
+}
+
+func EnsureDriverEnvVars(bmv2Target *infrav1alpha1.BMv2Target, existing []corev1.EnvVar) []corev1.EnvVar {
+	if existing == nil {
+		existing = []corev1.EnvVar{}
+	}
+	newEnvVars := make([]corev1.EnvVar, len(existing))
+	copy(newEnvVars, existing)
+	newEnvVars = EnsurePodNameEnvVar(newEnvVars)
+	newEnvVars = EnsurePodNamespaceEnvVar(newEnvVars)
+	return newEnvVars
+}
+
+func EnsurePodNameEnvVar(existing []corev1.EnvVar) []corev1.EnvVar {
+	var foundEnvVar *corev1.EnvVar
+	for i := range existing {
+		if existing[i].Name == "POD_NAME" {
+			foundEnvVar = &existing[i]
+		}
+	}
+	if foundEnvVar == nil {
+		return append(existing, corev1.EnvVar{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		})
+	}
+	foundEnvVar.Value = ""
+	if foundEnvVar.ValueFrom == nil {
+		foundEnvVar.ValueFrom = &corev1.EnvVarSource{}
+	}
+	if foundEnvVar.ValueFrom.FieldRef == nil {
+		foundEnvVar.ValueFrom.FieldRef = &corev1.ObjectFieldSelector{}
+	}
+	foundEnvVar.ValueFrom.FieldRef.FieldPath = "metadata.name"
+	return existing
+}
+
+func EnsurePodNamespaceEnvVar(existing []corev1.EnvVar) []corev1.EnvVar {
+	var foundEnvVar *corev1.EnvVar
+	for i := range existing {
+		if existing[i].Name == "POD_NAMESPACE" {
+			foundEnvVar = &existing[i]
+		}
+	}
+	if foundEnvVar == nil {
+		return append(existing, corev1.EnvVar{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		})
+	}
+	foundEnvVar.Value = ""
+	if foundEnvVar.ValueFrom == nil {
+		foundEnvVar.ValueFrom = &corev1.EnvVarSource{}
+	}
+	if foundEnvVar.ValueFrom.FieldRef == nil {
+		foundEnvVar.ValueFrom.FieldRef = &corev1.ObjectFieldSelector{}
+	}
+	foundEnvVar.ValueFrom.FieldRef.FieldPath = "metadata.namespace"
+	return existing
 }
 
 func EnsureBMv2DeploymentSpec(bmv2Target *infrav1alpha1.BMv2Target,
@@ -245,20 +315,20 @@ func GetBMv2TargetCondition(bmv2Target *infrav1alpha1.BMv2Target,
 }
 
 func CopyBMv2TargetConditions(bmv2Target *infrav1alpha1.BMv2Target) []infrav1alpha1.BMv2TargetCondition {
-	newConditions := make([]infrav1alpha1.BMv2TargetCondition, len(bmv2Target.Status.Conditions))
-	for i := range bmv2Target.Status.Conditions {
-		newConditions = append(newConditions, bmv2Target.Status.Conditions[i])
-	}
+	conditions := bmv2Target.Status.Conditions
+
+	newConditions := make([]infrav1alpha1.BMv2TargetCondition, len(conditions))
+	copy(newConditions, conditions)
+
 	return newConditions
 }
 
 func RemoveBMv2TargetCondition(bmv2Target *infrav1alpha1.BMv2Target,
 	conditionType infrav1alpha1.BMv2TargetConditionType) []infrav1alpha1.BMv2TargetCondition {
 	newConditions := make([]infrav1alpha1.BMv2TargetCondition, 0)
-	conditions := bmv2Target.Status.Conditions
-	for i := range conditions {
-		if conditions[i].Type == conditionType {
-			newConditions = append(conditions[:i], conditions[i+1:]...)
+	for _, cond := range bmv2Target.Status.Conditions {
+		if cond.Type != conditionType {
+			newConditions = append(newConditions, cond)
 		}
 	}
 	return newConditions
