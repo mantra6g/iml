@@ -10,7 +10,7 @@ TARGET_IMAGES = $(IMG_TARGET_BMV2)
 IMG_EXAMPLE_LOADBALANCER ?= loadbalancer:local
 EXAMPLE_IMAGES = $(IMG_EXAMPLE_LOADBALANCER)
 
-ALL_IMAGES = $(IML_IMAGES) $(TARGET_IMAGES) $(EXAMPLE_IMAGES)
+ALL_IMAGES = $(IML_IMAGES) $(TARGET_IMAGES)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -63,7 +63,7 @@ help: ## Display this help.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build-all
-docker-build-all: docker-build-iml docker-build-targets docker-build-examples docker-build-bmv2 ## Build docker images for iml, all targets and examples.
+docker-build-all: docker-build-iml docker-build-targets docker-build-examples ## Build docker images for iml, all targets and examples.
 
 .PHONY: docker-build-iml
 docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator ## Build docker images for the cni, daemon and operator.
@@ -128,8 +128,12 @@ kind-create: ## Create and configure a local kind cluster with a single control-
 kind-delete: ## Delete the local kind cluster.
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
 
-.PHONY: kind-load
-kind-load: ## Load all images into the local cluster.
+.PHONY: kind-load-all
+kind-load-all: ## Load all images into the local cluster.
+	$(KIND) load docker-image ${ALL_IMAGES} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-iml
+kind-load-all: ## Load all images into the local cluster.
 	$(KIND) load docker-image ${IML_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
