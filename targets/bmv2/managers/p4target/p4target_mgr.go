@@ -42,7 +42,7 @@ type Manager interface {
 	GetCapacity() corev1.ResourceList
 	GetAllocatable() corev1.ResourceList
 	GetHealthyCondition() corev1alpha1.P4TargetCondition
-	GetReadyCondition() corev1alpha1.P4TargetCondition
+	GetReadyCondition(corev1alpha1.P4TargetCondition, corev1alpha1.P4TargetCondition) corev1alpha1.P4TargetCondition
 	GetNetworkConfiguredCondition() corev1alpha1.P4TargetCondition
 	GetOccupiedCondition() corev1alpha1.P4TargetCondition
 	GetTargetIPs() []net.IP
@@ -209,7 +209,7 @@ func (r *RealManager) GetHealthyCondition() corev1alpha1.P4TargetCondition {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	now := metav1.NewTime(time.Now())
-	_, err := r.p4client.GetForwardingPipelineConfig(ctx, &p4v1.GetForwardingPipelineConfigRequest{})
+	_, err := r.p4client.Capabilities(ctx, &p4v1.CapabilitiesRequest{})
 	if err != nil {
 		return corev1alpha1.P4TargetCondition{
 			Type:              ConditionHealthy,
@@ -224,38 +224,27 @@ func (r *RealManager) GetHealthyCondition() corev1alpha1.P4TargetCondition {
 		Status:            metav1.ConditionTrue,
 		LastHeartbeatTime: now,
 		Reason:            "SwitchReachable",
+		Message:           "The BMv2 switch is reachable",
 	}
 }
 
-func (r *RealManager) GetReadyCondition() corev1alpha1.P4TargetCondition {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	now := metav1.NewTime(time.Now())
-	resp, err := r.p4client.GetForwardingPipelineConfig(ctx, &p4v1.GetForwardingPipelineConfigRequest{
-		ResponseType: p4v1.GetForwardingPipelineConfigRequest_P4INFO_AND_COOKIE,
-	})
-	if err != nil {
+func (r *RealManager) GetReadyCondition(healthyCond corev1alpha1.P4TargetCondition,
+	netconfCond corev1alpha1.P4TargetCondition) corev1alpha1.P4TargetCondition {
+	if healthyCond.Status == metav1.ConditionTrue && netconfCond.Status == metav1.ConditionTrue {
 		return corev1alpha1.P4TargetCondition{
 			Type:              corev1alpha1.P4TargetConditionReady,
-			Status:            metav1.ConditionFalse,
-			LastHeartbeatTime: now,
-			Reason:            "SwitchUnreachable",
-			Message:           err.Error(),
-		}
-	}
-	if resp.Config == nil || resp.Config.P4Info == nil || len(resp.Config.P4Info.Tables) == 0 {
-		return corev1alpha1.P4TargetCondition{
-			Type:              corev1alpha1.P4TargetConditionReady,
-			Status:            metav1.ConditionFalse,
-			LastHeartbeatTime: now,
-			Reason:            "NoProgramLoaded",
+			Status:            metav1.ConditionTrue,
+			LastHeartbeatTime: metav1.NewTime(time.Now()),
+			Reason:            "TargetReady",
+			Message:           "The target is ready.",
 		}
 	}
 	return corev1alpha1.P4TargetCondition{
 		Type:              corev1alpha1.P4TargetConditionReady,
-		Status:            metav1.ConditionTrue,
-		LastHeartbeatTime: now,
-		Reason:            "ProgramLoaded",
+		Status:            metav1.ConditionFalse,
+		LastHeartbeatTime: metav1.NewTime(time.Now()),
+		Reason:            "TargetNotReady",
+		Message:           "The target is not ready.",
 	}
 }
 
@@ -270,6 +259,7 @@ func (r *RealManager) GetNetworkConfiguredCondition() corev1alpha1.P4TargetCondi
 			Status:            metav1.ConditionFalse,
 			LastHeartbeatTime: now,
 			Reason:            "NoCIDR",
+			Message:           "No CIDR was assigned to the P4Target yet.",
 		}
 	}
 	return corev1alpha1.P4TargetCondition{

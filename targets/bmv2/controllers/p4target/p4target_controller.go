@@ -135,11 +135,16 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 		targetStatus.DriverIPs = []string{driverIP.String()}
 	}
 
+	occupiedCondition := r.P4TargetManager.GetOccupiedCondition()
+	healthyCondition := r.P4TargetManager.GetHealthyCondition()
+	netconfCondition := r.P4TargetManager.GetNetworkConfiguredCondition()
+	readyCondition := r.P4TargetManager.GetReadyCondition(healthyCondition, netconfCondition)
+
 	targetStatus.Conditions = []corev1alpha1.P4TargetCondition{}
-	targetStatus.Conditions = append(targetStatus.Conditions, r.P4TargetManager.GetReadyCondition())
-	targetStatus.Conditions = append(targetStatus.Conditions, r.P4TargetManager.GetHealthyCondition())
-	targetStatus.Conditions = append(targetStatus.Conditions, r.P4TargetManager.GetNetworkConfiguredCondition())
-	targetStatus.Conditions = append(targetStatus.Conditions, r.P4TargetManager.GetOccupiedCondition())
+	targetStatus.Conditions = append(targetStatus.Conditions, readyCondition)
+	targetStatus.Conditions = append(targetStatus.Conditions, healthyCondition)
+	targetStatus.Conditions = append(targetStatus.Conditions, netconfCondition)
+	targetStatus.Conditions = append(targetStatus.Conditions, occupiedCondition)
 	return targetStatus
 }
 

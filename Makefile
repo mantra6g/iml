@@ -4,7 +4,7 @@ IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
 IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
 
-IMG_TARGET_BMV2 ?= bmv2:local
+IMG_TARGET_BMV2 ?= mantra6g/bmv2-driver:local
 TARGET_IMAGES = $(IMG_TARGET_BMV2)
 
 IMG_EXAMPLE_LOADBALANCER ?= loadbalancer:local
@@ -133,7 +133,7 @@ kind-load-all: ## Load all images into the local cluster.
 	$(KIND) load docker-image ${ALL_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: kind-load-iml
-kind-load-all: ## Load all images into the local cluster.
+kind-load-iml: ## Load all images into the local cluster.
 	$(KIND) load docker-image ${IML_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
