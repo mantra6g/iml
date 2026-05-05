@@ -90,18 +90,20 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	// Once assigned, make sure the control-plane deployment
-	// associated with this nf exists.
-	operation, err := r.ensureControlPlaneDeployment(ctx, nf)
-	if err != nil {
-		logger.Error(err, "failed to ensure control plane deployment")
-		_ = r.updateStatus(ctx, nf)
-		return ctrl.Result{}, err
-	}
-	if operation != controllerutil.OperationResultNone {
-		logger.Info("Control plane deployment updated")
-		_ = r.updateStatus(ctx, nf)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	if nf.Spec.ControlPlane != nil {
+		// Once assigned, make sure the control-plane deployment
+		// associated with this nf exists.
+		operation, err := r.ensureControlPlaneDeployment(ctx, nf)
+		if err != nil {
+			logger.Error(err, "failed to ensure control plane deployment")
+			_ = r.updateStatus(ctx, nf)
+			return ctrl.Result{}, err
+		}
+		if operation != controllerutil.OperationResultNone {
+			logger.Info("Control plane deployment updated")
+			_ = r.updateStatus(ctx, nf)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 	}
 
 	// Target is scheduled and control plane deployment is up to date,

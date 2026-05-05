@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"github.com/vishvananda/netlink"
@@ -35,6 +36,7 @@ type ManagerConfig struct {
 	MaxNFSlots int
 	P4Client   p4v1.P4RuntimeClient
 	BridgeName string
+	Log        logr.Logger
 }
 
 type Manager interface {
@@ -69,6 +71,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		p4client:     cfg.P4Client,
 		bridgeName:   cfg.BridgeName,
 		allocatedIPs: make(map[netip.Addr]struct{}),
+		log:          cfg.Log,
 	}, nil
 }
 
@@ -82,6 +85,7 @@ type RealManager struct {
 	maxNFSlots int
 	p4client   p4v1.P4RuntimeClient
 	bridgeName string
+	log        logr.Logger
 
 	mu           sync.RWMutex
 	cidr         netip.Prefix

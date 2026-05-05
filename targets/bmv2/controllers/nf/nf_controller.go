@@ -27,6 +27,7 @@ import (
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -138,13 +139,32 @@ func calculateStatus(netFunc *corev1alpha1.NetworkFunction,
 	depStatus nf.DeploymentStatus, funcIP net.IP) corev1alpha1.NetworkFunctionStatus {
 	// Calculate Phase
 	var calculatedPhase corev1alpha1.NetworkFunctionPhase
+	var readyCondition corev1alpha1.NetworkFunctionCondition
 	switch depStatus.Phase {
 	case nf.PhaseReady:
 		calculatedPhase = corev1alpha1.NetworkFunctionRunning
+		readyCondition = corev1alpha1.NetworkFunctionCondition{
+			Type:    corev1alpha1.NetworkFunctionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "NetworkFunctionReady",
+			Message: "The NetworkFunction is ready",
+		}
 	case nf.PhaseFailed:
 		calculatedPhase = corev1alpha1.NetworkFunctionFailed
+		readyCondition = corev1alpha1.NetworkFunctionCondition{
+			Type:    corev1alpha1.NetworkFunctionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "NetworkFunctionNotReady",
+			Message: "The NetworkFunction is not ready",
+		}
 	default:
 		calculatedPhase = corev1alpha1.NetworkFunctionPending
+		readyCondition = corev1alpha1.NetworkFunctionCondition{
+			Type:    corev1alpha1.NetworkFunctionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "NetworkFunctionNotReady",
+			Message: "The NetworkFunction is not ready",
+		}
 	}
 
 	status := corev1alpha1.NetworkFunctionStatus{
@@ -153,9 +173,9 @@ func calculateStatus(netFunc *corev1alpha1.NetworkFunction,
 		Phase:              calculatedPhase,
 	}
 	// Copy conditions from old status
-	for i := range netFunc.Status.Conditions {
-		status.Conditions = append(status.Conditions, netFunc.Status.Conditions[i])
-	}
+	status.Conditions = CopyConditions(&netFunc.Status)
+	// Update or add the ready condition
+	status.Conditions = UpdateNFCondition(&status, readyCondition)
 	return status
 }
 

@@ -181,6 +181,7 @@ func main() {
 		TargetIPs:  targetIPs,
 		DriverIP:   net.ParseIP(driverIP),
 		BridgeName: "br0",
+		Log:        ctrl.Log.WithName("p4target-manager"),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create p4target manager")
@@ -194,6 +195,7 @@ func main() {
 		Switch:          switchClient,
 		P4TargetManager: p4targetMgr,
 		NFInterface:     nfIface,
+		Log:             ctrl.Log.WithName("nf-manager"),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create nf manager")
@@ -202,6 +204,7 @@ func main() {
 
 	nfcfgMgr, err := nfcfgmgr.NewManager(nfcfgmgr.ManagerConfig{
 		Switch: switchClient,
+		Log:    ctrl.Log.WithName("nfcfg-manager"),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create nfcfg manager")

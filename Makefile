@@ -4,7 +4,7 @@ IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
 IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
 
-IMG_TARGET_BMV2 ?= mantra6g/bmv2-driver:local
+IMG_TARGET_BMV2 ?= mantra6g/bmv2-driver:latest
 TARGET_IMAGES = $(IMG_TARGET_BMV2)
 
 IMG_EXAMPLE_LOADBALANCER ?= loadbalancer:local
@@ -129,12 +129,15 @@ kind-delete: ## Delete the local kind cluster.
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: kind-load-all
-kind-load-all: ## Load all images into the local cluster.
-	$(KIND) load docker-image ${ALL_IMAGES} --name $(KIND_CLUSTER)
+kind-load-all: kind-load-iml kind-load-targets ## Load all images into the local cluster.
 
 .PHONY: kind-load-iml
 kind-load-iml: ## Load all images into the local cluster.
 	$(KIND) load docker-image ${IML_IMAGES} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-targets
+kind-load-targets: ## Load all target images into the local cluster.
+	$(KIND) load docker-image ${TARGET_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
 build-installer: ## Generate a consolidated YAML with CRDs and deployment.

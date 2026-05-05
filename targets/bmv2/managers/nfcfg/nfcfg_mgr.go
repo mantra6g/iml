@@ -9,6 +9,7 @@ import (
 	"bmv2-driver/api"
 	p4switch "bmv2-driver/pkg/p4switch"
 
+	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,6 +17,7 @@ import (
 
 type ManagerConfig struct {
 	Switch *p4switch.SwitchClient
+	Log    logr.Logger
 }
 
 type Manager interface {
@@ -32,6 +34,7 @@ type appliedState struct {
 
 type RealManager struct {
 	switchClient *p4switch.SwitchClient
+	log          logr.Logger
 
 	mu          sync.RWMutex
 	configToNFs map[client.ObjectKey]map[client.ObjectKey]struct{} // configKey -> set of nfKeys
@@ -48,6 +51,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		switchClient: cfg.Switch,
 		configToNFs:  make(map[client.ObjectKey]map[client.ObjectKey]struct{}),
 		nfApplied:    make(map[client.ObjectKey]*appliedState),
+		log:          cfg.Log,
 	}, nil
 }
 

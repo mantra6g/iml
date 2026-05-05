@@ -15,6 +15,7 @@ import (
 	"bmv2-driver/pkg/p4compile"
 	p4switch "bmv2-driver/pkg/p4switch"
 
+	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -25,6 +26,7 @@ type ManagerConfig struct {
 	Switch          *p4switch.SwitchClient
 	P4TargetManager p4targetpkg.Manager
 	NFInterface     string
+	Log             logr.Logger
 }
 
 type Manager interface {
@@ -49,6 +51,7 @@ type RealManager struct {
 	switchClient    *p4switch.SwitchClient
 	p4targetManager p4targetpkg.Manager
 	nfInterface     string
+	log             logr.Logger
 
 	mu       sync.Mutex
 	programs map[client.ObjectKey]*api.P4Program
@@ -71,6 +74,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		nfInterface:     cfg.NFInterface,
 		programs:        make(map[client.ObjectKey]*api.P4Program),
 		ops:             make(map[client.ObjectKey]*trackedOp),
+		log:             cfg.Log,
 	}, nil
 }
 
@@ -148,35 +152,45 @@ func (m *RealManager) GetDeployedNetworkFunctions(ctx context.Context) ([]client
 }
 
 func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction, nfIP net.IP) {
+	logger := m.log
 	defer func() {
 		if r := recover(); r != nil {
 			h.transition(PhaseFailed, "panic occurred", fmt.Errorf("%v", r))
 		}
 	}()
 
+	logger.V(1).Info("Compiling network function")
 	h.transition(PhaseCompiling, "compiling network function", nil)
 	if err := m.compile(ctx, nf); err != nil {
+		logger.V(1).Error(err, "failed to compile network function")
 		h.transition(PhaseFailed, "compilation failed", err)
 		return
 	}
 
+	logger.V(1).Info("Running pre-deployment checks")
 	h.transition(PhasePreCheck, "running pre-deployment checks", nil)
 	if err := m.preCheck(ctx, nf); err != nil {
+		logger.V(1).Error(err, "pre-check failed")
 		h.transition(PhaseFailed, "pre-check failed", err)
 		return
 	}
 
+	logger.V(1).Info("Deploying network function")
 	h.transition(PhaseDeploying, "deploying network function", nil)
 	if err := m.deploy(ctx, nf); err != nil {
+		logger.V(1).Error(err, "Network function deploy failed")
 		h.transition(PhaseFailed, "deployment failed", err)
 		return
 	}
 
+	logger.V(1).Info("Setting up networking for NF")
 	h.transition(PhaseNetworkSetup, "setting up network forwarding", nil)
 	if err := m.setupNetworkForwarding(nfIP); err != nil {
+		logger.V(1).Error(err, "failed to setup network forwarding")
 		h.transition(PhaseFailed, "network setup failed", err)
 		return
 	}
+	logger.V(1).Info("Network function setup successfully")
 
 	h.transition(PhaseReady, "network function ready", nil)
 }
@@ -256,24 +270,30 @@ func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFuncti
 }
 
 func (m *RealManager) runDeletion(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction) {
+	logger := m.log
 	defer func() {
 		if r := recover(); r != nil {
 			h.transition(PhaseFailed, "panic occurred", fmt.Errorf("%v", r))
 		}
 	}()
 
+	logger.V(1).Info("Draining network function")
 	h.transition(PhaseDraining, "draining traffic", nil)
 	if err := m.drain(ctx, nf); err != nil {
+		logger.V(1).Error(err, "failed to drain network function")
 		h.transition(PhaseFailed, "drain failed", err)
 		return
 	}
 
+	logger.V(1).Info("Deleting network function")
 	h.transition(PhaseDeleting, "removing resources", nil)
 	if err := m.deleteResources(ctx, nf); err != nil {
+		logger.V(1).Error(err, "failed to delete resources")
 		h.transition(PhaseFailed, "deletion failed", err)
 		return
 	}
 
+	logger.V(1).Info("Network function deleted successfully")
 	h.transition(PhaseDeleted, "successfully deleted", nil)
 }
 
