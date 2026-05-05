@@ -54,7 +54,7 @@ func (d *Driver) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	reg.MustRegister(packetGauge, byteGauge)
 
 	for _, e := range entries {
-		if e.Data == nil || (e.Data.PacketCount == 0 && e.Data.ByteCount == 0) {
+		if e.Data == nil {
 			continue
 		}
 		idx := int64(0)
