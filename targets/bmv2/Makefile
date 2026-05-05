@@ -134,6 +134,22 @@ port-forward: ## Port-forward the bmv2-driver HTTP API to localhost:8080 (backgr
 port-forward-stop: ## Stop the background port-forward.
 	pkill -f "kubectl port-forward pod/bmv2-test" || true
 
+.PHONY: monitoring-up
+monitoring-up: ## Deploy Prometheus + Grafana monitoring stack.
+	$(KUBECTL) apply -f monitoring.yaml
+
+.PHONY: monitoring-down
+monitoring-down: ## Remove the monitoring stack.
+	$(KUBECTL) delete -f monitoring.yaml --ignore-not-found
+
+.PHONY: port-forward-prometheus
+port-forward-prometheus: ## Port-forward Prometheus UI to localhost:9090 (background).
+	$(KUBECTL) port-forward svc/prometheus 9090:9090 &
+
+.PHONY: port-forward-grafana
+port-forward-grafana: ## Port-forward Grafana UI to localhost:3000 (background).
+	$(KUBECTL) port-forward svc/grafana 3000:3000 &
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the driver.
 	$(CONTAINER_TOOL) push ${IMG}
