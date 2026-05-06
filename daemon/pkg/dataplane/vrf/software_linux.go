@@ -13,10 +13,9 @@ import (
 	"iml-daemon/pkg/tunnel"
 	netutils "iml-daemon/pkg/utils/net"
 
+	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
-
-	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,6 +75,7 @@ type Subnet interface {
 	GetGateway() netutils.DualStackAddress
 	GetStack() StackType
 	GetVRFName() string
+	SetTunnel(string)
 }
 
 type P4TargetInstance struct {
@@ -294,14 +294,17 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 	if err != nil {
 		return nil, fmt.Errorf("failed to create subnet to application subnet: %w", err)
 	}
-	err = d.routingSubnet.AddRouteToSubnet(subnet)
+	logger.V(1).Info("Created tunnels between routing subnet and application subnet",
+		"routingSubnetTunData", routingSubnetTunData, "newSubnetTunData", newSubnetTunData)
+
+	err = d.routingSubnet.AddRoute(subnet.Networks, newSubnetTunData.Addrs, routingSubnetTunData.InterfaceName)
 	if err != nil {
 		err = fmt.Errorf("failed to install routes towards app subnet in routing subnet: %w", err)
 		return
 	}
-	err = subnet.AddDefaultRouteViaSubnet(d.routingSubnet)
+	err = subnet.AddDefaultRoute(routingSubnetTunData.Addrs, newSubnetTunData.InterfaceName)
 	if err != nil {
-		err = fmt.Errorf("failed to install default routes towards app subnet in routing subnet: %w", err)
+		err = fmt.Errorf("failed to install default routes towards routing subnet in app subnet: %w", err)
 	}
 	existingSubnets, ok := d.appSubnets[appID]
 	if !ok {
@@ -331,15 +334,124 @@ func (d *Software) createSubnetToSubnetTunnels(sub1, sub2 Subnet) (sub1TunData, 
 	if err != nil {
 		return
 	}
-	var tun1IPv4, tun2IPv4 net.IP
+	var tun1IPv4, tun2IPv4 *net.IPNet
 	if d.tunNet4Allocator != nil {
-		tunIPv4Allocator, allocErr := d.tunNet4Allocator.Allocate()
+		var allocErr error
+		tunIPv4Net, allocErr := d.tunNet4Allocator.Allocate()
 		if allocErr != nil {
 			err = allocErr
 			return
 		}
-
+		tunIPv4Allocator, allocErr := dataplane.NewIPv4Allocator(tunIPv4Net)
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+		tun1IPv4, allocErr = tunIPv4Allocator.Allocate()
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+		tun2IPv4, allocErr = tunIPv4Allocator.Allocate()
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
 	}
+	tunIPv6Net, err := d.tunNet6Allocator.Allocate()
+	if err != nil {
+		return
+	}
+	tunIPv6Allocator, err := dataplane.NewIPv6Allocator(tunIPv6Net)
+	if err != nil {
+		return
+	}
+	tun1IPv6, err := tunIPv6Allocator.Allocate()
+	if err != nil {
+		return
+	}
+	tun2IPv6, err := tunIPv6Allocator.Allocate()
+	if err != nil {
+		return
+	}
+	vrf1, err := netlink.LinkByName(sub1.GetVRFName())
+	if err != nil {
+		return
+	}
+	vrf2, err := netlink.LinkByName(sub2.GetVRFName())
+	if err != nil {
+		return
+	}
+	tun1 := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: tunName1,
+		},
+		PeerName: tunName2,
+	}
+	err = netlink.LinkAdd(tun1)
+	if err != nil {
+		return
+	}
+	sub1.SetTunnel(tunName1)
+	sub2.SetTunnel(tunName2)
+	tun2, err := netlink.LinkByName(tunName2)
+	if err != nil {
+		return
+	}
+	err = netlink.LinkSetMaster(tun1, vrf1)
+	if err != nil {
+		return
+	}
+	err = netlink.LinkSetMaster(tun2, vrf2)
+	if err != nil {
+		return
+	}
+	err = netlink.AddrAdd(tun1, &netlink.Addr{IPNet: tun1IPv6})
+	if err != nil {
+		return
+	}
+	err = netlink.AddrAdd(tun2, &netlink.Addr{IPNet: tun2IPv6})
+	if err != nil {
+		return
+	}
+	if tun1IPv4 != nil && tun2IPv4 != nil {
+		err = netlink.AddrAdd(tun1, &netlink.Addr{IPNet: tun1IPv4})
+		if err != nil {
+			return
+		}
+		err = netlink.AddrAdd(tun2, &netlink.Addr{IPNet: tun2IPv4})
+		if err != nil {
+			return
+		}
+	}
+	err = netlink.LinkSetUp(tun1)
+	if err != nil {
+		return
+	}
+	err = netlink.LinkSetUp(tun2)
+	if err != nil {
+		return
+	}
+	var tun1Ip4, tun2Ip4 net.IP
+	if tun1IPv4 != nil && tun2IPv4 != nil {
+		tun1Ip4 = tun1IPv4.IP
+		tun2Ip4 = tun2IPv4.IP
+	}
+	sub1TunData = &subnetTunData{
+		InterfaceName: tunName1,
+		Addrs: netutils.DualStackAddress{
+			IPv4: tun1Ip4,
+			IPv6: tun1IPv6.IP,
+		},
+	}
+	sub2TunData = &subnetTunData{
+		InterfaceName: tunName2,
+		Addrs: netutils.DualStackAddress{
+			IPv4: tun2Ip4,
+			IPv6: tun2IPv6.IP,
+		},
+	}
+	return
 }
 
 func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net.IPNet, appNet6 *net.IPNet) error {

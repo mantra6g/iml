@@ -20,8 +20,11 @@ type AppSubnet struct {
 	Vrf           *netlink.Vrf
 	IPv6Allocator *dataplane.IPv6Allocator
 	IPv4Allocator *dataplane.IPv4Allocator
+	Tunnel        string
 	Log           logr.Logger
 }
+
+var _ Subnet = &AppSubnet{}
 
 func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet *AppSubnet, err error) {
 	if ip6Net == nil && ip4Net == nil {
@@ -130,16 +133,22 @@ func (s *AppSubnet) Teardown() {
 			logger.Error(err, "failed to delete bridge", "name", s.Bridge.Attrs().Name)
 		}
 	}
-	//if s.Tunnel != nil {
-	//	if err := netlink.LinkDel(s.Tunnel); err != nil {
-	//		logger.Error(err, "failed to delete tunnel", "name", s.Tunnel.Attrs().Name)
-	//	}
-	//}
+	if s.Tunnel != "" {
+		if tunnel, err := netlink.LinkByName(s.Tunnel); err == nil {
+			if err := netlink.LinkDel(tunnel); err != nil {
+				logger.Error(err, "failed to delete tunnel", "name", s.Tunnel)
+			}
+		}
+	}
 	if s.Vrf != nil {
 		if err := netlink.LinkDel(s.Vrf); err != nil {
 			logger.Error(err, "failed to delete VRF", "name", s.Vrf.Attrs().Name)
 		}
 	}
+}
+
+func (s *AppSubnet) SetTunnel(tunnel string) {
+	s.Tunnel = tunnel
 }
 
 // HasIPsAvailable returns true if there are both IPv4 and IPv6 addresses available for allocation in
@@ -333,6 +342,13 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, d
 	if dst.IsEmpty() {
 		return fmt.Errorf("destination's IPv4Net and IPv6Net are both nil")
 	}
+	if s.Tunnel == "" {
+		return fmt.Errorf("Cannot add an SRv6 route, as the tunnel is not set")
+	}
+	tun, err := netlink.LinkByName(s.Tunnel)
+	if err != nil {
+		return fmt.Errorf("failed to get tunnel %s: %w", s.Tunnel, err)
+	}
 	if dst.IPv4Net != nil {
 		// ip route add <dstNet4> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
 		ipv4Sids := reversed(append(sids, decapSIDv4.IP))
@@ -343,7 +359,7 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, d
 				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
 				Segments: ipv4Sids,
 			},
-			LinkIndex: s.Bridge.Attrs().Index,
+			LinkIndex: tun.Attrs().Index,
 		}
 		if err := netlink.RouteAdd(route); err != nil {
 			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv4Net.String(), sids, err)
@@ -359,7 +375,7 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, d
 				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
 				Segments: ipv6Sids,
 			},
-			LinkIndex: s.Bridge.Attrs().Index,
+			LinkIndex: tun.Attrs().Index,
 		}
 		if err := netlink.RouteAdd(route); err != nil {
 			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv6Net.String(), sids, err)

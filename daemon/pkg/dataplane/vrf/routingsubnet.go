@@ -28,6 +28,8 @@ type RoutingSubnet struct {
 	Log           logr.Logger
 }
 
+var _ Subnet = &RoutingSubnet{}
+
 func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (subnet *RoutingSubnet, err error) {
 	if network == nil {
 		return nil, fmt.Errorf("invalid network")
@@ -437,3 +439,5 @@ func (r *RoutingSubnet) GetStack() StackType {
 func (r *RoutingSubnet) GetVRFName() string {
 	return r.Vrf.Name
 }
+
+func (r *RoutingSubnet) SetTunnel(_ string) {}
