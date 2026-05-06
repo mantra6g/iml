@@ -21,6 +21,7 @@ import (
 	"bmv2-driver/controllers/p4target/utils"
 	"bmv2-driver/managers/p4target"
 	"context"
+	"net/netip"
 	"os"
 	"time"
 
@@ -128,9 +129,23 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 	targetStatus.Capacity = r.P4TargetManager.GetCapacity()
 	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
 
+	targetIPs := make([]string, 0)
 	for _, ip := range r.P4TargetManager.GetTargetIPs() {
-		targetStatus.TargetIPs = append(targetStatus.TargetIPs, ip.String())
+		parsedIP, ok := netip.AddrFromSlice(ip)
+		if !ok {
+			continue
+		}
+		if parsedIP.IsInterfaceLocalMulticast() ||
+			parsedIP.IsLinkLocalUnicast() ||
+			parsedIP.IsLinkLocalMulticast() ||
+			parsedIP.IsLoopback() ||
+			parsedIP.IsMulticast() ||
+			parsedIP.IsUnspecified() {
+			continue
+		}
+		targetIPs = append(targetIPs, parsedIP.String())
 	}
+	targetStatus.TargetIPs = targetIPs
 	if driverIP := r.P4TargetManager.GetDriverIP(); driverIP != nil {
 		targetStatus.DriverIPs = []string{driverIP.String()}
 	}

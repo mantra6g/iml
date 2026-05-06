@@ -47,7 +47,7 @@ spec:
   restartPolicy: OnFailure
   containers:
   - name: bmv2-driver
-    image: mantra6g/bmv2-driver:local
+    image: mantra6g/bmv2-driver:latest
     imagePullPolicy: Never
     securityContext:
       capabilities:
