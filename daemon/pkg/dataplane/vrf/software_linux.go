@@ -53,6 +53,8 @@ type Software struct {
 
 	appNet6Allocator *dataplane.Subnet6Allocator
 	appNet4Allocator *dataplane.Subnet4Allocator
+	tunNet6Allocator *dataplane.Subnet6Allocator
+	tunNet4Allocator *dataplane.Subnet4Allocator
 	tableAllocator   *dataplane.TableAllocator
 
 	cfg    *env.GlobalConfig
@@ -105,6 +107,17 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 			return nil, fmt.Errorf("failed to create application subnet allocator: %w", err)
 		}
 	}
+	tunnel6Allocator, err := dataplane.NewSubnet6Allocator(cfg.TunnelCIDR.IPv6Net, 126)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
+	}
+	var tunnel4Allocator *dataplane.Subnet4Allocator
+	if cfg.TunnelCIDR.IPv4Net != nil {
+		tunnel4Allocator, err = dataplane.NewSubnet4Allocator(cfg.TunnelCIDR.IPv4Net, 30)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
+		}
+	}
 	routingBaseNet, err := net6Allocator.Allocate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet's IP allocator: %w", err)
@@ -146,6 +159,8 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	return &Software{
 		appNet4Allocator:   net4Allocator,
 		appNet6Allocator:   net6Allocator,
+		tunNet4Allocator:   tunnel4Allocator,
+		tunNet6Allocator:   tunnel6Allocator,
 		tableAllocator:     tableAllocator,
 		routingSubnet:      rtrSubnet,
 		appSubnets:         make(map[client.ObjectKey][]AppSubnet),
@@ -275,6 +290,10 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		}
 	}()
 
+	routingSubnetTunData, newSubnetTunData, err := d.createSubnetToSubnetTunnels(d.routingSubnet, subnet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subnet to application subnet: %w", err)
+	}
 	err = d.routingSubnet.AddRouteToSubnet(subnet)
 	if err != nil {
 		err = fmt.Errorf("failed to install routes towards app subnet in routing subnet: %w", err)
@@ -296,6 +315,31 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		return
 	}
 	return subnet, nil
+}
+
+type subnetTunData struct {
+	InterfaceName string
+	Addrs         netutils.DualStackAddress
+}
+
+func (d *Software) createSubnetToSubnetTunnels(sub1, sub2 Subnet) (sub1TunData, sub2TunData *subnetTunData, err error) {
+	tunName1, err := vrfutil.GenerateRandomName("imltun", 4)
+	if err != nil {
+		return
+	}
+	tunName2, err := vrfutil.GenerateRandomName("imltun", 4)
+	if err != nil {
+		return
+	}
+	var tun1IPv4, tun2IPv4 net.IP
+	if d.tunNet4Allocator != nil {
+		tunIPv4Allocator, allocErr := d.tunNet4Allocator.Allocate()
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+
+	}
 }
 
 func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net.IPNet, appNet6 *net.IPNet) error {
