@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"net"
+	"net/netip"
 	"slices"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
@@ -68,4 +70,24 @@ func ConditionChanged(original, target corev1alpha1.P4TargetCondition) bool {
 	return original.Status != target.Status ||
 		original.Reason != target.Reason ||
 		original.Message != target.Message
+}
+
+func FilterIPs(ips []net.IP) []string {
+	filtered := make([]string, 0)
+	for _, ip := range ips {
+		parsedIP, ok := netip.AddrFromSlice(ip)
+		if !ok {
+			continue
+		}
+		if parsedIP.IsInterfaceLocalMulticast() ||
+			parsedIP.IsLinkLocalUnicast() ||
+			parsedIP.IsLinkLocalMulticast() ||
+			parsedIP.IsLoopback() ||
+			parsedIP.IsMulticast() ||
+			parsedIP.IsUnspecified() {
+			continue
+		}
+		filtered = append(filtered, ip.String())
+	}
+	return filtered
 }
