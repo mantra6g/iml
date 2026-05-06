@@ -129,9 +129,7 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
 
 	targetStatus.TargetIPs = utils.FilterIPs(r.P4TargetManager.GetTargetIPs())
-	if driverIP := r.P4TargetManager.GetDriverIP(); driverIP != nil {
-		targetStatus.DriverIPs = []string{driverIP.String()}
-	}
+	targetStatus.DriverIPs = utils.FilterIPs(r.P4TargetManager.GetDriverIPs())
 
 	occupiedCondition := r.P4TargetManager.GetOccupiedCondition()
 	healthyCondition := r.P4TargetManager.GetHealthyCondition()

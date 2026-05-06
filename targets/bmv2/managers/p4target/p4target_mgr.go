@@ -32,7 +32,7 @@ type NetConfig struct {
 type ManagerConfig struct {
 	Name       string
 	TargetIPs  []net.IP
-	DriverIP   net.IP
+	DriverIPs  []net.IP
 	MaxNFSlots int
 	P4Client   p4v1.P4RuntimeClient
 	BridgeName string
@@ -48,7 +48,7 @@ type Manager interface {
 	GetNetworkConfiguredCondition() corev1alpha1.P4TargetCondition
 	GetOccupiedCondition() corev1alpha1.P4TargetCondition
 	GetTargetIPs() []net.IP
-	GetDriverIP() net.IP
+	GetDriverIPs() []net.IP
 	EnsureNetworkConfiguration(NetConfig) error
 	AllocateNetworkFunctionIP() (net.IP, error)
 }
@@ -66,7 +66,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	return &RealManager{
 		name:         cfg.Name,
 		targetIPs:    cfg.TargetIPs,
-		driverIP:     cfg.DriverIP,
+		driverIPs:    cfg.DriverIPs,
 		maxNFSlots:   cfg.MaxNFSlots,
 		p4client:     cfg.P4Client,
 		bridgeName:   cfg.BridgeName,
@@ -81,7 +81,7 @@ var _ Manager = &RealManager{}
 type RealManager struct {
 	name       string
 	targetIPs  []net.IP
-	driverIP   net.IP
+	driverIPs  []net.IP
 	maxNFSlots int
 	p4client   p4v1.P4RuntimeClient
 	bridgeName string
@@ -97,7 +97,7 @@ func (r *RealManager) GetName() string { return r.name }
 
 func (r *RealManager) GetTargetIPs() []net.IP { return r.targetIPs }
 
-func (r *RealManager) GetDriverIP() net.IP { return r.driverIP }
+func (r *RealManager) GetDriverIPs() []net.IP { return r.driverIPs }
 
 func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	cidr, err := netip.ParsePrefix(cfg.TargetCIDR)

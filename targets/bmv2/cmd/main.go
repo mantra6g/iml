@@ -60,7 +60,7 @@ func init() {
 func main() {
 	var leaseRenewIntervalSeconds, leaseDurationSeconds, statusUpdateIntervalSeconds uint
 	var maxNFSlots int
-	var p4targetName, switchAddr, driverIP, dataIface, nfIface string
+	var p4targetName, switchAddr, driverIP, dataIface, controlIface, nfIface string
 
 	flag.UintVar(&leaseRenewIntervalSeconds, "lease-renew-interval-seconds",
 		DefaultLeaseRenewIntervalSeconds, "Interval at which to renew the Lease for this P4Target")
@@ -78,6 +78,8 @@ func main() {
 		DefaultMaxNFSlots, "Maximum number of network functions this target can host")
 	flag.StringVar(&dataIface, "data-iface",
 		"iml0", "Network interface to discover target IPs from")
+	flag.StringVar(&controlIface, "control-iface",
+		"eth0", "Network interface to discover driver IPs from")
 	flag.StringVar(&nfIface, "nf-iface",
 		"nf0", "Network interface connected to the NF data plane (used for traffic forwarding setup)")
 
@@ -93,6 +95,12 @@ func main() {
 		os.Exit(1)
 	}
 	setupLog.Info(fmt.Sprintf("Discovered target IPs on %s: %v", dataIface, targetIPs))
+	driverIPs, err := discoverIPs(controlIface)
+	if err != nil {
+		setupLog.Error(err, "failed to discover driver IPs", "iface", controlIface)
+		os.Exit(1)
+	}
+	setupLog.Info(fmt.Sprintf("Discovered driver IPs on %s: %v", controlIface, driverIPs))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:  scheme,
@@ -179,7 +187,7 @@ func main() {
 		P4Client:   c,
 		MaxNFSlots: maxNFSlots,
 		TargetIPs:  targetIPs,
-		DriverIP:   net.ParseIP(driverIP),
+		DriverIPs:  driverIPs,
 		BridgeName: "br0",
 		Log:        ctrl.Log.WithName("p4target-manager"),
 	})
