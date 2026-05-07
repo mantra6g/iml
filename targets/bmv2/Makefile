@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= mantra6g/bmv2-driver:local
+IMG ?= mantra6g/bmv2-driver:latest
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -180,7 +180,7 @@ p4-compile: ## Compile P4 programs for BMv2.
 		if [ -f "$$p4_file" ]; then \
 			echo "Compiling $$p4_file..."; \
 			cd $(P4_PROGRAMS_DIR) && bash compile.sh $$(basename $$p4_file) || exit 1; \
-			cd ...; \
+			cd ..; \
 		fi \
 	done
 
@@ -270,6 +270,21 @@ api-verify-program: ## Verify P4 program without deploying (dry-run).
 	@curl -s -X POST http://$(API_HOST)/api/p4/verify \
 		-H "Content-Type: application/json" \
 		-d '{"program": "https://raw.githubusercontent.com/mantra6g/iml/main/examples/simple/logger.p4", "dry_run": true}' | jq . || echo "Error: Could not reach verify endpoint"
+
+.PHONY: api-deploy-simple
+api-deploy-simple: ## Deploy a simple P4 program to the switch.
+	@echo "Testing /api/p4/program endpoint..."
+	@curl -s -X POST http://$(API_HOST)/api/p4/program \
+    -H "Content-Type: application/json" \
+    -d "{\"p4_file_url\": \"https://raw.githubusercontent.com/mantra6g/iml/refs/heads/bmv2target/examples/simple/logger.p4\", \"dry_run\": false}" | jq . || echo "Error: Could not reach deploy endpoint"
+
+.PHONY: api-deploy-telemetry
+api-deploy-telemetry: ## Deploy a telemetry P4 program to the switch.
+	@echo "Testing /api/p4/program endpoint..."
+	@curl -s -X POST http://$(API_HOST)/api/p4/program \
+    -H "Content-Type: application/json" \
+    -d "{\"p4_file_url\": \"https://raw.githubusercontent.com/mantra6g/iml/refs/heads/bmv2target/examples/telemetry/counter.p4\", \"dry_run\": false}" | jq . || echo "Error: Could not reach deploy endpoint"
+
 
 .PHONY: api-all-tests
 api-all-tests: api-health api-tables api-counters api-get-program ## Run all API endpoint tests.
