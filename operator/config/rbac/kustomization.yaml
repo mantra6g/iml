@@ -54,3 +54,8 @@ resources:
 - infra_loomnode_admin_role.yaml
 - infra_loomnode_editor_role.yaml
 - infra_loomnode_viewer_role.yaml
+
+# ClusterRole, ClusterRoleBinding and ServiceAccount for the BMV2 driver.
+- bmv2_driver_cluster_role.yaml
+- bmv2_driver_cluster_role_binding.yaml
+- bmv2_driver_service_account.yaml

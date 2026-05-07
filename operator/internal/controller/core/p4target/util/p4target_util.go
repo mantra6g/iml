@@ -102,8 +102,9 @@ func RemoveTaints(taints []corev1alpha1.Taint, taintKeys ...string) (newTaints [
 				break
 			}
 		}
-		if !toRemove {
+		if toRemove {
 			updated = true
+		} else {
 			newTaints = append(newTaints, taints[i])
 		}
 	}

@@ -15,7 +15,7 @@ spec:
     - targets
     - target
     singular: p4target
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status

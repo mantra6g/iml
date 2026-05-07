@@ -4,13 +4,13 @@ IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
 IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
 
-IMG_TARGET_BMV2 ?= bmv2:local
+IMG_TARGET_BMV2 ?= mantra6g/bmv2-driver:latest
 TARGET_IMAGES = $(IMG_TARGET_BMV2)
 
 IMG_EXAMPLE_LOADBALANCER ?= loadbalancer:local
 EXAMPLE_IMAGES = $(IMG_EXAMPLE_LOADBALANCER)
 
-ALL_IMAGES = $(IML_IMAGES) $(TARGET_IMAGES) $(EXAMPLE_IMAGES)
+ALL_IMAGES = $(IML_IMAGES) $(TARGET_IMAGES)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -81,12 +81,11 @@ docker-build-operator: ## Build docker image for the operator.
 	$(CONTAINER_TOOL) build -t ${IMG_OPERATOR} --target operator .
 
 .PHONY: docker-build-targets
-docker-build-targets: ## Build docker images for the targets.
-#docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
+docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
 
-#.PHONY: docker-build-bmv2
-#docker-build-bmv2: ## Build docker image for the bmv2 target.
-#	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
+.PHONY: docker-build-bmv2
+docker-build-bmv2: ## Build docker image for the bmv2 target.
+	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
 
 .PHONY: docker-build-examples
 docker-build-examples: ## Build docker images for the examples.
@@ -129,9 +128,16 @@ kind-create: ## Create and configure a local kind cluster with a single control-
 kind-delete: ## Delete the local kind cluster.
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
 
-.PHONY: kind-load
-kind-load: ## Load all images into the local cluster.
+.PHONY: kind-load-all
+kind-load-all: kind-load-iml kind-load-targets ## Load all images into the local cluster.
+
+.PHONY: kind-load-iml
+kind-load-iml: ## Load all images into the local cluster.
 	$(KIND) load docker-image ${IML_IMAGES} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-targets
+kind-load-targets: ## Load all target images into the local cluster.
+	$(KIND) load docker-image ${TARGET_IMAGES} --name $(KIND_CLUSTER)
 
 .PHONY: build-installer
 build-installer: ## Generate a consolidated YAML with CRDs and deployment.

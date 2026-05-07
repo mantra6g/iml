@@ -13,10 +13,10 @@ import (
 	"iml-daemon/pkg/tunnel"
 	netutils "iml-daemon/pkg/utils/net"
 
+	"github.com/coreos/go-iptables/iptables"
+	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
-
-	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,6 +38,9 @@ const (
 
 	// DecapInterfaceName sets the name for the SRv6 decapsulation interface in the router VRF.
 	DecapInterfaceName = "decap0"
+
+	// DefaultSRv6TableName set the name for the iptable table used for allowing SRv6 traffic in the cluster.
+	DefaultSRv6TableName = "IML-SRV6"
 )
 
 type Software struct {
@@ -50,9 +53,12 @@ type Software struct {
 	tunnelManager      tunnel.Manager
 	routingSubnet      *RoutingSubnet
 	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
+	ipt                *iptables.IPTables
 
 	appNet6Allocator *dataplane.Subnet6Allocator
 	appNet4Allocator *dataplane.Subnet4Allocator
+	tunNet6Allocator *dataplane.Subnet6Allocator
+	tunNet4Allocator *dataplane.Subnet4Allocator
 	tableAllocator   *dataplane.TableAllocator
 
 	cfg    *env.GlobalConfig
@@ -74,6 +80,7 @@ type Subnet interface {
 	GetGateway() netutils.DualStackAddress
 	GetStack() StackType
 	GetVRFName() string
+	SetTunnel(string)
 }
 
 type P4TargetInstance struct {
@@ -105,9 +112,24 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 			return nil, fmt.Errorf("failed to create application subnet allocator: %w", err)
 		}
 	}
-	routingBaseNet, err := net6Allocator.Allocate()
+	tunnel6Allocator, err := dataplane.NewSubnet6Allocator(cfg.TunnelCIDR.IPv6Net, 126)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create routing subnet's IP allocator: %w", err)
+		return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
+	}
+	var tunnel4Allocator *dataplane.Subnet4Allocator
+	if cfg.TunnelCIDR.IPv4Net != nil {
+		tunnel4Allocator, err = dataplane.NewSubnet4Allocator(cfg.TunnelCIDR.IPv4Net, 30)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
+		}
+	}
+	routingIPNet, err := net6Allocator.Allocate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to assign router-vrf's ip network: %w", err)
+	}
+	routingSIDNet, err := net6Allocator.Allocate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to assign router-vrf's SID network: %w", err)
 	}
 	tableAllocator, err := dataplane.NewTableAllocator(1000)
 	if err != nil {
@@ -138,23 +160,36 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	if err = os.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte("0"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to disable rp_filter: %w", err)
 	}
-	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingBaseNet, rtrVrfTable)
+	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingIPNet, routingSIDNet, rtrVrfTable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
+	}
+
+	ip6t, err := iptables.New(iptables.IPFamily(iptables.ProtocolIPv6))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ip6t: %w", err)
+	}
+	err = ensureIPTablesRulesArePresent(ip6t)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create iptables rules: %w", err)
 	}
 
 	return &Software{
 		appNet4Allocator:   net4Allocator,
 		appNet6Allocator:   net6Allocator,
+		tunNet4Allocator:   tunnel4Allocator,
+		tunNet6Allocator:   tunnel6Allocator,
 		tableAllocator:     tableAllocator,
 		routingSubnet:      rtrSubnet,
 		appSubnets:         make(map[client.ObjectKey][]AppSubnet),
 		p4Targets:          make(map[client.ObjectKey]*P4TargetInstance),
 		nodeConfigs:        make(map[client.ObjectKey]*NodeConfig),
 		serviceChainRoutes: make(map[client.ObjectKey][]dataplane.SRv6Route),
+		ipt:                ip6t,
 		tunnelManager:      tunnelManager,
 		cfg:                cfg,
 		Client:             k8sClient,
+		log:                logger,
 	}, nil
 }
 
@@ -169,6 +204,58 @@ func (d *Software) Shutdown(ctx context.Context) error {
 		for i := range subnets {
 			subnets[i].Teardown()
 		}
+	}
+
+	// Delete iptables rules
+	err := ensureIPTablesRulesAreRemoved(d.ipt)
+	if err != nil {
+		d.log.Error(err, "failed to remove iptables rules. Ignoring error...")
+	}
+
+	return nil
+}
+
+func ensureIPTablesRulesArePresent(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear iptables chain: %w", err)
+	}
+	err = ipt.Append("filter", DefaultSRv6TableName,
+		"-m", "rt", "--rt-type", "4", "-j", "ACCEPT")
+	if err != nil {
+		return fmt.Errorf("failed to append SRv6 accept rule: %w", err)
+	}
+	err = ipt.Append("filter", DefaultSRv6TableName,
+		"-j", "RETURN")
+	if err != nil {
+		return fmt.Errorf("failed to append return rule: %w", err)
+	}
+	err = ipt.DeleteIfExists("filter", "FORWARD",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+	}
+	err = ipt.InsertUnique("filter", "FORWARD", 1,
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
+	}
+	return nil
+}
+
+func ensureIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
+	}
+	err = ipt.DeleteIfExists("filter", "FORWARD",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+	}
+	err = ipt.DeleteChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
 	}
 	return nil
 }
@@ -275,14 +362,21 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		}
 	}()
 
-	err = d.routingSubnet.AddRouteToSubnet(subnet)
+	routingSubnetTunData, newSubnetTunData, err := d.createSubnetToSubnetTunnels(d.routingSubnet, subnet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subnet to application subnet: %w", err)
+	}
+	logger.V(1).Info("Created tunnels between routing subnet and application subnet",
+		"routingSubnetTunData", routingSubnetTunData, "newSubnetTunData", newSubnetTunData)
+
+	err = d.routingSubnet.AddRoute(subnet.Networks, newSubnetTunData.Addrs, routingSubnetTunData.InterfaceName)
 	if err != nil {
 		err = fmt.Errorf("failed to install routes towards app subnet in routing subnet: %w", err)
 		return
 	}
-	err = subnet.AddDefaultRouteViaSubnet(d.routingSubnet)
+	err = subnet.AddDefaultRoute(routingSubnetTunData.Addrs, newSubnetTunData.InterfaceName)
 	if err != nil {
-		err = fmt.Errorf("failed to install default routes towards app subnet in routing subnet: %w", err)
+		err = fmt.Errorf("failed to install default routes towards routing subnet in app subnet: %w", err)
 	}
 	existingSubnets, ok := d.appSubnets[appID]
 	if !ok {
@@ -296,6 +390,140 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		return
 	}
 	return subnet, nil
+}
+
+type subnetTunData struct {
+	InterfaceName string
+	Addrs         netutils.DualStackAddress
+}
+
+func (d *Software) createSubnetToSubnetTunnels(sub1, sub2 Subnet) (sub1TunData, sub2TunData *subnetTunData, err error) {
+	tunName1, err := vrfutil.GenerateRandomName("imltun", 4)
+	if err != nil {
+		return
+	}
+	tunName2, err := vrfutil.GenerateRandomName("imltun", 4)
+	if err != nil {
+		return
+	}
+	var tun1IPv4, tun2IPv4 *net.IPNet
+	if d.tunNet4Allocator != nil {
+		var allocErr error
+		tunIPv4Net, allocErr := d.tunNet4Allocator.Allocate()
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+		tunIPv4Allocator, allocErr := dataplane.NewIPv4Allocator(tunIPv4Net)
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+		tun1IPv4, allocErr = tunIPv4Allocator.Allocate()
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+		tun2IPv4, allocErr = tunIPv4Allocator.Allocate()
+		if allocErr != nil {
+			err = allocErr
+			return
+		}
+	}
+	tunIPv6Net, err := d.tunNet6Allocator.Allocate()
+	if err != nil {
+		return
+	}
+	tunIPv6Allocator, err := dataplane.NewIPv6Allocator(tunIPv6Net)
+	if err != nil {
+		return
+	}
+	tun1IPv6, err := tunIPv6Allocator.Allocate()
+	if err != nil {
+		return
+	}
+	tun2IPv6, err := tunIPv6Allocator.Allocate()
+	if err != nil {
+		return
+	}
+	vrf1, err := netlink.LinkByName(sub1.GetVRFName())
+	if err != nil {
+		return
+	}
+	vrf2, err := netlink.LinkByName(sub2.GetVRFName())
+	if err != nil {
+		return
+	}
+	tun1 := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: tunName1,
+		},
+		PeerName: tunName2,
+	}
+	err = netlink.LinkAdd(tun1)
+	if err != nil {
+		return
+	}
+	sub1.SetTunnel(tunName1)
+	sub2.SetTunnel(tunName2)
+	tun2, err := netlink.LinkByName(tunName2)
+	if err != nil {
+		return
+	}
+	err = netlink.LinkSetMaster(tun1, vrf1)
+	if err != nil {
+		return
+	}
+	err = netlink.LinkSetMaster(tun2, vrf2)
+	if err != nil {
+		return
+	}
+	err = netlink.AddrAdd(tun1, &netlink.Addr{IPNet: tun1IPv6})
+	if err != nil {
+		return
+	}
+	err = netlink.AddrAdd(tun2, &netlink.Addr{IPNet: tun2IPv6})
+	if err != nil {
+		return
+	}
+	if tun1IPv4 != nil && tun2IPv4 != nil {
+		err = netlink.AddrAdd(tun1, &netlink.Addr{IPNet: tun1IPv4})
+		if err != nil {
+			return
+		}
+		err = netlink.AddrAdd(tun2, &netlink.Addr{IPNet: tun2IPv4})
+		if err != nil {
+			return
+		}
+	}
+	err = netlink.LinkSetUp(tun1)
+	if err != nil {
+		return
+	}
+	err = netlink.LinkSetUp(tun2)
+	if err != nil {
+		return
+	}
+	var tun1Ip4, tun2Ip4 net.IP
+	if tun1IPv4 != nil && tun2IPv4 != nil {
+		tun1Ip4 = tun1IPv4.IP
+		tun2Ip4 = tun2IPv4.IP
+	}
+	sub1TunData = &subnetTunData{
+		InterfaceName: tunName1,
+		Addrs: netutils.DualStackAddress{
+			IPv4: tun1Ip4,
+			IPv6: tun1IPv6.IP,
+		},
+	}
+	sub2TunData = &subnetTunData{
+		InterfaceName: tunName2,
+		Addrs: netutils.DualStackAddress{
+			IPv4: tun2Ip4,
+			IPv6: tun2IPv6.IP,
+		},
+	}
+	return
 }
 
 func (d *Software) addSubnetToAppStatus(appID types.NamespacedName, appNet4 *net.IPNet, appNet6 *net.IPNet) error {
@@ -517,13 +745,6 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	targetInstance, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
-	if !exists {
-		// Either a P4Target that wasn't configured yet, or it belongs to another node.
-		// TODO: This verification does not work for Hardware-based P4Targets that don't belong to any node.
-		//  Refactor the code to properly handle this case.
-		return nil
-	}
 	if len(target.Status.TargetIPs) == 0 || len(target.Status.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
 		// We don't have enough information about the object yet to update its routes.
 		return nil
@@ -536,7 +757,7 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse nf CIDR for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 	}
-	err = d.routingSubnet.AddRoute(nfCIDR, targetAddrs, targetInstance.ifaceName)
+	err = d.routingSubnet.AddRoute(nfCIDR, targetAddrs, d.routingSubnet.Bridge.Attrs().Name)
 	if err != nil {
 		return fmt.Errorf("failed to add route for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 	}

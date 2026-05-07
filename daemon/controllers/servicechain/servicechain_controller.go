@@ -124,6 +124,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		matchingNFsPerStage = append(matchingNFsPerStage, matchingNFs)
 	}
+	logger.V(1).Info("found matching NFs", "matching NFs", matchingNFsPerStage)
+	//logger.V(1).Info("found matching NFs", "matching NFs", func() [][]client.ObjectKey {
+	//	keys := make([][]client.ObjectKey, len(matchingNFsPerStage))
+	//	for stage := range matchingNFsPerStage {
+	//		keys[stage] = make([]client.ObjectKey, len(matchingNFsPerStage[stage]))
+	//		for matchingNF := range matchingNFsPerStage[stage] {
+	//			keys[stage][matchingNF] = client.ObjectKeyFromObject(matchingNFsPerStage[stage][matchingNF])
+	//		}
+	//	}
+	//	return keys
+	//}())
 
 	// Filter NFs to only use those with assigned p4Targets, ips, and in running phase
 	for stage := range matchingNFsPerStage {
@@ -191,6 +202,7 @@ func (r *Reconciler) filterNFs(originalNFs []*corev1alpha1.NetworkFunction) []*c
 		if readyCondition == nil || readyCondition.Status != v1.ConditionTrue {
 			continue
 		}
+		filteredNFs = append(filteredNFs, nf)
 	}
 	return filteredNFs
 }
@@ -270,7 +282,15 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.mapNFsToRequests),
 			builder.WithPredicates(predicate.Funcs{
 				CreateFunc: func(e event.TypedCreateEvent[client.Object]) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool { return false }, // NFs shouldn't be updated
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+						return true
+					}
+					oldNF := e.ObjectOld.(*corev1alpha1.NetworkFunction)
+					newNF := e.ObjectNew.(*corev1alpha1.NetworkFunction)
+					// Reconcile whenever the status changes
+					return !reflect.DeepEqual(oldNF.Status, newNF.Status)
+				},
 				DeleteFunc: func(e event.TypedDeleteEvent[client.Object]) bool { return true },
 			})).
 		Watches(&corev1alpha1.P4Target{},

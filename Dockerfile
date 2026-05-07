@@ -1,6 +1,6 @@
 # This is a multi-stage Dockerfile that builds all services in the project.
 # Use 'docker build --target <service-name>' to build a specific service.
-# Available targets: cni, daemon, operator, lb-control
+# Available targets: cni, daemon, operator, bmv2
 
 # ============================================================================
 # Build stages
@@ -62,6 +62,28 @@ COPY operator/ operator/
 RUN cd operator && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/manager cmd/main.go
 
 # ============================================================================
+# BMv2 driver builder — standalone module (not in go.work), final image needs
+# p4c at runtime to compile P4 source files downloaded via URL.
+# ============================================================================
+FROM golang:1.26 AS bmv2-builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+COPY targets/bmv2/go.mod targets/bmv2/go.sum ./
+RUN go mod download
+
+COPY targets/bmv2/cmd/ cmd/
+COPY targets/bmv2/api/ api/
+COPY targets/bmv2/handlers/ handlers/
+COPY targets/bmv2/controllers/ controllers/
+COPY targets/bmv2/http/ http/
+COPY targets/bmv2/managers/ managers/
+COPY targets/bmv2/pkg/ pkg/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o driver cmd/main.go
+
+# ============================================================================
 # Final images
 # ============================================================================
 
@@ -84,5 +106,17 @@ WORKDIR /
 COPY --from=operator-builder /workspace/operator/bin/manager .
 USER 65532:65532
 ENTRYPOINT ["/manager"]
+
+# BMv2 driver image
+# p4lang/p4c:latest provides p4c at runtime for compiling .p4 source files.
+# libboost libraries are required by p4c's runtime dependencies.
+FROM p4lang/p4c:latest AS bmv2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libboost-iostreams-dev \
+    libboost-graph-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /
+COPY --from=bmv2-builder /workspace/driver .
+ENTRYPOINT ["/driver"]
 
 

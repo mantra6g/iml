@@ -242,6 +242,10 @@ func (r *P4TargetReconciler) ensureReadinessTaints(p4target *corev1alpha1.P4Targ
 
 func (r *P4TargetReconciler) ensureReadinessState(ctx context.Context, p4target *corev1alpha1.P4Target,
 	readyCondition corev1alpha1.P4TargetCondition) error {
+	logger := logf.FromContext(ctx)
+	logger.V(1).Info("ensuring readiness state",
+		"p4target", client.ObjectKeyFromObject(p4target), "readyCondition", readyCondition)
+
 	if p4target.Spec.Taints == nil {
 		p4target.Spec.Taints = []corev1alpha1.Taint{}
 	}
@@ -250,21 +254,20 @@ func (r *P4TargetReconciler) ensureReadinessState(ctx context.Context, p4target 
 	}
 
 	var err error
-	newTaints, updatedTaints := r.ensureReadinessTaints(p4target, readyCondition)
-	if updatedTaints {
-		original := p4target.DeepCopy()
-		p4target.Spec.Taints = newTaints
-		err = r.Client.Patch(ctx, p4target, client.MergeFrom(original))
-	}
-	if err != nil {
-		return err
-	}
-
 	newConditions, updatedConditions := p4targetutil.AddConditions(p4target.Status.Conditions, readyCondition)
 	if updatedConditions {
 		original := p4target.DeepCopy()
 		p4target.Status.Conditions = newConditions
 		err = r.Client.Status().Patch(ctx, p4target, client.MergeFrom(original))
+	}
+	if err != nil {
+		return err
+	}
+
+	newTaints, updatedTaints := r.ensureReadinessTaints(p4target, readyCondition)
+	if updatedTaints {
+		p4target.Spec.Taints = newTaints
+		err = r.Client.Update(ctx, p4target)
 	}
 	return err
 }

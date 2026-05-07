@@ -1,0 +1,179 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package p4target
+
+import (
+	"bmv2-driver/controllers/lease"
+	"bmv2-driver/controllers/p4target/utils"
+	"bmv2-driver/managers/p4target"
+	"context"
+	"os"
+	"time"
+
+	"github.com/go-logr/logr"
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// Reconciler reconciles a P4Target object
+type Reconciler struct {
+	client.Client
+	Scheme          *runtime.Scheme
+	P4TargetManager p4target.Manager
+	PullInterval    time.Duration
+	Log             logr.Logger
+}
+
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
+	logger := r.Log
+	logger.V(1).Info("Reconciling P4Target")
+
+	target := &corev1alpha1.P4Target{}
+	if err := r.Get(ctx, types.NamespacedName{Name: r.P4TargetManager.GetName()}, target); err != nil {
+		if errors.IsNotFound(err) {
+			err = r.createP4Target(ctx)
+			if err != nil {
+				logger.Error(err, "Failed to create P4Target")
+				return ctrl.Result{}, err
+			}
+			logger.Info("P4Target created")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		logger.Error(err, "Failed to get P4Target")
+		return ctrl.Result{}, err
+	}
+
+	podName := os.Getenv("POD_NAME")
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podName == "" || podNamespace == "" {
+		logger.Error(nil, "POD_NAME or POD_NAMESPACE environment variable is not set")
+		panic("POD_NAME or POD_NAMESPACE environment variable is not set")
+	}
+
+	targetPod := &v1.Pod{}
+	if err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: podNamespace}, targetPod); err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(1).Info("P4Target Pod not found. Requeueing after 10 seconds.")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		logger.Error(err, "Failed to get P4Target Pod")
+		return ctrl.Result{}, err
+	}
+
+	if len(target.Spec.NfCIDR) == 0 {
+		logger.V(1).Info("P4Target does not have any IP address. Requeueing after 10 seconds.")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if err := r.P4TargetManager.EnsureNetworkConfiguration(p4target.NetConfig{
+		TargetCIDR: target.Spec.NfCIDR,
+	}); err != nil {
+		logger.Error(err, "Failed to configure network")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, r.updateP4TargetStatus(ctx, target, targetPod)
+}
+
+func (r *Reconciler) createP4Target(ctx context.Context) error {
+	target := &corev1alpha1.P4Target{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: r.P4TargetManager.GetName(),
+			Labels: map[string]string{
+				corev1alpha1.P4TargetArchitectureLabel: "v1model",
+			},
+		},
+		Spec: corev1alpha1.P4TargetSpec{},
+	}
+	return r.Create(ctx, target)
+}
+
+func (r *Reconciler) updateP4TargetStatus(ctx context.Context, target *corev1alpha1.P4Target, targetPod *v1.Pod) error {
+	original := target.DeepCopy()
+	target.Status = r.calculateP4TargetStatus(targetPod)
+	if utils.StatusChanged(original, target) {
+		return r.Status().Patch(ctx, target, client.MergeFrom(original))
+	}
+	return nil
+}
+
+func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4TargetStatus {
+	targetStatus := corev1alpha1.P4TargetStatus{}
+	targetStatus.NodeName = targetPod.Spec.NodeName
+	targetStatus.Capacity = r.P4TargetManager.GetCapacity()
+	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
+
+	targetStatus.TargetIPs = utils.FilterIPs(r.P4TargetManager.GetTargetIPs())
+	targetStatus.DriverIPs = utils.FilterIPs(r.P4TargetManager.GetDriverIPs())
+
+	occupiedCondition := r.P4TargetManager.GetOccupiedCondition()
+	healthyCondition := r.P4TargetManager.GetHealthyCondition()
+	netconfCondition := r.P4TargetManager.GetNetworkConfiguredCondition()
+	readyCondition := r.P4TargetManager.GetReadyCondition(healthyCondition, netconfCondition)
+
+	targetStatus.Conditions = []corev1alpha1.P4TargetCondition{}
+	targetStatus.Conditions = append(targetStatus.Conditions, readyCondition)
+	targetStatus.Conditions = append(targetStatus.Conditions, healthyCondition)
+	targetStatus.Conditions = append(targetStatus.Conditions, netconfCondition)
+	targetStatus.Conditions = append(targetStatus.Conditions, occupiedCondition)
+	return targetStatus
+}
+
+func (r *Reconciler) Start(ctx context.Context) error {
+	r.Log.V(1).Info("Starting P4Target controller")
+	backoff := lease.InitialBackoff
+	timer := time.NewTimer(0) // run immediately
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			res, err := r.Reconcile(ctx)
+			if err != nil {
+				// failure -> apply backoff and retry
+				timer.Reset(backoff)
+
+				backoff *= 2
+				if backoff > lease.MaxBackoff {
+					backoff = lease.MaxBackoff
+				}
+				continue
+			}
+			// success -> reset backoff
+			backoff = lease.InitialBackoff
+
+			// decide next schedule
+			next := r.PullInterval
+			if !res.IsZero() {
+				next = res.RequeueAfter
+			}
+			timer.Reset(next)
+		}
+	}
+}
