@@ -745,13 +745,6 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	targetInstance, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
-	if !exists {
-		// Either a P4Target that wasn't configured yet, or it belongs to another node.
-		// TODO: This verification does not work for Hardware-based P4Targets that don't belong to any node.
-		//  Refactor the code to properly handle this case.
-		return nil
-	}
 	if len(target.Status.TargetIPs) == 0 || len(target.Status.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
 		// We don't have enough information about the object yet to update its routes.
 		return nil
@@ -764,7 +757,7 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse nf CIDR for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 	}
-	err = d.routingSubnet.AddRoute(nfCIDR, targetAddrs, targetInstance.ifaceName)
+	err = d.routingSubnet.AddRoute(nfCIDR, targetAddrs, d.routingSubnet.Bridge.Attrs().Name)
 	if err != nil {
 		return fmt.Errorf("failed to add route for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 	}

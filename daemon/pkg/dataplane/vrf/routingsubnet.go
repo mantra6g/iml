@@ -387,7 +387,7 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 			Table:     int(r.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
-		if err = netlink.RouteAdd(ipv6Route); err != nil {
+		if err = netlink.RouteReplace(ipv6Route); err != nil {
 			logger.Error(err, "failed to add IPv6 route to app subnet in routing VRF",
 				"dst", dst.IPv6Net.String(), "table", r.Vrf.Table)
 			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
@@ -401,7 +401,7 @@ func (r *RoutingSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.Dual
 			Table:     int(r.Vrf.Table),
 			LinkIndex: outIf.Attrs().Index,
 		}
-		if err = netlink.RouteAdd(ipv4Route); err != nil {
+		if err = netlink.RouteReplace(ipv4Route); err != nil {
 			logger.Error(err, "failed to add IPv4 route to app subnet in routing VRF",
 				"dst", dst.IPv4Net.String(), "table", r.Vrf.Table)
 			return fmt.Errorf("failed to add route to app subnet in routing VRF: %w", err)
