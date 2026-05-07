@@ -13,6 +13,7 @@ import (
 	"iml-daemon/pkg/tunnel"
 	netutils "iml-daemon/pkg/utils/net"
 
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
@@ -37,6 +38,9 @@ const (
 
 	// DecapInterfaceName sets the name for the SRv6 decapsulation interface in the router VRF.
 	DecapInterfaceName = "decap0"
+
+	// DefaultSRv6TableName set the name for the iptable table used for allowing SRv6 traffic in the cluster.
+	DefaultSRv6TableName = "IML-SRV6"
 )
 
 type Software struct {
@@ -49,6 +53,7 @@ type Software struct {
 	tunnelManager      tunnel.Manager
 	routingSubnet      *RoutingSubnet
 	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
+	ipt                *iptables.IPTables
 
 	appNet6Allocator *dataplane.Subnet6Allocator
 	appNet4Allocator *dataplane.Subnet4Allocator
@@ -118,9 +123,13 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 			return nil, fmt.Errorf("failed to create tunnel subnet allocator: %w", err)
 		}
 	}
-	routingBaseNet, err := net6Allocator.Allocate()
+	routingIPNet, err := net6Allocator.Allocate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create routing subnet's IP allocator: %w", err)
+		return nil, fmt.Errorf("failed to assign router-vrf's ip network: %w", err)
+	}
+	routingSIDNet, err := net6Allocator.Allocate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to assign router-vrf's SID network: %w", err)
 	}
 	tableAllocator, err := dataplane.NewTableAllocator(1000)
 	if err != nil {
@@ -151,9 +160,18 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	if err = os.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte("0"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to disable rp_filter: %w", err)
 	}
-	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingBaseNet, rtrVrfTable)
+	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingIPNet, routingSIDNet, rtrVrfTable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
+	}
+
+	ip6t, err := iptables.New(iptables.IPFamily(iptables.ProtocolIPv6))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ip6t: %w", err)
+	}
+	err = ensureIPTablesRulesArePresent(ip6t)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create iptables rules: %w", err)
 	}
 
 	return &Software{
@@ -167,9 +185,11 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 		p4Targets:          make(map[client.ObjectKey]*P4TargetInstance),
 		nodeConfigs:        make(map[client.ObjectKey]*NodeConfig),
 		serviceChainRoutes: make(map[client.ObjectKey][]dataplane.SRv6Route),
+		ipt:                ip6t,
 		tunnelManager:      tunnelManager,
 		cfg:                cfg,
 		Client:             k8sClient,
+		log:                logger,
 	}, nil
 }
 
@@ -184,6 +204,58 @@ func (d *Software) Shutdown(ctx context.Context) error {
 		for i := range subnets {
 			subnets[i].Teardown()
 		}
+	}
+
+	// Delete iptables rules
+	err := ensureIPTablesRulesAreRemoved(d.ipt)
+	if err != nil {
+		d.log.Error(err, "failed to remove iptables rules. Ignoring error...")
+	}
+
+	return nil
+}
+
+func ensureIPTablesRulesArePresent(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear iptables chain: %w", err)
+	}
+	err = ipt.Append("filter", DefaultSRv6TableName,
+		"-m", "rt", "--rt-type", "4", "-j", "ACCEPT")
+	if err != nil {
+		return fmt.Errorf("failed to append SRv6 accept rule: %w", err)
+	}
+	err = ipt.Append("filter", DefaultSRv6TableName,
+		"-j", "RETURN")
+	if err != nil {
+		return fmt.Errorf("failed to append return rule: %w", err)
+	}
+	err = ipt.DeleteIfExists("filter", "FORWARD",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+	}
+	err = ipt.InsertUnique("filter", "FORWARD", 1,
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
+	}
+	return nil
+}
+
+func ensureIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
+	}
+	err = ipt.DeleteIfExists("filter", "FORWARD",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+	}
+	err = ipt.DeleteChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
 	}
 	return nil
 }

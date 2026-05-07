@@ -16,12 +16,14 @@ import (
 type SubnetCIDR = string
 
 type RoutingSubnet struct {
-	Network       *net.IPNet
+	TargetNetwork *net.IPNet
+	SIDNetwork    *net.IPNet
 	Gateway       net.IP
 	Vrf           *netlink.Vrf
-	DecapIface    *netlink.Dummy
+	DecapIface    *netlink.Veth
 	Bridge        *netlink.Bridge
 	IP6Allocator  *dataplane.IPv6Allocator
+	SIDAllocator  *dataplane.IPv6Allocator
 	DecapSIDv6    *net.IPNet
 	DecapSIDv4    *net.IPNet
 	SubnetTunnels map[SubnetCIDR]*netlink.Veth
@@ -30,13 +32,17 @@ type RoutingSubnet struct {
 
 var _ Subnet = &RoutingSubnet{}
 
-func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (subnet *RoutingSubnet, err error) {
-	if network == nil {
-		return nil, fmt.Errorf("invalid network")
+func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, tableID uint32) (subnet *RoutingSubnet, err error) {
+	if targetNetwork == nil {
+		return nil, fmt.Errorf("invalid target network")
+	}
+	if sidNetwork == nil {
+		return nil, fmt.Errorf("invalid sid network")
 	}
 	subnet = &RoutingSubnet{
-		Network: network,
-		Log:     logger,
+		TargetNetwork: targetNetwork,
+		SIDNetwork:    sidNetwork,
+		Log:           logger,
 	}
 	defer func(subnet *RoutingSubnet) {
 		if err != nil {
@@ -44,11 +50,17 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 		}
 	}(subnet)
 
-	routingIP6Allocator, err := dataplane.NewIPv6Allocator(network)
+	routingIP6Allocator, err := dataplane.NewIPv6Allocator(targetNetwork)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create IPv6 allocator for routing subnet: %w", err)
 	}
 	subnet.IP6Allocator = routingIP6Allocator
+
+	sidIP6Allocator, err := dataplane.NewIPv6Allocator(sidNetwork)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create IPv6 allocator for routing subnet: %w", err)
+	}
+	subnet.SIDAllocator = sidIP6Allocator
 
 	routerVrf := &netlink.Vrf{
 		LinkAttrs: netlink.LinkAttrs{
@@ -89,27 +101,39 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 	gwIPv6, err := subnet.IP6Allocator.Allocate()
 	err = netlink.AddrAdd(bridge, &netlink.Addr{IPNet: gwIPv6})
 	if err != nil {
-		return nil, fmt.Errorf("failed to add address %s to bridge %s: %w", network.String(), bridgeName, err)
+		return nil, fmt.Errorf("failed to add address %s to bridge %s: %w", targetNetwork.String(), bridgeName, err)
 	}
 	subnet.Gateway = gwIPv6.IP
 
-	decapIface := &netlink.Dummy{
+	decapPeerName := fmt.Sprintf("%spipe", DecapInterfaceName)
+	decapIface := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: DecapInterfaceName,
 		},
+		PeerName: decapPeerName,
 	}
 	if err = netlink.LinkAdd(decapIface); err != nil {
 		return nil, fmt.Errorf("failed to add decap interface: %w", err)
 	}
+	subnet.DecapIface = decapIface
 	if err = netlink.LinkSetMaster(decapIface, routerVrf); err != nil {
 		return nil, fmt.Errorf("failed to set master for decap interface: %w", err)
 	}
 	if err = netlink.LinkSetUp(decapIface); err != nil {
 		return nil, fmt.Errorf("failed to set up decap interface: %w", err)
 	}
-	subnet.DecapIface = decapIface
+	decapPeer, err := netlink.LinkByName(decapPeerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get decap peer interface: %w", err)
+	}
+	if err = netlink.LinkSetMaster(decapPeer, routerVrf); err != nil {
+		return nil, fmt.Errorf("failed to set master for decap peer interface: %w", err)
+	}
+	if err = netlink.LinkSetUp(decapPeer); err != nil {
+		return nil, fmt.Errorf("failed to set up decap peer interface: %w", err)
+	}
 
-	decapSidv6, err := subnet.IP6Allocator.Allocate()
+	decapSidv6, err := subnet.SIDAllocator.Allocate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate decap SID: %w", err)
 	}
@@ -136,7 +160,7 @@ func NewRoutingSubnet(logger logr.Logger, network *net.IPNet, tableID uint32) (s
 			decapSidv6.String(), routerVrf.Table, routerVrf.Table, decapIface.Attrs().Name, err)
 		return nil, fmt.Errorf("failed to add decap route: %w", err)
 	}
-	decapSidv4, err := subnet.IP6Allocator.Allocate()
+	decapSidv4, err := subnet.SIDAllocator.Allocate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate decap SID: %w", err)
 	}
@@ -421,7 +445,7 @@ func (r *RoutingSubnet) RemoveRoute(dst netutils.DualStackNetwork) error {
 func (r *RoutingSubnet) GetNetwork() netutils.DualStackNetwork {
 	return netutils.DualStackNetwork{
 		IPv4Net: nil,
-		IPv6Net: r.Network,
+		IPv6Net: r.TargetNetwork,
 	}
 }
 

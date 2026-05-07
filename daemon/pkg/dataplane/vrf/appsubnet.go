@@ -18,6 +18,7 @@ type AppSubnet struct {
 	GatewayIPs    netutils.DualStackAddress
 	Bridge        *netlink.Bridge
 	Vrf           *netlink.Vrf
+	VethBridgeVRF *netlink.Veth
 	IPv6Allocator *dataplane.IPv6Allocator
 	IPv4Allocator *dataplane.IPv4Allocator
 	Tunnel        string
@@ -105,15 +106,48 @@ func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tabl
 		return nil, fmt.Errorf("failed to add bridge %s: %w", bridgeName, err)
 	}
 	subnet.Bridge = bridge
-
-	if err = netlink.AddrAdd(bridge, &netlink.Addr{IPNet: gatewayIPv6}); err != nil {
-		return nil, fmt.Errorf("failed to add IPv6 address to bridge %s: %w", bridge.Name, err)
-	}
-	if err = netlink.AddrAdd(bridge, &netlink.Addr{IPNet: gatewayIPv4}); err != nil {
-		return nil, fmt.Errorf("failed to add IPv4 address to bridge %s: %w", bridge.Name, err)
-	}
 	if err = netlink.LinkSetUp(bridge); err != nil {
 		return nil, fmt.Errorf("failed to set up bridge %s: %w", bridgeName, err)
+	}
+
+	vethFromBridgeToVrfName, err := vrfutil.GenerateRandomName("vethb", 5)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate vethb name: %w", err)
+	}
+	vethFromVrfToBridgeName, err := vrfutil.GenerateRandomName("vethv", 5)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate vethv name: %w", err)
+	}
+	vethFromBridgeToVrf := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:        vethFromBridgeToVrfName,
+			MasterIndex: bridge.Attrs().Index,
+		},
+		PeerName: vethFromVrfToBridgeName,
+	}
+	if err := netlink.LinkAdd(vethFromBridgeToVrf); err != nil {
+		return nil, fmt.Errorf("failed to add veth from bridge to vnf %s: %w", vethFromBridgeToVrf.Attrs().Name, err)
+	}
+	subnet.VethBridgeVRF = vethFromBridgeToVrf
+	if err := netlink.LinkSetUp(vethFromBridgeToVrf); err != nil {
+		return nil, fmt.Errorf("failed to set up veth from bridge to vnf %s: %w", vethFromBridgeToVrf.Attrs().Name, err)
+	}
+
+	vethFromVrfToBridge, err := netlink.LinkByName(vethFromBridgeToVrf.PeerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get veth from vrf to bridge %s: %w", vethFromBridgeToVrf.PeerName, err)
+	}
+	if err := netlink.LinkSetMaster(vethFromVrfToBridge, appVrf); err != nil {
+		return nil, fmt.Errorf("failed to set master for veth from vrf to bridge %s: %w", vethFromBridgeToVrf.PeerName, err)
+	}
+	if err = netlink.AddrAdd(vethFromVrfToBridge, &netlink.Addr{IPNet: gatewayIPv6}); err != nil {
+		return nil, fmt.Errorf("failed to add IPv6 address to bridge %s: %w", bridge.Name, err)
+	}
+	if err = netlink.AddrAdd(vethFromVrfToBridge, &netlink.Addr{IPNet: gatewayIPv4}); err != nil {
+		return nil, fmt.Errorf("failed to add IPv4 address to bridge %s: %w", bridge.Name, err)
+	}
+	if err := netlink.LinkSetUp(vethFromVrfToBridge); err != nil {
+		return nil, fmt.Errorf("failed to set up veth from vrf to bridge %s: %w", vethFromBridgeToVrf.PeerName, err)
 	}
 	return
 }
@@ -123,11 +157,11 @@ func (s *AppSubnet) Teardown() {
 		return
 	}
 	logger := s.Log
-	//if s.VethBridgeVRF != nil {
-	//	if err := netlink.LinkDel(s.VethBridgeVRF); err != nil {
-	//		logger.Error(err, "failed to delete veth", "name", s.VethBridgeVRF.Attrs().Name)
-	//	}
-	//}
+	if s.VethBridgeVRF != nil {
+		if err := netlink.LinkDel(s.VethBridgeVRF); err != nil {
+			logger.Error(err, "failed to delete veth", "name", s.VethBridgeVRF.Attrs().Name)
+		}
+	}
 	if s.Bridge != nil {
 		if err := netlink.LinkDel(s.Bridge); err != nil {
 			logger.Error(err, "failed to delete bridge", "name", s.Bridge.Attrs().Name)
