@@ -32,7 +32,7 @@ type ManagerConfig struct {
 type Manager interface {
 	GetDeployedNetworkFunctions(ctx context.Context) ([]client.ObjectKey, error)
 	EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction, nfIP net.IP) DeploymentHandle
-	EnsureAbsent(ctx context.Context, nf *corev1alpha1.NetworkFunction) DeploymentHandle
+	EnsureAbsent(ctx context.Context, nfKey client.ObjectKey) DeploymentHandle
 }
 
 type operationType string
@@ -102,10 +102,8 @@ func (m *RealManager) EnsurePresent(ctx context.Context, nf *corev1alpha1.Networ
 	return h
 }
 
-func (m *RealManager) EnsureAbsent(ctx context.Context, nf *corev1alpha1.NetworkFunction) DeploymentHandle {
-	key := client.ObjectKeyFromObject(nf)
-
-	if existing, ok := m.ops[key]; ok {
+func (m *RealManager) EnsureAbsent(ctx context.Context, nfKey client.ObjectKey) DeploymentHandle {
+	if existing, ok := m.ops[nfKey]; ok {
 		if existing.opType == opAbsent {
 			return existing.handle // already deleting
 		}
@@ -116,12 +114,12 @@ func (m *RealManager) EnsureAbsent(ctx context.Context, nf *corev1alpha1.Network
 	ctx, cancel := context.WithCancel(ctx)
 	h := newDeploymentHandle(cancel)
 
-	m.ops[key] = &trackedOp{
+	m.ops[nfKey] = &trackedOp{
 		handle: h,
 		opType: opAbsent,
 	}
 
-	go m.runDeletion(ctx, h, nf)
+	go m.runDeletion(ctx, h, nfKey)
 
 	return h
 }
@@ -152,6 +150,9 @@ func (m *RealManager) GetDeployedNetworkFunctions(ctx context.Context) ([]client
 }
 
 func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction, nfIP net.IP) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	logger := m.log
 	defer func() {
 		if r := recover(); r != nil {
@@ -185,7 +186,7 @@ func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf
 
 	logger.V(1).Info("Setting up networking for NF")
 	h.transition(PhaseNetworkSetup, "setting up network forwarding", nil)
-	if err := m.setupNetworkForwarding(nfIP); err != nil {
+	if err := m.setupNetworkForwarding(nf, nfIP); err != nil {
 		logger.V(1).Error(err, "failed to setup network forwarding")
 		h.transition(PhaseFailed, "network setup failed", err)
 		return
@@ -219,9 +220,7 @@ func (m *RealManager) compile(ctx context.Context, nf *corev1alpha1.NetworkFunct
 		return err
 	}
 
-	m.mu.Lock()
 	m.programs[key] = program
-	m.mu.Unlock()
 	return nil
 }
 
@@ -248,10 +247,7 @@ func (m *RealManager) preCheck(_ context.Context, _ *corev1alpha1.NetworkFunctio
 // SetForwardingPipelineConfig RPC is skipped to avoid unnecessary disruption.
 func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
 	key := client.ObjectKeyFromObject(nf)
-
-	m.mu.Lock()
 	program := m.programs[key]
-	m.mu.Unlock()
 
 	if program == nil {
 		return fmt.Errorf("no compiled program for %s", key)
@@ -269,75 +265,23 @@ func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFuncti
 	return m.switchClient.DeployPipeline(reqCtx, program)
 }
 
-func (m *RealManager) runDeletion(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction) {
-	logger := m.log
-	defer func() {
-		if r := recover(); r != nil {
-			h.transition(PhaseFailed, "panic occurred", fmt.Errorf("%v", r))
-		}
-	}()
-
-	logger.V(1).Info("Draining network function")
-	h.transition(PhaseDraining, "draining traffic", nil)
-	if err := m.drain(ctx, nf); err != nil {
-		logger.V(1).Error(err, "failed to drain network function")
-		h.transition(PhaseFailed, "drain failed", err)
-		return
-	}
-
-	logger.V(1).Info("Deleting network function")
-	h.transition(PhaseDeleting, "removing resources", nil)
-	if err := m.deleteResources(ctx, nf); err != nil {
-		logger.V(1).Error(err, "failed to delete resources")
-		h.transition(PhaseFailed, "deletion failed", err)
-		return
-	}
-
-	logger.V(1).Info("Network function deleted successfully")
-	h.transition(PhaseDeleted, "successfully deleted", nil)
-}
-
-// drain is a no-op for BMv2: the switch has no per-NF traffic queuing to flush.
-func (m *RealManager) drain(_ context.Context, _ *corev1alpha1.NetworkFunction) error {
-	return nil
-}
-
-// deleteResources tears down network forwarding, resets the forwarding pipeline,
-// and removes the compiled program artifact from the in-memory store.
-func (m *RealManager) deleteResources(ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
-	if m.nfInterface != "" && nf.Status.AssignedIP != "" {
-		ip, err := netip.ParseAddr(nf.Status.AssignedIP)
-		if err == nil {
-			if err := m.teardownNetworkForwarding(ip); err != nil {
-				return fmt.Errorf("tearing down network forwarding: %w", err)
-			}
-		}
-	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	if err := m.switchClient.ResetPipeline(reqCtx); err != nil {
-		return fmt.Errorf("resetting forwarding pipeline: %w", err)
-	}
-
-	key := client.ObjectKeyFromObject(nf)
-	m.mu.Lock()
-	delete(m.programs, key)
-	m.mu.Unlock()
-	return nil
-}
-
 // setupNetworkForwarding is a no-op when no NF interface is configured (e.g. in tests).
-func (m *RealManager) setupNetworkForwarding(nfIP net.IP) error {
-	if m.nfInterface == "" {
-		return nil
-	}
-	addr, ok := netip.AddrFromSlice(nfIP)
+func (m *RealManager) setupNetworkForwarding(nf *corev1alpha1.NetworkFunction, ip net.IP) error {
+	key := client.ObjectKeyFromObject(nf)
+	program := m.programs[key]
+
+	nfIP, ok := netip.AddrFromSlice(ip)
 	if !ok {
-		return fmt.Errorf("invalid NF IP: %v", nfIP)
+		return fmt.Errorf("invalid NF IP address: %s", ip.String())
 	}
-	return m.configureTrafficForwardingToNetworkFunctionInterface(addr.Unmap(), m.nfInterface)
+	if m.nfInterface == "" || program == nil || !nfIP.IsValid() {
+		return fmt.Errorf("invalid parameters for setting up network forwarding")
+	}
+	if err := m.configureTrafficForwardingToNetworkFunctionInterface(nfIP.Unmap(), m.nfInterface); err != nil {
+		return fmt.Errorf("could not configure traffic forwarding for NF: %w", err)
+	}
+	program.IP = nfIP
+	return nil
 }
 
 // configureTrafficForwardingToNetworkFunctionInterface sets up the necessary routes and neighbor entries to ensure
@@ -375,6 +319,77 @@ func (m *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP 
 	if err := netlink.NeighAdd(neighbor); err != nil {
 		return fmt.Errorf("failed to add neighbor entry for NF IP %s: %w", nfIP.String(), err)
 	}
+	return nil
+}
+
+func (m *RealManager) runDeletion(ctx context.Context, h *deploymentHandle, nfKey client.ObjectKey) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	logger := m.log
+	defer func() {
+		if r := recover(); r != nil {
+			h.transition(PhaseFailed, "panic occurred", fmt.Errorf("%v", r))
+		}
+	}()
+
+	logger.V(1).Info("Draining network function")
+	h.transition(PhaseDraining, "draining traffic", nil)
+	if err := m.drain(ctx, nfKey); err != nil {
+		logger.V(1).Error(err, "failed to drain network function")
+		h.transition(PhaseFailed, "drain failed", err)
+		return
+	}
+
+	logger.V(1).Info("Deleting network function")
+	h.transition(PhaseDeleting, "removing resources", nil)
+	if err := m.deleteResources(ctx, nfKey); err != nil {
+		logger.V(1).Error(err, "failed to delete resources")
+		h.transition(PhaseFailed, "deletion failed", err)
+		return
+	}
+
+	logger.V(1).Info("Network function deleted successfully")
+	h.transition(PhaseDeleted, "successfully deleted", nil)
+}
+
+// drain is a no-op for BMv2: the switch has no per-NF traffic queuing to flush.
+func (m *RealManager) drain(_ context.Context, _ client.ObjectKey) error {
+	return nil
+}
+
+// deleteResources tears down network forwarding, resets the forwarding pipeline,
+// and removes the compiled program artifact from the in-memory store.
+func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKey) error {
+	nfOps, ok := m.ops[nfKey]
+	if !ok {
+		return nil // no tracked op for this NF, so nothing to delete
+	}
+	program, ok := m.programs[nfKey]
+	if !ok {
+		delete(m.ops, nfKey) // no compiled program, so just remove the op tracking
+		return nil           // no compiled program, so nothing was deployed; just remove the op tracking
+	}
+
+	// If the NF was never fully deployed (e.g. failed during compilation or pre-check), then we can skip the teardown of forwarding rules
+	// and just remove the compiled program, since it was never actually pushed to the switch.
+	if nfOps.opType == opPresent && nfOps.handle.status.Phase != PhaseReady {
+		delete(m.ops, nfKey) // NF never reached ready, so no forwarding rules were installed; just remove the compiled program
+		delete(m.programs, nfKey)
+		return nil
+	}
+
+	if err := m.teardownNetworkForwarding(program.IP); err != nil {
+		return fmt.Errorf("tearing down network forwarding: %w", err)
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := m.switchClient.ResetPipeline(reqCtx); err != nil {
+		return fmt.Errorf("resetting forwarding pipeline: %w", err)
+	}
+
 	return nil
 }
 

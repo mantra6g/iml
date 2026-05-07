@@ -186,31 +186,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	netfunc := &corev1alpha1.NetworkFunction{}
 	if err := r.Get(ctx, req.NamespacedName, netfunc); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("NetworkFunction resource not found. Ignoring since object must be deleted.")
+			logger.Info("NetworkFunction resource not found. Deleting associated resources if any.")
+			_ = r.NFManager.EnsureAbsent(ctx, req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "unable to fetch NetworkFunction")
 		return ctrl.Result{}, err
-	}
-
-	if netfunc.DeletionTimestamp != nil {
-		if !hasFinalizer(netfunc) {
-			return ctrl.Result{}, nil
-		}
-		handle := r.NFManager.EnsureAbsent(ctx, netfunc)
-		status := handle.Status()
-
-		if !isDeleted(status) {
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, r.updateStatus(netfunc, status, nil)
-		}
-		original := netfunc.DeepCopy()
-		removeFinalizer(netfunc)
-		return ctrl.Result{}, r.Patch(ctx, netfunc, client.MergeFrom(original))
-	}
-	if !hasFinalizer(netfunc) {
-		original := netfunc.DeepCopy()
-		ensureFinalizer(netfunc)
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, r.Patch(ctx, netfunc, client.MergeFrom(original))
 	}
 
 	var funcIP net.IP

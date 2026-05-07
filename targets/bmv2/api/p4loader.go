@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"fmt"
+	"net/netip"
 	"os"
 
 	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
@@ -13,6 +14,7 @@ type P4Program struct {
 	P4DeviceConfig []byte // BMv2 JSON device config
 	ProgramName    string
 	P4Info         *p4configv1.P4Info // Parsed P4Info from compilation
+	IP             netip.Addr         // Optional IP for the NF, if applicable
 }
 
 // LoadP4ProgramFromFiles loads P4DeviceConfig from file paths
