@@ -256,16 +256,16 @@ func setupNFInterfaces(interfaceAmount uint8) error {
 	if interfaceAmount == 0 {
 		return nil
 	}
-	nfBridge := &netlink.Bridge{
+	inputBridge := &netlink.Bridge{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: NetworkFunctionBridge,
 		},
 	}
-	err := netlink.LinkAdd(nfBridge)
+	err := netlink.LinkAdd(inputBridge)
 	if err != nil {
 		return fmt.Errorf("failed to add bridge %s: %w", NetworkFunctionBridge, err)
 	}
-	err = netlink.LinkSetUp(nfBridge)
+	err = netlink.LinkSetUp(inputBridge)
 	if err != nil {
 		return fmt.Errorf("failed to bring bridge %s up: %w", NetworkFunctionBridge, err)
 	}
@@ -274,35 +274,69 @@ func setupNFInterfaces(interfaceAmount uint8) error {
 		return fmt.Errorf("failed to get bridge %s: %w", NetworkFunctionBridge, err)
 	}
 
+	outputBridge := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:         fmt.Sprintf("%sout", NetworkFunctionBridge),
+			HardwareAddr: nfBridgeLink.Attrs().HardwareAddr,
+		},
+	}
+	err = netlink.LinkAdd(outputBridge)
+	if err != nil {
+		return fmt.Errorf("failed to add bridge %s: %w", fmt.Sprintf("%s-out", NetworkFunctionBridge), err)
+	}
+	err = netlink.LinkSetUp(outputBridge)
+	if err != nil {
+		return fmt.Errorf("failed to bring bridge %s up: %w", fmt.Sprintf("%s-out", NetworkFunctionBridge), err)
+	}
+
 	for i := range interfaceAmount {
-		nfIface := &netlink.Veth{
-			LinkAttrs: netlink.LinkAttrs{
-				Name: fmt.Sprintf("nf%d-pipe", i),
-				MTU:  1500,
-			},
-			PeerName: fmt.Sprintf("nf%d", i),
-			PeerMTU:  1500,
-		}
-		err = netlink.LinkAdd(nfIface)
+		err = addInterfaceToBridge(
+			fmt.Sprintf("nf%d-pipe", i),
+			fmt.Sprintf("nf%d", i),
+			nfBridgeLink)
 		if err != nil {
-			return fmt.Errorf("failed to create nf interface %s: %w", nfIface.Name, err)
+			return fmt.Errorf("failed to add nf interface to bridge %s: %w", NetworkFunctionBridge, err)
 		}
-		err = netlink.LinkSetMaster(nfIface, nfBridgeLink)
+
+		err = addInterfaceToBridge(
+			fmt.Sprintf("nf%dout-pipe", i),
+			fmt.Sprintf("nf%dout", i),
+			outputBridge)
 		if err != nil {
-			return fmt.Errorf("failed to set nf interface %s master to bridge: %w", nfIface.Name, err)
+			return fmt.Errorf("failed to add nf interface to bridge %s: %w", NetworkFunctionBridge, err)
 		}
-		err = netlink.LinkSetUp(nfIface)
-		if err != nil {
-			return fmt.Errorf("failed to set nf interface %s up: %w", nfIface.Name, err)
-		}
-		peerIface, err := netlink.LinkByName(nfIface.PeerName)
-		if err != nil {
-			return fmt.Errorf("failed to get peer interface %s: %w", nfIface.PeerName, err)
-		}
-		err = netlink.LinkSetUp(peerIface)
-		if err != nil {
-			return fmt.Errorf("failed to set nf interface %s up: %w", nfIface.PeerName, err)
-		}
+	}
+	return nil
+}
+
+func addInterfaceToBridge(enslavedIfaceName, peerName string, nfBridgeLink netlink.Link) error {
+	nfIface := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: enslavedIfaceName,
+			MTU:  1500,
+		},
+		PeerName: peerName,
+		PeerMTU:  1500,
+	}
+	err := netlink.LinkAdd(nfIface)
+	if err != nil {
+		return fmt.Errorf("failed to create nf interface %s: %w", nfIface.Name, err)
+	}
+	err = netlink.LinkSetMaster(nfIface, nfBridgeLink)
+	if err != nil {
+		return fmt.Errorf("failed to set nf interface %s master to bridge: %w", nfIface.Name, err)
+	}
+	err = netlink.LinkSetUp(nfIface)
+	if err != nil {
+		return fmt.Errorf("failed to set nf interface %s up: %w", nfIface.Name, err)
+	}
+	peerIface, err := netlink.LinkByName(nfIface.PeerName)
+	if err != nil {
+		return fmt.Errorf("failed to get peer interface %s: %w", nfIface.PeerName, err)
+	}
+	err = netlink.LinkSetUp(peerIface)
+	if err != nil {
+		return fmt.Errorf("failed to set nf interface %s up: %w", nfIface.PeerName, err)
 	}
 	return nil
 }
