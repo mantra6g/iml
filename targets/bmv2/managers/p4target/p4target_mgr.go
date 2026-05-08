@@ -30,13 +30,13 @@ type NetConfig struct {
 }
 
 type ManagerConfig struct {
-	Name       string
-	TargetIPs  []net.IP
-	DriverIPs  []net.IP
-	MaxNFSlots int
-	P4Client   p4v1.P4RuntimeClient
-	BridgeName string
-	Log        logr.Logger
+	Name           string
+	TargetIPs      []net.IP
+	DriverIPs      []net.IP
+	MaxNFSlots     int
+	P4Client       p4v1.P4RuntimeClient
+	InOutInterface string
+	Log            logr.Logger
 }
 
 type Manager interface {
@@ -64,14 +64,14 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		return nil, fmt.Errorf("P4Runtime client is required")
 	}
 	return &RealManager{
-		name:         cfg.Name,
-		targetIPs:    cfg.TargetIPs,
-		driverIPs:    cfg.DriverIPs,
-		maxNFSlots:   cfg.MaxNFSlots,
-		p4client:     cfg.P4Client,
-		bridgeName:   cfg.BridgeName,
-		allocatedIPs: make(map[netip.Addr]struct{}),
-		log:          cfg.Log,
+		name:           cfg.Name,
+		targetIPs:      cfg.TargetIPs,
+		driverIPs:      cfg.DriverIPs,
+		maxNFSlots:     cfg.MaxNFSlots,
+		p4client:       cfg.P4Client,
+		inOutInterface: cfg.InOutInterface,
+		allocatedIPs:   make(map[netip.Addr]struct{}),
+		log:            cfg.Log,
 	}, nil
 }
 
@@ -79,13 +79,13 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 var _ Manager = &RealManager{}
 
 type RealManager struct {
-	name       string
-	targetIPs  []net.IP
-	driverIPs  []net.IP
-	maxNFSlots int
-	p4client   p4v1.P4RuntimeClient
-	bridgeName string
-	log        logr.Logger
+	name           string
+	targetIPs      []net.IP
+	driverIPs      []net.IP
+	maxNFSlots     int
+	p4client       p4v1.P4RuntimeClient
+	inOutInterface string
+	log            logr.Logger
 
 	mu           sync.RWMutex
 	cidr         netip.Prefix
@@ -120,7 +120,7 @@ func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	r.cidr = cidr
 	r.ipAllocator = alloc
 	r.allocatedIPs = make(map[netip.Addr]struct{})
-	if r.bridgeName != "" {
+	if r.inOutInterface != "" {
 		bridgeIP, err := alloc.Next()
 		if err != nil {
 			return fmt.Errorf("failed to allocate bridge IP from %s: %w", cidr, err)
@@ -303,7 +303,7 @@ func (r *RealManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 // in the same subnet as the NF interfaces, and also to ensure that it can act as a kind of
 // gateway for the NFs to forward traffic back to the host.
 func (r *RealManager) configureNFBridge(bridgeIP netip.Addr, nfCIDR netip.Prefix) error {
-	nfBridge, err := netlink.LinkByName(r.bridgeName)
+	nfBridge, err := netlink.LinkByName(r.inOutInterface)
 	if err != nil {
 		return err
 	}

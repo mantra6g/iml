@@ -295,13 +295,13 @@ func (m *RealManager) setupNetworkForwarding(nf *corev1alpha1.NetworkFunction, i
 // be set by the NF. Afterwards, the packet will be routed by the bridge back to the iml0 interface out of the container
 // and back to the routing VRF in the host.
 func (m *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP netip.Addr, nfInterface string) error {
-	nfBridge, err := netlink.LinkByName("br0")
+	inoutIface, err := netlink.LinkByName("inout0")
 	if err != nil {
 		return fmt.Errorf("failed to get bridge interface: %w", err)
 	}
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: nfIP.Unmap().AsSlice(), Mask: net.CIDRMask(nfIP.BitLen(), nfIP.BitLen())},
-		LinkIndex: nfBridge.Attrs().Index,
+		LinkIndex: inoutIface.Attrs().Index,
 	}
 	if err := netlink.RouteAdd(route); err != nil {
 		return fmt.Errorf("failed to add route for NF IP %s via bridge: %w", nfIP.String(), err)
@@ -311,7 +311,7 @@ func (m *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP 
 		return fmt.Errorf("failed to get NF interface: %w", err)
 	}
 	neighbor := &netlink.Neigh{
-		LinkIndex:    nfBridge.Attrs().Index,
+		LinkIndex:    inoutIface.Attrs().Index,
 		State:        netlink.NUD_PERMANENT,
 		IP:           nfIP.Unmap().AsSlice(),
 		HardwareAddr: nfLink.Attrs().HardwareAddr,
@@ -396,19 +396,19 @@ func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKe
 // teardownNetworkForwarding removes the host route and neighbor entry that were
 // installed by configureTrafficForwardingToNetworkFunctionInterface when the NF was deployed.
 func (m *RealManager) teardownNetworkForwarding(nfIP netip.Addr) error {
-	nfBridge, err := netlink.LinkByName("br0")
+	inoutInterface, err := netlink.LinkByName("inout0")
 	if err != nil {
 		return fmt.Errorf("failed to get bridge interface: %w", err)
 	}
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: nfIP.Unmap().AsSlice(), Mask: net.CIDRMask(nfIP.BitLen(), nfIP.BitLen())},
-		LinkIndex: nfBridge.Attrs().Index,
+		LinkIndex: inoutInterface.Attrs().Index,
 	}
 	if err := netlink.RouteDel(route); err != nil {
 		return fmt.Errorf("failed to delete route for NF IP %s: %w", nfIP.String(), err)
 	}
 	neighbor := &netlink.Neigh{
-		LinkIndex: nfBridge.Attrs().Index,
+		LinkIndex: inoutInterface.Attrs().Index,
 		IP:        nfIP.Unmap().AsSlice(),
 	}
 	if err := netlink.NeighDel(neighbor); err != nil {
