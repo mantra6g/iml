@@ -12,9 +12,6 @@ const bit<8> IPPROTO_SRH  = 43;
 
 const bit<32> MAX_TRACKED_FLOWS = 512;
 
-const bit<9> IN_PORT = 0;
-const bit<9> OUT_PORT = 1;
-
 header ethernet_h {
 	bit<48> dst_addr;
 	bit<48> src_addr;
@@ -161,8 +158,8 @@ control MyIngress(inout headers hdr,
     hdr.ethernet.src_addr = hdr.ethernet.dst_addr;
     hdr.ethernet.dst_addr = original_src;
 
-    // Output the packet
-    stdmeta.egress_spec = OUT_PORT;
+    // Output the packet on the same port it came in on
+    stdmeta.egress_spec = stdmeta.ingress_port;
   }
 
   action log() {
