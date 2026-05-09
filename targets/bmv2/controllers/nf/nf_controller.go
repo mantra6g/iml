@@ -22,7 +22,8 @@ import (
 	"bmv2-driver/managers/p4target"
 	"bmv2-driver/pkg/strutils"
 	"context"
-	"net"
+	"fmt"
+	"net/netip"
 	"time"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
@@ -129,14 +130,14 @@ func ensureFinalizer(networkFunction *corev1alpha1.NetworkFunction) {
 }
 
 func (r *Reconciler) updateStatus(networkFunction *corev1alpha1.NetworkFunction,
-	depStatus nf.DeploymentStatus, funcIP net.IP) error {
+	depStatus nf.DeploymentStatus, funcIP netip.Prefix) error {
 	original := networkFunction.DeepCopy()
 	networkFunction.Status = calculateStatus(networkFunction, depStatus, funcIP)
 	return r.Status().Patch(context.Background(), networkFunction, client.MergeFrom(original))
 }
 
 func calculateStatus(netFunc *corev1alpha1.NetworkFunction,
-	depStatus nf.DeploymentStatus, funcIP net.IP) corev1alpha1.NetworkFunctionStatus {
+	depStatus nf.DeploymentStatus, funcIP netip.Prefix) corev1alpha1.NetworkFunctionStatus {
 	// Calculate Phase
 	var calculatedPhase corev1alpha1.NetworkFunctionPhase
 	var readyCondition corev1alpha1.NetworkFunctionCondition
@@ -168,7 +169,7 @@ func calculateStatus(netFunc *corev1alpha1.NetworkFunction,
 	}
 
 	status := corev1alpha1.NetworkFunctionStatus{
-		AssignedIP:         funcIP.String(),
+		AssignedIP:         funcIP.Addr().String(),
 		ObservedGeneration: netFunc.Generation,
 		Phase:              calculatedPhase,
 	}
@@ -194,16 +195,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	var funcIP net.IP
+	if r.P4TargetManager.GetNetworkConfiguredCondition().Status != metav1.ConditionTrue {
+		logger.Info("Network not yet configured, requeuing", "reason", r.P4TargetManager.GetNetworkConfiguredCondition().Reason)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	var funcIP netip.Addr
+	var err error
 	if netfunc.Status.AssignedIP == "" {
 		var err error
 		funcIP, err = r.P4TargetManager.AllocateNetworkFunctionIP()
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to allocate Network Function IP: %w", err)
 		}
 	} else {
-		funcIP = net.ParseIP(netfunc.Status.AssignedIP)
+		funcIP, err = netip.ParseAddr(netfunc.Status.AssignedIP)
+		if err != nil {
+			logger.Error(nil, "Invalid IP address in NetworkFunction status", "assignedIP", netfunc.Status.AssignedIP)
+			return ctrl.Result{}, fmt.Errorf("invalid IP address in NetworkFunction status: %s", netfunc.Status.AssignedIP)
+		}
 	}
+	fullNfAddress := netip.PrefixFrom(funcIP, r.P4TargetManager.GetNfCIDR().Bits())
 
 	var nfConfig *corev1alpha1.NetworkFunctionConfig
 	if netfunc.Spec.ConfigRef != nil {
@@ -214,14 +226,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 	}
-	err := r.NFConfigManager.EnsurePresentConfigForNF(ctx, nfConfig, netfunc)
+	err = r.NFConfigManager.EnsurePresentConfigForNF(ctx, nfConfig, netfunc)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	nfHandle := r.NFManager.EnsurePresent(ctx, netfunc, funcIP)
+	nfHandle := r.NFManager.EnsurePresent(ctx, netfunc, fullNfAddress)
 	status := nfHandle.Status()
-	err = r.updateStatus(netfunc, status, funcIP)
+	err = r.updateStatus(netfunc, status, fullNfAddress)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

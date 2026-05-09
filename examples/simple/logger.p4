@@ -168,7 +168,6 @@ control MyIngress(inout headers hdr,
 
   apply {
     if (!hdr.srh.isValid() || !hdr.inner_ipv6.isValid()) {
-      drop();
       return;
     }
     log();

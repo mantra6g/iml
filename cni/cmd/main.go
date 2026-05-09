@@ -256,12 +256,27 @@ func setupNFInterfaces(interfaceAmount uint8) error {
 	if interfaceAmount == 0 {
 		return nil
 	}
+	nfVrf := &netlink.Vrf{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: "nfvrf",
+		},
+		Table: 1000,
+	}
+	err := netlink.LinkAdd(nfVrf)
+	if err != nil {
+		return fmt.Errorf("failed to add nfvrf: %w", err)
+	}
+	err = netlink.LinkSetUp(nfVrf)
+	if err != nil {
+		return fmt.Errorf("failed to set nfvrf up: %w", err)
+	}
+
 	nfBridge := &netlink.Bridge{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: NetworkFunctionBridge,
 		},
 	}
-	err := netlink.LinkAdd(nfBridge)
+	err = netlink.LinkAdd(nfBridge)
 	if err != nil {
 		return fmt.Errorf("failed to add bridge %s: %w", NetworkFunctionBridge, err)
 	}
@@ -272,32 +287,6 @@ func setupNFInterfaces(interfaceAmount uint8) error {
 	nfBridgeLink, err := netlink.LinkByName(NetworkFunctionBridge)
 	if err != nil {
 		return fmt.Errorf("failed to get bridge %s: %w", NetworkFunctionBridge, err)
-	}
-	inout0 := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: "inout0",
-		},
-		PeerName: "inout0pipe",
-	}
-	err = netlink.LinkAdd(inout0)
-	if err != nil {
-		return fmt.Errorf("failed to add interface inout0: %w", err)
-	}
-	err = netlink.LinkSetUp(inout0)
-	if err != nil {
-		return fmt.Errorf("failed to bring inout0 up: %w", err)
-	}
-	inout0pipe, err := netlink.LinkByName("inout0pipe")
-	if err != nil {
-		return fmt.Errorf("failed to get interface inout0pipe: %w", err)
-	}
-	err = netlink.LinkSetUp(inout0pipe)
-	if err != nil {
-		return fmt.Errorf("failed to bring inout0pipe up: %w", err)
-	}
-	err = netlink.LinkSetMaster(inout0pipe, nfBridgeLink)
-	if err != nil {
-		return fmt.Errorf("failed to attache inout0pipe to bridge %s: %w", NetworkFunctionBridge, err)
 	}
 
 	for i := range interfaceAmount {
@@ -324,6 +313,10 @@ func setupNFInterfaces(interfaceAmount uint8) error {
 		peerIface, err := netlink.LinkByName(nfIface.PeerName)
 		if err != nil {
 			return fmt.Errorf("failed to get peer interface %s: %w", nfIface.PeerName, err)
+		}
+		err = netlink.LinkSetMaster(peerIface, nfVrf)
+		if err != nil {
+			return fmt.Errorf("failed to set peer interface %s master to vrf: %w", nfIface.PeerName, err)
 		}
 		err = netlink.LinkSetUp(peerIface)
 		if err != nil {

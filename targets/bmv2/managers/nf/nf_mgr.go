@@ -31,7 +31,7 @@ type ManagerConfig struct {
 
 type Manager interface {
 	GetDeployedNetworkFunctions(ctx context.Context) ([]client.ObjectKey, error)
-	EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction, nfIP net.IP) DeploymentHandle
+	EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction, nfIP netip.Prefix) DeploymentHandle
 	EnsureAbsent(ctx context.Context, nfKey client.ObjectKey) DeploymentHandle
 }
 
@@ -78,7 +78,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	}, nil
 }
 
-func (m *RealManager) EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction, nfIP net.IP) DeploymentHandle {
+func (m *RealManager) EnsurePresent(ctx context.Context, nf *corev1alpha1.NetworkFunction, nfIP netip.Prefix) DeploymentHandle {
 	key := client.ObjectKeyFromObject(nf)
 
 	if existing, ok := m.ops[key]; ok {
@@ -149,7 +149,7 @@ func (m *RealManager) GetDeployedNetworkFunctions(ctx context.Context) ([]client
 	return deployed, nil
 }
 
-func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction, nfIP net.IP) {
+func (m *RealManager) runDeployment(ctx context.Context, h *deploymentHandle, nf *corev1alpha1.NetworkFunction, nfIP netip.Prefix) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -266,21 +266,17 @@ func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFuncti
 }
 
 // setupNetworkForwarding is a no-op when no NF interface is configured (e.g. in tests).
-func (m *RealManager) setupNetworkForwarding(nf *corev1alpha1.NetworkFunction, ip net.IP) error {
+func (m *RealManager) setupNetworkForwarding(nf *corev1alpha1.NetworkFunction, ip netip.Prefix) error {
 	key := client.ObjectKeyFromObject(nf)
 	program := m.programs[key]
 
-	nfIP, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		return fmt.Errorf("invalid NF IP address: %s", ip.String())
-	}
-	if m.nfInterface == "" || program == nil || !nfIP.IsValid() {
+	if m.nfInterface == "" || program == nil || !ip.IsValid() {
 		return fmt.Errorf("invalid parameters for setting up network forwarding")
 	}
-	if err := m.configureTrafficForwardingToNetworkFunctionInterface(nfIP.Unmap(), m.nfInterface); err != nil {
+	if err := m.configureTrafficForwardingToNetworkFunctionInterface(ip, m.nfInterface); err != nil {
 		return fmt.Errorf("could not configure traffic forwarding for NF: %w", err)
 	}
-	program.IP = nfIP
+	program.IP = ip
 	return nil
 }
 
@@ -294,30 +290,19 @@ func (m *RealManager) setupNetworkForwarding(nf *corev1alpha1.NetworkFunction, i
 // either be determined by the NF itself, or it will be the next segment in the SRv6 path; in both cases, this MUST
 // be set by the NF. Afterwards, the packet will be routed by the bridge back to the iml0 interface out of the container
 // and back to the routing VRF in the host.
-func (m *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP netip.Addr, nfInterface string) error {
-	inoutIface, err := netlink.LinkByName("inout0")
-	if err != nil {
-		return fmt.Errorf("failed to get bridge interface: %w", err)
-	}
-	route := &netlink.Route{
-		Dst:       &net.IPNet{IP: nfIP.Unmap().AsSlice(), Mask: net.CIDRMask(nfIP.BitLen(), nfIP.BitLen())},
-		LinkIndex: inoutIface.Attrs().Index,
-	}
-	if err := netlink.RouteAdd(route); err != nil {
-		return fmt.Errorf("failed to add route for NF IP %s via bridge: %w", nfIP.String(), err)
-	}
-	nfLink, err := netlink.LinkByName(nfInterface)
+func (m *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP netip.Prefix, nfIfaceName string) error {
+	nfInterface, err := netlink.LinkByName(nfIfaceName)
 	if err != nil {
 		return fmt.Errorf("failed to get NF interface: %w", err)
 	}
-	neighbor := &netlink.Neigh{
-		LinkIndex:    inoutIface.Attrs().Index,
-		State:        netlink.NUD_PERMANENT,
-		IP:           nfIP.Unmap().AsSlice(),
-		HardwareAddr: nfLink.Attrs().HardwareAddr,
+	nfAddr := &netlink.Addr{
+		IPNet: &net.IPNet{
+			IP:   nfIP.Addr().Unmap().AsSlice(),
+			Mask: net.CIDRMask(nfIP.Bits(), nfIP.Addr().BitLen()),
+		},
 	}
-	if err := netlink.NeighAdd(neighbor); err != nil {
-		return fmt.Errorf("failed to add neighbor entry for NF IP %s: %w", nfIP.String(), err)
+	if err := netlink.AddrAdd(nfInterface, nfAddr); err != nil {
+		return fmt.Errorf("failed to add address for NF IP %s: %w", nfIP.String(), err)
 	}
 	return nil
 }
@@ -379,7 +364,7 @@ func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKe
 		return nil
 	}
 
-	if err := m.teardownNetworkForwarding(program.IP); err != nil {
+	if err := m.teardownNetworkForwarding(program.IP, m.nfInterface); err != nil {
 		return fmt.Errorf("tearing down network forwarding: %w", err)
 	}
 
@@ -395,24 +380,34 @@ func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKe
 
 // teardownNetworkForwarding removes the host route and neighbor entry that were
 // installed by configureTrafficForwardingToNetworkFunctionInterface when the NF was deployed.
-func (m *RealManager) teardownNetworkForwarding(nfIP netip.Addr) error {
-	inoutInterface, err := netlink.LinkByName("inout0")
+func (m *RealManager) teardownNetworkForwarding(nfIP netip.Prefix, nfIfaceName string) error {
+	nfInterface, err := netlink.LinkByName(nfIfaceName)
 	if err != nil {
-		return fmt.Errorf("failed to get bridge interface: %w", err)
+		return fmt.Errorf("failed to get NF interface: %w", err)
 	}
-	route := &netlink.Route{
-		Dst:       &net.IPNet{IP: nfIP.Unmap().AsSlice(), Mask: net.CIDRMask(nfIP.BitLen(), nfIP.BitLen())},
-		LinkIndex: inoutInterface.Attrs().Index,
+	nfAddr := &netlink.Addr{
+		IPNet: &net.IPNet{
+			IP:   nfIP.Addr().Unmap().AsSlice(),
+			Mask: net.CIDRMask(nfIP.Bits(), nfIP.Addr().BitLen()),
+		},
 	}
-	if err := netlink.RouteDel(route); err != nil {
-		return fmt.Errorf("failed to delete route for NF IP %s: %w", nfIP.String(), err)
+	if err := netlink.AddrDel(nfInterface, nfAddr); err != nil {
+		return fmt.Errorf("failed to delete address for NF IP %s: %w", nfIP.String(), err)
 	}
-	neighbor := &netlink.Neigh{
-		LinkIndex: inoutInterface.Attrs().Index,
-		IP:        nfIP.Unmap().AsSlice(),
-	}
-	if err := netlink.NeighDel(neighbor); err != nil {
-		return fmt.Errorf("failed to delete neighbor entry for NF IP %s: %w", nfIP.String(), err)
-	}
+	// nfVeth, ok := nfInterface.(*netlink.Veth)
+	// if !ok {
+	// 	return nil // not a veth interface, so no neighbor entry to delete
+	// }
+	// nfPeer, err := netlink.LinkByName(nfVeth.PeerName)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get peer interface for NF veth: %w", err)
+	// }
+	// neighbor := &netlink.Neigh{
+	// 	LinkIndex: nfPeer.Attrs().Index,
+	// 	IP:        nfIP.Unmap().AsSlice(),
+	// }
+	// if err := netlink.NeighDel(neighbor); err != nil {
+	// 	return fmt.Errorf("failed to delete neighbor entry for NF IP %s: %w", nfIP.String(), err)
+	// }
 	return nil
 }

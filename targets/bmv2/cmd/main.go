@@ -183,13 +183,13 @@ func main() {
 	setupLog.Info(fmt.Sprintf("Connected to P4 switch at %s (primary arbitration established)", switchAddr))
 
 	p4targetMgr, err := p4targetmgr.NewManager(p4targetmgr.ManagerConfig{
-		Name:           p4targetName,
-		P4Client:       c,
-		MaxNFSlots:     maxNFSlots,
-		TargetIPs:      targetIPs,
-		DriverIPs:      driverIPs,
-		InOutInterface: "inout0",
-		Log:            ctrl.Log.WithName("p4target-manager"),
+		Name:       p4targetName,
+		P4Client:   c,
+		MaxNFSlots: maxNFSlots,
+		TargetIPs:  targetIPs,
+		DriverIPs:  driverIPs,
+		BridgeName: "br0",
+		Log:        ctrl.Log.WithName("p4target-manager"),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create p4target manager")

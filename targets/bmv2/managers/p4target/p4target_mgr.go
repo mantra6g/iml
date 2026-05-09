@@ -30,13 +30,13 @@ type NetConfig struct {
 }
 
 type ManagerConfig struct {
-	Name           string
-	TargetIPs      []net.IP
-	DriverIPs      []net.IP
-	MaxNFSlots     int
-	P4Client       p4v1.P4RuntimeClient
-	InOutInterface string
-	Log            logr.Logger
+	Name       string
+	TargetIPs  []net.IP
+	DriverIPs  []net.IP
+	MaxNFSlots int
+	P4Client   p4v1.P4RuntimeClient
+	BridgeName string
+	Log        logr.Logger
 }
 
 type Manager interface {
@@ -50,7 +50,8 @@ type Manager interface {
 	GetTargetIPs() []net.IP
 	GetDriverIPs() []net.IP
 	EnsureNetworkConfiguration(NetConfig) error
-	AllocateNetworkFunctionIP() (net.IP, error)
+	AllocateNetworkFunctionIP() (netip.Addr, error)
+	GetNfCIDR() netip.Prefix
 }
 
 func NewManager(cfg ManagerConfig) (Manager, error) {
@@ -64,14 +65,14 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		return nil, fmt.Errorf("P4Runtime client is required")
 	}
 	return &RealManager{
-		name:           cfg.Name,
-		targetIPs:      cfg.TargetIPs,
-		driverIPs:      cfg.DriverIPs,
-		maxNFSlots:     cfg.MaxNFSlots,
-		p4client:       cfg.P4Client,
-		inOutInterface: cfg.InOutInterface,
-		allocatedIPs:   make(map[netip.Addr]struct{}),
-		log:            cfg.Log,
+		name:         cfg.Name,
+		targetIPs:    cfg.TargetIPs,
+		driverIPs:    cfg.DriverIPs,
+		maxNFSlots:   cfg.MaxNFSlots,
+		p4client:     cfg.P4Client,
+		BridgeName:   cfg.BridgeName,
+		allocatedIPs: make(map[netip.Addr]struct{}),
+		log:          cfg.Log,
 	}, nil
 }
 
@@ -79,18 +80,24 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 var _ Manager = &RealManager{}
 
 type RealManager struct {
-	name           string
-	targetIPs      []net.IP
-	driverIPs      []net.IP
-	maxNFSlots     int
-	p4client       p4v1.P4RuntimeClient
-	inOutInterface string
-	log            logr.Logger
+	name       string
+	targetIPs  []net.IP
+	driverIPs  []net.IP
+	maxNFSlots int
+	p4client   p4v1.P4RuntimeClient
+	BridgeName string
+	log        logr.Logger
 
 	mu           sync.RWMutex
 	cidr         netip.Prefix
 	ipAllocator  *ipam.AddrAllocator
 	allocatedIPs map[netip.Addr]struct{}
+}
+
+func (r *RealManager) GetNfCIDR() netip.Prefix {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cidr
 }
 
 func (r *RealManager) GetName() string { return r.name }
@@ -120,7 +127,7 @@ func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	r.cidr = cidr
 	r.ipAllocator = alloc
 	r.allocatedIPs = make(map[netip.Addr]struct{})
-	if r.inOutInterface != "" {
+	if r.BridgeName != "" {
 		bridgeIP, err := alloc.Next()
 		if err != nil {
 			return fmt.Errorf("failed to allocate bridge IP from %s: %w", cidr, err)
@@ -132,19 +139,19 @@ func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	return nil
 }
 
-func (r *RealManager) AllocateNetworkFunctionIP() (net.IP, error) {
+func (r *RealManager) AllocateNetworkFunctionIP() (netip.Addr, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.ipAllocator == nil {
-		return nil, fmt.Errorf("network not configured: call EnsureNetworkConfiguration first")
+		return netip.Addr{}, fmt.Errorf("network not configured: call EnsureNetworkConfiguration first")
 	}
 	addr, err := r.ipAllocator.Next()
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
 	r.allocatedIPs[addr] = struct{}{}
-	return net.IP(addr.Unmap().AsSlice()), nil
+	return addr, nil
 }
 
 func (r *RealManager) GetCapacity() corev1.ResourceList {
@@ -303,7 +310,7 @@ func (r *RealManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 // in the same subnet as the NF interfaces, and also to ensure that it can act as a kind of
 // gateway for the NFs to forward traffic back to the host.
 func (r *RealManager) configureNFBridge(bridgeIP netip.Addr, nfCIDR netip.Prefix) error {
-	nfBridge, err := netlink.LinkByName(r.inOutInterface)
+	nfBridge, err := netlink.LinkByName(r.BridgeName)
 	if err != nil {
 		return err
 	}
