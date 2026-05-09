@@ -14,7 +14,7 @@ type P4Program struct {
 	P4DeviceConfig []byte // BMv2 JSON device config
 	ProgramName    string
 	P4Info         *p4configv1.P4Info // Parsed P4Info from compilation
-	IP             netip.Addr         // Optional IP for the NF, if applicable
+	IP             netip.Prefix       // Optional IP for the NF, if applicable
 }
 
 // LoadP4ProgramFromFiles loads P4DeviceConfig from file paths

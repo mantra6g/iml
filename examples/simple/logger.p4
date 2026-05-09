@@ -150,7 +150,7 @@ control MyIngress(inout headers hdr,
       hdr.srh.segments_left = hdr.srh.segments_left - 1;
       hdr.outer_ipv6.dst_addr = hdr.segment_list[hdr.srh.segments_left].segment;
     } else {
-      mark_to_drop(stdmeta);
+      drop();
     }
 
     // Change the source and destination MAC addresses
@@ -167,7 +167,7 @@ control MyIngress(inout headers hdr,
   }
 
   apply {
-    if (!hdr.srh.isValid() || !hdr.inner_ipv6.isValid()) {
+    if (!hdr.srh.isValid()) {
       return;
     }
     log();

@@ -179,7 +179,7 @@ control MyIngress(inout headers hdr,
   }
 
   apply {
-    if (!hdr.srh.isValid() || !hdr.inner_ipv6.isValid()) {
+    if (!hdr.srh.isValid()) {
       return;
     }
     log_table.apply();
