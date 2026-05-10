@@ -1,0 +1,52 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: bmv2-target
+    app.kubernetes.io/managed-by: kustomize
+  name: bmv2-driver-role
+rules:
+  - apiGroups:
+      - core.loom.io
+    resources:
+      - networkfunctionconfigs
+      - networkfunctions
+      - p4targets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - core.loom.io
+    resources:
+      - networkfunctionconfigs/status
+      - networkfunctions/status
+      - p4targets/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete

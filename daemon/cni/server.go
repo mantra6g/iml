@@ -190,26 +190,9 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 		return
 	}
 
-	p4target := &corev1alpha1.P4Target{}
-	p4targetKey := types.NamespacedName{
-		Name:      requestData.P4TargetName,
-		Namespace: requestData.P4TargetName,
-	}
-	err = c.Client.Get(context.Background(), p4targetKey, p4target)
-	if apierrors.IsNotFound(err) {
-		logger.Error(err, "P4Target not found", "namespace", requestData.P4TargetName, "name", requestData.P4TargetName)
-		http.Error(response, err.Error(), http.StatusNotFound)
-		return
-	}
+	p4TargetConfig, err := c.Dataplane.ConfigureP4TargetInstance(requestData.P4TargetName, requestData.P4TargetName)
 	if err != nil {
-		logger.Error(err, "failed to get P4Target", "namespace", requestData.P4TargetName, "name", requestData.P4TargetName)
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	p4TargetConfig, err := c.Dataplane.ConfigureP4TargetInstance(p4target, requestData.P4TargetName)
-	if err != nil {
-		logger.Error(err, "failed to configure P4Target", "namespace", requestData.P4TargetName, "name", requestData.P4TargetName)
+		logger.Error(err, "failed to configure P4Target", "name", requestData.P4TargetName)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}

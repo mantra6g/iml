@@ -124,6 +124,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		matchingNFsPerStage = append(matchingNFsPerStage, matchingNFs)
 	}
+	logger.V(1).Info("found matching NFs", "matching NFs", matchingNFsPerStage)
+	//logger.V(1).Info("found matching NFs", "matching NFs", func() [][]client.ObjectKey {
+	//	keys := make([][]client.ObjectKey, len(matchingNFsPerStage))
+	//	for stage := range matchingNFsPerStage {
+	//		keys[stage] = make([]client.ObjectKey, len(matchingNFsPerStage[stage]))
+	//		for matchingNF := range matchingNFsPerStage[stage] {
+	//			keys[stage][matchingNF] = client.ObjectKeyFromObject(matchingNFsPerStage[stage][matchingNF])
+	//		}
+	//	}
+	//	return keys
+	//}())
 
 	// Filter NFs to only use those with assigned p4Targets, ips, and in running phase
 	for stage := range matchingNFsPerStage {
@@ -133,6 +144,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	routes, err := r.calculateSRv6Routes(ctx, &serviceChain, srcApp, dstApp, matchingNFsPerStage)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to calculate SRv6 Routes: %w", err)
+	}
+
+	if len(routes) == 0 {
+		logger.V(1).Info("No available routes to add for this service chain, skipping dataplane configuration")
+		return ctrl.Result{}, nil
 	}
 
 	err = r.Dataplane.AddServiceChainRoutes(&serviceChain, routes)
@@ -149,6 +165,9 @@ func (r *Reconciler) calculateSRv6Routes(ctx context.Context, serviceChain *core
 	logger := logf.FromContext(ctx)
 	segments := make([]net.IP, 0)
 	for _, nfs := range matchingNFs {
+		if len(nfs) == 0 {
+			return nil, nil
+		} // If any stage has no available NFs, we can't create a route
 		parsedIP := net.ParseIP(nfs[0].Status.AssignedIP)
 		if parsedIP == nil {
 			logger.V(1).Error(fmt.Errorf("failed to parse assigned IP for NF"),
@@ -183,6 +202,7 @@ func (r *Reconciler) filterNFs(originalNFs []*corev1alpha1.NetworkFunction) []*c
 		if readyCondition == nil || readyCondition.Status != v1.ConditionTrue {
 			continue
 		}
+		filteredNFs = append(filteredNFs, nf)
 	}
 	return filteredNFs
 }
@@ -230,14 +250,14 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		"spec.to",
 		func(obj client.Object) []string {
 			sc := obj.(*corev1alpha1.ServiceChain)
-			if sc.Spec.From.Name == "" {
+			if sc.Spec.To.Name == "" {
 				return nil
 			}
-			ns := sc.Spec.From.Namespace
+			ns := sc.Spec.To.Namespace
 			if ns == "" {
 				ns = sc.Namespace
 			}
-			return []string{ns + "/" + sc.Spec.From.Name}
+			return []string{ns + "/" + sc.Spec.To.Name}
 		},
 	); err != nil {
 		return err
@@ -262,7 +282,15 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.mapNFsToRequests),
 			builder.WithPredicates(predicate.Funcs{
 				CreateFunc: func(e event.TypedCreateEvent[client.Object]) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool { return false }, // NFs shouldn't be updated
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+						return true
+					}
+					oldNF := e.ObjectOld.(*corev1alpha1.NetworkFunction)
+					newNF := e.ObjectNew.(*corev1alpha1.NetworkFunction)
+					// Reconcile whenever the status changes
+					return !reflect.DeepEqual(oldNF.Status, newNF.Status)
+				},
 				DeleteFunc: func(e event.TypedDeleteEvent[client.Object]) bool { return true },
 			})).
 		Watches(&corev1alpha1.P4Target{},
@@ -335,7 +363,9 @@ func (r *Reconciler) reconcileAllChains(ctx context.Context, _ client.Object) []
 	}
 	requests := make([]reconcile.Request, len(serviceChains.Items))
 	for i := range serviceChains.Items {
-		requests[i] = reconcile.Request{}
+		requests[i] = reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&serviceChains.Items[i]),
+		}
 	}
 	return requests
 }

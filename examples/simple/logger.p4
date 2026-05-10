@@ -88,7 +88,7 @@ parser MyParser(packet_in packet,
 	state start {
 		packet.extract(hdr.ethernet);
 		transition select(hdr.ethernet.ether_type) {
-			IPV6_ETHERTYPE: parse_outer_ipv6;
+			ETHERTYPE_IPV6: parse_outer_ipv6;
 			default: accept;
 		}
 	}
@@ -108,7 +108,7 @@ parser MyParser(packet_in packet,
 
 	state parse_srh_segments {
 		packet.extract(hdr.segment_list.next);
-		transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.last_entry) {
+		transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.first_segment) {
 			true: parse_srh_segments; // Loop to extract all segments
 			false: parse_inner_header;
 		}
@@ -150,7 +150,7 @@ control MyIngress(inout headers hdr,
       hdr.srh.segments_left = hdr.srh.segments_left - 1;
       hdr.outer_ipv6.dst_addr = hdr.segment_list[hdr.srh.segments_left].segment;
     } else {
-      mark_to_drop(stdmeta);
+      drop();
     }
 
     // Change the source and destination MAC addresses
@@ -167,7 +167,7 @@ control MyIngress(inout headers hdr,
   }
 
   apply {
-    if (!hdr.srh.isValid() || !hdr.inner_ipv6.isValid()) {
+    if (!hdr.srh.isValid()) {
       return;
     }
     log();

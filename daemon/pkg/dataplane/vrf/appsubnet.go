@@ -18,10 +18,14 @@ type AppSubnet struct {
 	GatewayIPs    netutils.DualStackAddress
 	Bridge        *netlink.Bridge
 	Vrf           *netlink.Vrf
+	VethBridgeVRF *netlink.Veth
 	IPv6Allocator *dataplane.IPv6Allocator
 	IPv4Allocator *dataplane.IPv4Allocator
+	Tunnel        string
 	Log           logr.Logger
 }
+
+var _ Subnet = &AppSubnet{}
 
 func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tableID uint32) (subnet *AppSubnet, err error) {
 	if ip6Net == nil && ip4Net == nil {
@@ -102,15 +106,48 @@ func NewAppSubnet(logger logr.Logger, ip4Net *net.IPNet, ip6Net *net.IPNet, tabl
 		return nil, fmt.Errorf("failed to add bridge %s: %w", bridgeName, err)
 	}
 	subnet.Bridge = bridge
-
-	if err = netlink.AddrAdd(bridge, &netlink.Addr{IPNet: gatewayIPv6}); err != nil {
-		return nil, fmt.Errorf("failed to add IPv6 address to bridge %s: %w", bridge.Name, err)
-	}
-	if err = netlink.AddrAdd(bridge, &netlink.Addr{IPNet: gatewayIPv4}); err != nil {
-		return nil, fmt.Errorf("failed to add IPv4 address to bridge %s: %w", bridge.Name, err)
-	}
 	if err = netlink.LinkSetUp(bridge); err != nil {
 		return nil, fmt.Errorf("failed to set up bridge %s: %w", bridgeName, err)
+	}
+
+	vethFromBridgeToVrfName, err := vrfutil.GenerateRandomName("vethb", 5)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate vethb name: %w", err)
+	}
+	vethFromVrfToBridgeName, err := vrfutil.GenerateRandomName("vethv", 5)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate vethv name: %w", err)
+	}
+	vethFromBridgeToVrf := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:        vethFromBridgeToVrfName,
+			MasterIndex: bridge.Attrs().Index,
+		},
+		PeerName: vethFromVrfToBridgeName,
+	}
+	if err := netlink.LinkAdd(vethFromBridgeToVrf); err != nil {
+		return nil, fmt.Errorf("failed to add veth from bridge to vnf %s: %w", vethFromBridgeToVrf.Attrs().Name, err)
+	}
+	subnet.VethBridgeVRF = vethFromBridgeToVrf
+	if err := netlink.LinkSetUp(vethFromBridgeToVrf); err != nil {
+		return nil, fmt.Errorf("failed to set up veth from bridge to vnf %s: %w", vethFromBridgeToVrf.Attrs().Name, err)
+	}
+
+	vethFromVrfToBridge, err := netlink.LinkByName(vethFromBridgeToVrf.PeerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get veth from vrf to bridge %s: %w", vethFromBridgeToVrf.PeerName, err)
+	}
+	if err := netlink.LinkSetMaster(vethFromVrfToBridge, appVrf); err != nil {
+		return nil, fmt.Errorf("failed to set master for veth from vrf to bridge %s: %w", vethFromBridgeToVrf.PeerName, err)
+	}
+	if err = netlink.AddrAdd(vethFromVrfToBridge, &netlink.Addr{IPNet: gatewayIPv6}); err != nil {
+		return nil, fmt.Errorf("failed to add IPv6 address to bridge %s: %w", bridge.Name, err)
+	}
+	if err = netlink.AddrAdd(vethFromVrfToBridge, &netlink.Addr{IPNet: gatewayIPv4}); err != nil {
+		return nil, fmt.Errorf("failed to add IPv4 address to bridge %s: %w", bridge.Name, err)
+	}
+	if err := netlink.LinkSetUp(vethFromVrfToBridge); err != nil {
+		return nil, fmt.Errorf("failed to set up veth from vrf to bridge %s: %w", vethFromBridgeToVrf.PeerName, err)
 	}
 	return
 }
@@ -120,26 +157,32 @@ func (s *AppSubnet) Teardown() {
 		return
 	}
 	logger := s.Log
-	//if s.VethBridgeVRF != nil {
-	//	if err := netlink.LinkDel(s.VethBridgeVRF); err != nil {
-	//		logger.Error(err, "failed to delete veth", "name", s.VethBridgeVRF.Attrs().Name)
-	//	}
-	//}
+	if s.VethBridgeVRF != nil {
+		if err := netlink.LinkDel(s.VethBridgeVRF); err != nil {
+			logger.Error(err, "failed to delete veth", "name", s.VethBridgeVRF.Attrs().Name)
+		}
+	}
 	if s.Bridge != nil {
 		if err := netlink.LinkDel(s.Bridge); err != nil {
 			logger.Error(err, "failed to delete bridge", "name", s.Bridge.Attrs().Name)
 		}
 	}
-	//if s.Tunnel != nil {
-	//	if err := netlink.LinkDel(s.Tunnel); err != nil {
-	//		logger.Error(err, "failed to delete tunnel", "name", s.Tunnel.Attrs().Name)
-	//	}
-	//}
+	if s.Tunnel != "" {
+		if tunnel, err := netlink.LinkByName(s.Tunnel); err == nil {
+			if err := netlink.LinkDel(tunnel); err != nil {
+				logger.Error(err, "failed to delete tunnel", "name", s.Tunnel)
+			}
+		}
+	}
 	if s.Vrf != nil {
 		if err := netlink.LinkDel(s.Vrf); err != nil {
 			logger.Error(err, "failed to delete VRF", "name", s.Vrf.Attrs().Name)
 		}
 	}
+}
+
+func (s *AppSubnet) SetTunnel(tunnel string) {
+	s.Tunnel = tunnel
 }
 
 // HasIPsAvailable returns true if there are both IPv4 and IPv6 addresses available for allocation in
@@ -329,20 +372,28 @@ func (s *AppSubnet) AddRoute(dst netutils.DualStackNetwork, gw netutils.DualStac
 	return nil
 }
 
-func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP) error {
+func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, decapSIDv4, decapSIDv6 *net.IPNet) error {
 	if dst.IsEmpty() {
 		return fmt.Errorf("destination's IPv4Net and IPv6Net are both nil")
 	}
+	if s.Tunnel == "" {
+		return fmt.Errorf("Cannot add an SRv6 route, as the tunnel is not set")
+	}
+	tun, err := netlink.LinkByName(s.Tunnel)
+	if err != nil {
+		return fmt.Errorf("failed to get tunnel %s: %w", s.Tunnel, err)
+	}
 	if dst.IPv4Net != nil {
 		// ip route add <dstNet4> vrf <subnet.Vrf> encap seg6 mode encap segs <sids> dev <subnet.tunnel>
+		ipv4Sids := reversed(append(sids, decapSIDv4.IP))
 		route := &netlink.Route{
 			Dst:   dst.IPv4Net,
 			Table: int(s.Vrf.Table),
 			Encap: &netlink.SEG6Encap{
 				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
-				Segments: sids,
+				Segments: ipv4Sids,
 			},
-			LinkIndex: s.Bridge.Attrs().Index,
+			LinkIndex: tun.Attrs().Index,
 		}
 		if err := netlink.RouteAdd(route); err != nil {
 			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv4Net.String(), sids, err)
@@ -350,14 +401,15 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP) e
 	}
 	if dst.IPv6Net != nil {
 		// same as above but in IPv6
+		ipv6Sids := reversed(append(sids, decapSIDv6.IP))
 		route := &netlink.Route{
 			Dst:   dst.IPv6Net,
 			Table: int(s.Vrf.Table),
 			Encap: &netlink.SEG6Encap{
 				Mode:     nl.SEG6_IPTUN_MODE_ENCAP,
-				Segments: sids,
+				Segments: ipv6Sids,
 			},
-			LinkIndex: s.Bridge.Attrs().Index,
+			LinkIndex: tun.Attrs().Index,
 		}
 		if err := netlink.RouteAdd(route); err != nil {
 			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv6Net.String(), sids, err)
@@ -414,4 +466,12 @@ func (s *AppSubnet) GetStack() StackType {
 
 func (s *AppSubnet) GetVRFName() string {
 	return s.Vrf.Name
+}
+
+func reversed[T any](slice []T) []T {
+	result := make([]T, len(slice))
+	for i := range slice {
+		result[len(slice)-1-i] = slice[i]
+	}
+	return result
 }

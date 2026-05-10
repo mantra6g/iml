@@ -1,0 +1,106 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bmv2-driver
+rules:
+- apiGroups: ["core.loom.io", "infra.loom.io", "scheduling.loom.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bmv2-driver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bmv2-driver
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bmv2-driver
+spec:
+  selector:
+    app: bmv2-driver
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bmv2-test
+  labels:
+    app: bmv2-driver
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {
+          "name": "loom-cni",
+          "namespace": "loom-system",
+          "cni-args": {
+            "app_type": "p4target",
+            "target_name": "web-client",
+            "nf_interfaces": 1
+          }
+        }
+      ]
+spec:
+  restartPolicy: OnFailure
+  containers:
+  - name: bmv2-driver
+    image: mantra6g/bmv2-driver:latest
+    imagePullPolicy: Never
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]
+    args: ["--data-iface=iml0"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    env:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  - name: bmv2-switch
+    image: p4lang/behavioral-model:latest
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      capabilities:
+        add: ["NET_RAW"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    command: ["simple_switch_grpc"]
+    args:
+      - "--no-p4"
+      - "--log-console"
+      - "-i"
+      - "0@nf0"
+      - "--"
+      - "--grpc-server-addr=0.0.0.0:9559"
+      - "--cpu-port=255"

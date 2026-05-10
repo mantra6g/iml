@@ -38,10 +38,10 @@ type IMLConfigMap struct {
 
 type GlobalConfig struct {
 	IMLConfigMap
-	PodCIDR  netutils.DualStackNetwork
-	DecapSID *net.IPNet
-	NodeID   types.UID
-	NodeName string
+	PodCIDR    netutils.DualStackNetwork
+	TunnelCIDR netutils.DualStackNetwork
+	NodeID     types.UID
+	NodeName   string
 }
 
 // Singleton instance of GlobalConfig
@@ -76,7 +76,7 @@ func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 		}
 	}
 	// If the loomNode exists but no CIDRs were assigned yet, wait until they are assigned
-	if len(loomNode.Spec.NodeCIDRs) == 0 {
+	if len(loomNode.Spec.NodeCIDRs) == 0 || len(loomNode.Spec.TunnelCIDRs) == 0 {
 		err = waitForCIDRs(ctx, k8sClient, hostname)
 		if err != nil {
 			return nil, fmt.Errorf("error waiting for CIDRs to be created: %w", err)
@@ -86,9 +86,14 @@ func SetUpNode(k8sClient client.Client) (*GlobalConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing podCIDRs: %w", err)
 	}
+	tunnelCIDR, err := netutils.ParseDualStackNetworkFromStrings(loomNode.Spec.TunnelCIDRs)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing tunnelCIDRs: %w", err)
+	}
 	globalConfig = &GlobalConfig{
 		IMLConfigMap: *configMap,
 		PodCIDR:      podCIDR,
+		TunnelCIDR:   tunnelCIDR,
 		NodeID:       loomNode.UID,
 		NodeName:     hostname,
 	}
@@ -155,7 +160,7 @@ func waitForCIDRs(ctx context.Context, k8sClient client.Client, nodeName string)
 		if errors.IsNotFound(err) {
 			return false, err // Resource was deleted, stop retrying and return error
 		}
-		if len(loomNode.Spec.NodeCIDRs) == 0 {
+		if len(loomNode.Spec.NodeCIDRs) == 0 || len(loomNode.Spec.TunnelCIDRs) == 0 {
 			return false, nil
 		}
 		return true, nil // stop retrying

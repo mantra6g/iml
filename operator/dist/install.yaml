@@ -225,6 +225,10 @@ spec:
                 items:
                   type: string
                 type: array
+              tunnelCIDRs:
+                items:
+                  type: string
+                type: array
             type: object
           status:
             description: status defines the observed state of LoomNode
@@ -4881,7 +4885,7 @@ spec:
     - targets
     - target
     singular: p4target
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
@@ -5151,6 +5155,15 @@ kind: ServiceAccount
 metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: bmv2-target
+  name: loom-bmv2-driver
+  namespace: loom-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: loom-operator
   name: loom-controller-manager
   namespace: loom-system
@@ -5195,6 +5208,59 @@ rules:
   verbs:
   - create
   - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: bmv2-target
+  name: loom-bmv2-driver-role
+rules:
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs
+  - networkfunctions
+  - p4targets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - core.loom.io
+  resources:
+  - networkfunctionconfigs/status
+  - networkfunctions/status
+  - p4targets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -6010,6 +6076,22 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: bmv2-target
+  name: loom-bmv2-driver-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-bmv2-driver-role
+subjects:
+- kind: ServiceAccount
+  name: loom-bmv2-driver
+  namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: loom-operator
   name: loom-manager-rolebinding
 roleRef:
@@ -6040,6 +6122,10 @@ data:
   cluster-pool-ipv4-mask-size: "24"
   cluster-pool-ipv6-cidr: fd00::/16
   cluster-pool-ipv6-mask-size: "64"
+  tunnel-pool-ipv4-cidr: 10.124.0.0/16
+  tunnel-pool-ipv4-mask-size: "24"
+  tunnel-pool-ipv6-cidr: fd01::/16
+  tunnel-pool-ipv6-mask-size: "64"
 kind: ConfigMap
 metadata:
   name: loom-iml-config
@@ -6156,10 +6242,10 @@ spec:
         resources:
           limits:
             cpu: 500m
-            memory: 128Mi
+            memory: 512Mi
           requests:
             cpu: 10m
-            memory: 64Mi
+            memory: 256Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

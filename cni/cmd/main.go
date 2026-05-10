@@ -20,6 +20,12 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+const (
+	// NetworkFunctionBridge is the name of the bridge that connects the main iml interface (iml0)
+	// with the nf interfaces (nf0, nf1, ...).
+	NetworkFunctionBridge = "br0"
+)
+
 func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 	logger.InfoLogger().Printf("ADD called for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 	logger.DebugLogger().Printf("CNI Args: %+v\n", cniArgs)
@@ -55,7 +61,7 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 		if err != nil {
 			logger.ErrorLogger().Printf("Failed to enable SRv6 in namespace: %v\n", err)
 		}
-		result, err = DeployNetworkConfiguration(netConfig, cniArgs)
+		result, err = DeployNetworkConfiguration(netConfig, cniArgs, &cniConf)
 		if err != nil {
 			logger.ErrorLogger().Printf("Failed to deploy programmable target: %v\n", err)
 			return fmt.Errorf("failed to deploy programmable target: %w", err)
@@ -78,7 +84,7 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 			logger.ErrorLogger().Printf("Failed to get network config from IML: %v\n", err)
 			return fmt.Errorf("failed to get network config from IML: %w", err)
 		}
-		result, err = DeployNetworkConfiguration(netConfig, cniArgs)
+		result, err = DeployNetworkConfiguration(netConfig, cniArgs, &cniConf)
 		if err != nil {
 			logger.ErrorLogger().Printf("Failed to deploy application function: %v\n", err)
 			return fmt.Errorf("failed to deploy application function: %w", err)
@@ -91,7 +97,7 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 	return types.PrintResult(result, cniConf.CNIVersion)
 }
 
-func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.CmdArgs) (types.Result, error) {
+func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.CmdArgs, cniConf *types2.IMLCNIConfig) (types.Result, error) {
 	logger.DebugLogger().Printf("Deploying application with config: %+v\n", netConfig)
 
 	if netConfig.IPNets.IsEmpty() {
@@ -160,6 +166,11 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 			if err = netlink.AddrAdd(imlInterface, &netlink.Addr{IPNet: netConfig.IPNets.IPv6Net}); err != nil {
 				return fmt.Errorf("failed to add IPv6 address to container interface %s: %w", imlInterface.Name, err)
 			}
+		}
+		// Add the nf interfaces
+		err = setupNFInterfaces(cniConf.Args.CNI.NFInterfaces)
+		if err != nil {
+			return fmt.Errorf("failed to setup NF interfaces: %w", err)
 		}
 
 		// Create route to the destination network
@@ -241,6 +252,80 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 	return result, nil
 }
 
+func setupNFInterfaces(interfaceAmount uint8) error {
+	if interfaceAmount == 0 {
+		return nil
+	}
+	nfVrf := &netlink.Vrf{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: "nfvrf",
+		},
+		Table: 1000,
+	}
+	err := netlink.LinkAdd(nfVrf)
+	if err != nil {
+		return fmt.Errorf("failed to add nfvrf: %w", err)
+	}
+	err = netlink.LinkSetUp(nfVrf)
+	if err != nil {
+		return fmt.Errorf("failed to set nfvrf up: %w", err)
+	}
+
+	nfBridge := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: NetworkFunctionBridge,
+		},
+	}
+	err = netlink.LinkAdd(nfBridge)
+	if err != nil {
+		return fmt.Errorf("failed to add bridge %s: %w", NetworkFunctionBridge, err)
+	}
+	err = netlink.LinkSetUp(nfBridge)
+	if err != nil {
+		return fmt.Errorf("failed to bring bridge %s up: %w", NetworkFunctionBridge, err)
+	}
+	nfBridgeLink, err := netlink.LinkByName(NetworkFunctionBridge)
+	if err != nil {
+		return fmt.Errorf("failed to get bridge %s: %w", NetworkFunctionBridge, err)
+	}
+
+	for i := range interfaceAmount {
+		nfIface := &netlink.Veth{
+			LinkAttrs: netlink.LinkAttrs{
+				Name: fmt.Sprintf("nf%d-pipe", i),
+				MTU:  1500,
+			},
+			PeerName: fmt.Sprintf("nf%d", i),
+			PeerMTU:  1500,
+		}
+		err = netlink.LinkAdd(nfIface)
+		if err != nil {
+			return fmt.Errorf("failed to create nf interface %s: %w", nfIface.Name, err)
+		}
+		err = netlink.LinkSetMaster(nfIface, nfBridgeLink)
+		if err != nil {
+			return fmt.Errorf("failed to set nf interface %s master to bridge: %w", nfIface.Name, err)
+		}
+		err = netlink.LinkSetUp(nfIface)
+		if err != nil {
+			return fmt.Errorf("failed to set nf interface %s up: %w", nfIface.Name, err)
+		}
+		peerIface, err := netlink.LinkByName(nfIface.PeerName)
+		if err != nil {
+			return fmt.Errorf("failed to get peer interface %s: %w", nfIface.PeerName, err)
+		}
+		err = netlink.LinkSetMaster(peerIface, nfVrf)
+		if err != nil {
+			return fmt.Errorf("failed to set peer interface %s master to vrf: %w", nfIface.PeerName, err)
+		}
+		err = netlink.LinkSetUp(peerIface)
+		if err != nil {
+			return fmt.Errorf("failed to set nf interface %s up: %w", nfIface.PeerName, err)
+		}
+	}
+	return nil
+}
+
 func getAppConfigFromIML(payload types2.AppInstanceConfigRequest) (*types2.NetworkConfig, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -274,7 +359,7 @@ func getP4TargetConfigFromIML(configRequest types2.ContainerizedP4TargetConfigRe
 	}
 
 	resp, err := http.Post(
-		"http://localhost:7623/api/v1/cni/vnf/register",
+		"http://localhost:7623/api/v1/cni/p4target/register",
 		"application/json", bytes.NewBuffer(data),
 	)
 	if err != nil {

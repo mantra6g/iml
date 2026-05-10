@@ -3,14 +3,12 @@ package util
 import (
 	"encoding/json"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/operator/pkg/util/ptr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
@@ -32,6 +30,24 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container := &containers[containerIndex]
 	container.Name = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_NAME
 	container.Image = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_IMAGE
+	container.ImagePullPolicy = corev1.PullIfNotPresent
+	if container.SecurityContext == nil {
+		container.SecurityContext = &corev1.SecurityContext{}
+	}
+	if container.SecurityContext.Capabilities == nil {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{}
+	}
+	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
+	container.Command = []string{"simple_switch_grpc"}
+	container.Args = []string{
+		"--no-p4",
+		"--log-console",
+		"-i",
+		"0@nf0",
+		"--",
+		"--grpc-server-addr=0.0.0.0:9559",
+		"--cpu-port=255",
+	}
 	return containers
 }
 
@@ -54,34 +70,86 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container := &containers[containerIndex]
 	container.Name = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_NAME
 	container.Image = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_IMAGE
-	if container.Ports == nil {
-		container.Ports = []corev1.ContainerPort{}
+	container.ImagePullPolicy = corev1.PullIfNotPresent
+	if container.SecurityContext == nil {
+		container.SecurityContext = &corev1.SecurityContext{}
 	}
-	containerPortExists := false
-	for i, port := range container.Ports {
-		if port.Name == "health" {
-			container.Ports[i].ContainerPort = infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT
-			containerPortExists = true
-			break
+	if container.SecurityContext.Capabilities == nil {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{}
+	}
+	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+	container.Args = []string{
+		"--p4target-name", bmv2Target.Name,
+	}
+	container.Env = EnsureDriverEnvVars(bmv2Target, container.Env)
+	return containers
+}
+
+func EnsureDriverEnvVars(bmv2Target *infrav1alpha1.BMv2Target, existing []corev1.EnvVar) []corev1.EnvVar {
+	if existing == nil {
+		existing = []corev1.EnvVar{}
+	}
+	newEnvVars := make([]corev1.EnvVar, len(existing))
+	copy(newEnvVars, existing)
+	newEnvVars = EnsurePodNameEnvVar(newEnvVars)
+	newEnvVars = EnsurePodNamespaceEnvVar(newEnvVars)
+	return newEnvVars
+}
+
+func EnsurePodNameEnvVar(existing []corev1.EnvVar) []corev1.EnvVar {
+	var foundEnvVar *corev1.EnvVar
+	for i := range existing {
+		if existing[i].Name == "POD_NAME" {
+			foundEnvVar = &existing[i]
 		}
 	}
-	if !containerPortExists {
-		container.Ports = append(container.Ports, corev1.ContainerPort{
-			Name:          "health",
-			ContainerPort: infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT,
+	if foundEnvVar == nil {
+		return append(existing, corev1.EnvVar{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
 		})
 	}
-	if container.ReadinessProbe == nil {
-		container.ReadinessProbe = &corev1.Probe{}
+	foundEnvVar.Value = ""
+	if foundEnvVar.ValueFrom == nil {
+		foundEnvVar.ValueFrom = &corev1.EnvVarSource{}
 	}
-	container.ReadinessProbe.ProbeHandler.HTTPGet = &corev1.HTTPGetAction{
-		Path: infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PATH,
-		Port: intstr.FromInt32(infrav1alpha1.BMV2_CONTROLPLANE_READY_PROBE_PORT),
+	if foundEnvVar.ValueFrom.FieldRef == nil {
+		foundEnvVar.ValueFrom.FieldRef = &corev1.ObjectFieldSelector{}
 	}
-	container.ReadinessProbe.InitialDelaySeconds = 5
-	container.ReadinessProbe.PeriodSeconds = 5
+	foundEnvVar.ValueFrom.FieldRef.FieldPath = "metadata.name"
+	return existing
+}
 
-	return containers
+func EnsurePodNamespaceEnvVar(existing []corev1.EnvVar) []corev1.EnvVar {
+	var foundEnvVar *corev1.EnvVar
+	for i := range existing {
+		if existing[i].Name == "POD_NAMESPACE" {
+			foundEnvVar = &existing[i]
+		}
+	}
+	if foundEnvVar == nil {
+		return append(existing, corev1.EnvVar{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		})
+	}
+	foundEnvVar.Value = ""
+	if foundEnvVar.ValueFrom == nil {
+		foundEnvVar.ValueFrom = &corev1.EnvVarSource{}
+	}
+	if foundEnvVar.ValueFrom.FieldRef == nil {
+		foundEnvVar.ValueFrom.FieldRef = &corev1.ObjectFieldSelector{}
+	}
+	foundEnvVar.ValueFrom.FieldRef.FieldPath = "metadata.namespace"
+	return existing
 }
 
 func EnsureBMv2DeploymentSpec(bmv2Target *infrav1alpha1.BMv2Target,
@@ -115,6 +183,7 @@ func EnsureBMv2PodSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	if spec == nil {
 		spec = &corev1.PodSpec{}
 	}
+	spec.ServiceAccountName = infrav1alpha1.BMV2_DRIVER_SERVICE_ACCOUNT_NAME
 	if spec.Containers == nil {
 		spec.Containers = []corev1.Container{}
 	}
@@ -146,13 +215,15 @@ func EnsureBMv2DeploymentFinalizers(bmv2Target *infrav1alpha1.BMv2Target,
 }
 
 type CNIConfig struct {
-	Name    string  `json:"name"`
-	CNIArgs CNIArgs `json:"cni-args"`
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
+	CNIArgs   CNIArgs `json:"cni-args"`
 }
 
 type CNIArgs struct {
-	AppType    string `json:"app_type"`
-	TargetName string `json:"target_name"`
+	AppType      string `json:"app_type"`
+	TargetName   string `json:"target_name"`
+	NFInterfaces uint8  `json:"nf_interfaces"`
 }
 
 func (c CNIConfig) String() string {
@@ -162,10 +233,12 @@ func (c CNIConfig) String() string {
 
 func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 	return CNIConfig{
-		Name: "iml-cni",
+		Name:      "loom-cni",
+		Namespace: "loom-system",
 		CNIArgs: CNIArgs{
-			AppType:    "p4target",
-			TargetName: bmv2Target.Name,
+			AppType:      "p4target",
+			TargetName:   bmv2Target.Name,
+			NFInterfaces: 1,
 		},
 	}
 }
@@ -242,20 +315,20 @@ func GetBMv2TargetCondition(bmv2Target *infrav1alpha1.BMv2Target,
 }
 
 func CopyBMv2TargetConditions(bmv2Target *infrav1alpha1.BMv2Target) []infrav1alpha1.BMv2TargetCondition {
-	newConditions := make([]infrav1alpha1.BMv2TargetCondition, len(bmv2Target.Status.Conditions))
-	for i := range bmv2Target.Status.Conditions {
-		newConditions = append(newConditions, bmv2Target.Status.Conditions[i])
-	}
+	conditions := bmv2Target.Status.Conditions
+
+	newConditions := make([]infrav1alpha1.BMv2TargetCondition, len(conditions))
+	copy(newConditions, conditions)
+
 	return newConditions
 }
 
 func RemoveBMv2TargetCondition(bmv2Target *infrav1alpha1.BMv2Target,
 	conditionType infrav1alpha1.BMv2TargetConditionType) []infrav1alpha1.BMv2TargetCondition {
 	newConditions := make([]infrav1alpha1.BMv2TargetCondition, 0)
-	conditions := bmv2Target.Status.Conditions
-	for i := range conditions {
-		if conditions[i].Type == conditionType {
-			newConditions = append(conditions[:i], conditions[i+1:]...)
+	for _, cond := range bmv2Target.Status.Conditions {
+		if cond.Type != conditionType {
+			newConditions = append(newConditions, cond)
 		}
 	}
 	return newConditions
