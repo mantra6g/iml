@@ -129,7 +129,7 @@ type ActionConfig struct {
 }
 
 type NamedParameter struct {
-	Value ParametrizedValue `json:",inline"`
+	ParametrizedValue `json:",inline"`
 	// Name of the parameter. This is used to identify the parameter in the action definition.
 	// +required
 	Name string `json:"name"`

@@ -221,8 +221,8 @@ func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 	if nfConfig.Spec.Tables == nil {
 		nfConfig.Spec.Tables = make(map[string]corev1alpha1.TableConfig)
 	}
-	var ipv4Entries = make([]corev1alpha1.TableEntry, len(dummyPodList.Items))
-	var ipv6Entries = make([]corev1alpha1.TableEntry, len(dummyPodList.Items))
+	var ipv4Entries = make([]corev1alpha1.TableEntry, 0, len(dummyPodList.Items))
+	var ipv6Entries = make([]corev1alpha1.TableEntry, 0, len(dummyPodList.Items))
 	for i := range dummyPodList.Items {
 		pod := &dummyPodList.Items[i]
 		podIPv4 := getPodIMLIPv4Addr(pod)
@@ -303,7 +303,7 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 					Name: SetIPv4NextHopAction,
 					Parameters: []corev1alpha1.NamedParameter{{
 						Name: "nhop_ipv4",
-						Value: corev1alpha1.ParametrizedValue{
+						ParametrizedValue: corev1alpha1.ParametrizedValue{
 							IPv4Address: new(podIPv4.String()),
 						},
 					}},
@@ -335,7 +335,7 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 					Name: SetIPv6NextHopAction,
 					Parameters: []corev1alpha1.NamedParameter{{
 						Name: "nhop_ipv6",
-						Value: corev1alpha1.ParametrizedValue{
+						ParametrizedValue: corev1alpha1.ParametrizedValue{
 							IPv6Address: new(podIPv6.String()),
 						},
 					}},
@@ -354,7 +354,7 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 			Name: SetECMPSelectIPv4Action,
 			Parameters: []corev1alpha1.NamedParameter{{
 				Name: "ecmp_count",
-				Value: corev1alpha1.ParametrizedValue{
+				ParametrizedValue: corev1alpha1.ParametrizedValue{
 					Int: new(strconv.Itoa(len(ipv4LbTableEntries))),
 				},
 			}},
@@ -365,7 +365,7 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 			Name: SetECMPSelectIPv6Action,
 			Parameters: []corev1alpha1.NamedParameter{{
 				Name: "ecmp_count",
-				Value: corev1alpha1.ParametrizedValue{
+				ParametrizedValue: corev1alpha1.ParametrizedValue{
 					Int: new(strconv.Itoa(len(ipv6LbTableEntries))),
 				},
 			}},

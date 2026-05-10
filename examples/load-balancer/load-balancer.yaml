@@ -83,7 +83,7 @@ rules:
       - list
       - watch
   - apiGroups:
-      - core.loom.io/v1alpha1
+      - core.loom.io
     resources:
       - networkfunctionconfigs
     verbs:
@@ -144,7 +144,7 @@ spec:
           args: [
             "--config-name", "lb-config",
             "--config-namespace", "default",
-            "--app-label", "web-client",
+            "--app-label", "app",
             "--dummy-app-label-value", "dummy-web-server",
             "--lb-app-label-value", "web-server"
           ]
