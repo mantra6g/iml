@@ -216,6 +216,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 	fullNfAddress := netip.PrefixFrom(funcIP, r.P4TargetManager.GetNfCIDR().Bits())
+	nfHandle := r.NFManager.EnsurePresent(ctx, netfunc, fullNfAddress)
+	status := nfHandle.Status()
+	err = r.updateStatus(netfunc, status, fullNfAddress)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !isDeployed(status) {
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
 
 	var nfConfig *corev1alpha1.NetworkFunctionConfig
 	if netfunc.Spec.ConfigRef != nil {
@@ -226,19 +235,5 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 	}
-	err = r.NFConfigManager.EnsurePresentConfigForNF(ctx, nfConfig, netfunc)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	nfHandle := r.NFManager.EnsurePresent(ctx, netfunc, fullNfAddress)
-	status := nfHandle.Status()
-	err = r.updateStatus(netfunc, status, fullNfAddress)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if !isDeployed(status) {
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.NFConfigManager.EnsurePresentConfigForNF(ctx, nfConfig, netfunc)
 }

@@ -68,7 +68,6 @@ struct metadata_t {
   bit<1> inbound_traffic;
 
   bit<32> ecmp_select; // Metadata field to hold the ECMP selection value for load balancing
-	bit<32> hash_result; // Metadata field to hold the result of the hash calculation for ECMP selection
 	bit<32> flow_index; // Metadata field to hold the index for tracking flows in the register
 }
 
@@ -165,6 +164,10 @@ control MyIngress(inout headers hdr,
 		stdmeta.egress_spec = stdmeta.ingress_port;
 	}
 
+	action mark_to_load_balance() {
+		meta.inbound_traffic = 1;
+	}
+
 	table dummy_pod_ipv6_table {
 		key = {
 			hdr.inner_ipv6.dst_addr: exact;
@@ -189,8 +192,9 @@ control MyIngress(inout headers hdr,
 		default_action = NoAction();
 	}
 
-	action mark_to_load_balance() {
-		meta.inbound_traffic = 1;
+
+	action mark_to_return() {
+		meta.return_traffic = 1;
 	}
 
 	table lb_pod_ipv6_table {
@@ -217,35 +221,65 @@ control MyIngress(inout headers hdr,
 		default_action = NoAction();
 	}
 
-	action mark_to_return() {
-		meta.return_traffic = 1;
+	action set_ecmp_select_ipv4(bit<32> ecmp_count) {
+		// Use the hash result to determine the ECMP selection for load balancing
+		hash(meta.ecmp_select,
+      HashAlgorithm.crc32,
+      32w0,
+      { hdr.inner_ipv4.src_addr,
+        hdr.inner_ipv4.protocol },
+      ecmp_count
+    );
+
+		// Use the hash result to determine the flow index for tracking in the register
+		hash(meta.flow_index,
+      HashAlgorithm.crc32,
+      32w0,
+      { hdr.inner_ipv4.src_addr,
+        hdr.inner_ipv4.protocol },
+      MAX_TRACKED_FLOWS
+    );
+
+		// Store the original destination address in the register for tracking
+		registered_ipv4_flows.write(meta.flow_index, hdr.inner_ipv4.dst_addr);
 	}
 
 	table ecmp_group_ipv4 {
 		actions = {
 			set_ecmp_select_ipv4;
 		}
-		default_action = set_ecmp_select_ipv6(0);
+		default_action = set_ecmp_select_ipv4(0);
 		size = 1;
 	}
 
-	action set_ecmp_select_ipv4(bit<32> ecmp_count) {
-		hash(meta.hash_result,
-			HashAlgorithm.crc32,
-			32w0,
-			{ hdr.inner_ipv4.src_addr,
-				hdr.inner_ipv4.protocol }
-		);
+	action set_ecmp_select_ipv6(bit<32> ecmp_count) {
+    // Use the hash result to determine the ECMP selection for load balancing
+    hash(meta.ecmp_select,
+      HashAlgorithm.crc32,
+      32w0,
+      { hdr.inner_ipv6.src_addr[31:0],
+        hdr.inner_ipv6.src_addr[63:32],
+        hdr.inner_ipv6.src_addr[95:64],
+        hdr.inner_ipv6.src_addr[127:96],
+        hdr.inner_ipv6.next_hdr },
+      ecmp_count
+    );
 
-		// Use the hash result to determine the ECMP selection for load balancing
-		meta.ecmp_select = meta.hash_result % ecmp_count;
+    // Use the hash result to determine the flow index for tracking in the register
+    hash(meta.flow_index,
+      HashAlgorithm.crc32,
+      32w0,
+      { hdr.inner_ipv6.src_addr[31:0],
+        hdr.inner_ipv6.src_addr[63:32],
+        hdr.inner_ipv6.src_addr[95:64],
+        hdr.inner_ipv6.src_addr[127:96],
+        hdr.inner_ipv6.next_hdr },
+      MAX_TRACKED_FLOWS
+    );
 
-		// Use the hash result to determine the flow index for tracking in the register
-		meta.flow_index = meta.hash_result % MAX_TRACKED_FLOWS;
-
-		// Store the original destination address in the register for tracking
-		registered_ipv4_flows.write(meta.flow_index, hdr.inner_ipv4.dst_addr);
-	}
+    // Store the original destination address in the register for tracking
+    registered_ipv6_flows.write(meta.flow_index, hdr.inner_ipv6.dst_addr);
+  }
 
 	table ecmp_group_ipv6 {
 		actions = {
@@ -255,25 +289,8 @@ control MyIngress(inout headers hdr,
 		size = 1;
 	}
 
-	action set_ecmp_select_ipv6(bit<32> ecmp_count) {
-		hash(meta.hash_result,
-			HashAlgorithm.crc32,
-			32w0,
-			{ hdr.inner_ipv6.src_addr[31:0],
-				hdr.inner_ipv6.src_addr[63:32],
-				hdr.inner_ipv6.src_addr[95:64],
-				hdr.inner_ipv6.src_addr[127:96],
-				hdr.inner_ipv6.next_hdr }
-		);
-
-		// Use the hash result to determine the ECMP selection for load balancing
-		meta.ecmp_select = meta.hash_result % ecmp_count;
-
-		// Use the hash result to determine the flow index for tracking in the register
-		meta.flow_index = meta.hash_result % MAX_TRACKED_FLOWS;
-
-		// Store the original destination address in the register for tracking
-		registered_ipv6_flows.write(meta.flow_index, hdr.inner_ipv6.dst_addr);
+	action set_nhop_ipv4(bit<32> nhop_ipv4) {
+		hdr.inner_ipv4.dst_addr = nhop_ipv4;
 	}
 
 	table ecmp_nhop_ipv4 {
@@ -287,8 +304,8 @@ control MyIngress(inout headers hdr,
 		size = 2;
 	}
 
-	action set_nhop_ipv4(bit<32> nhop_ipv4) {
-		hdr.inner_ipv4.dst_addr = nhop_ipv4;
+	action set_nhop_ipv6(bit<128> nhop_ipv6) {
+		hdr.inner_ipv6.dst_addr = nhop_ipv6;
 	}
 
 	table ecmp_nhop_ipv6 {
@@ -302,38 +319,32 @@ control MyIngress(inout headers hdr,
 		size = 2;
 	}
 
-	action set_nhop_ipv6(bit<128> nhop_ipv6) {
-		hdr.inner_ipv6.dst_addr = nhop_ipv6;
-	}
-
 	action restore_ipv4_dst_addr() {
-		hash(meta.hash_result,
+    // Use the hash result to determine the flow index for tracking in the register
+		hash(meta.flow_index,
 			HashAlgorithm.crc32,
 			32w0,
 			{ hdr.inner_ipv4.dst_addr,
-				hdr.inner_ipv4.protocol }
+				hdr.inner_ipv4.protocol },
+      MAX_TRACKED_FLOWS
 		);
-
-		// Use the hash result to determine the flow index for tracking in the register
-		meta.flow_index = meta.hash_result % MAX_TRACKED_FLOWS;
 
 		// Replace the source address with the original destination address stored in the register for return traffic
 		registered_ipv4_flows.read(hdr.inner_ipv4.src_addr, meta.flow_index);
 	}
 
 	action restore_ipv6_dst_addr() {
-		hash(meta.hash_result,
+    // Use the hash result to determine the flow index for tracking in the register
+    hash(meta.flow_index,
 			HashAlgorithm.crc32,
 			32w0,
 			{ hdr.inner_ipv6.dst_addr[31:0],
 				hdr.inner_ipv6.dst_addr[63:32],
 				hdr.inner_ipv6.dst_addr[95:64],
 				hdr.inner_ipv6.dst_addr[127:96],
-				hdr.inner_ipv6.next_hdr }
+				hdr.inner_ipv6.next_hdr },
+      MAX_TRACKED_FLOWS
 		);
-
-		// Use the hash result to determine the flow index for tracking in the register
-		meta.flow_index = meta.hash_result % MAX_TRACKED_FLOWS;
 
 		// Replace the source address with the original destination address stored in the register for return traffic
 		registered_ipv6_flows.read(hdr.inner_ipv6.src_addr, meta.flow_index);
@@ -358,17 +369,17 @@ control MyIngress(inout headers hdr,
 			lb_pod_ipv4_table.apply(); // Table to mark return traffic based on source address of inner IPv4 header
 		}
 
-		if (meta.return_traffic && meta.inbound_traffic) {
+		if (meta.return_traffic == 1 && meta.inbound_traffic == 1) {
 			drop(); // If the packet is marked as both return and inbound traffic, drop it to avoid loops
 			return;
 		}
 
-		if (!meta.return_traffic && !meta.inbound_traffic) {
+		if (meta.return_traffic != 1 && meta.inbound_traffic != 1) {
 			drop(); // If the packet is not marked as either return or inbound traffic, drop it as it's not relevant
 			return;
 		}
 
-		if (meta.inbound_traffic) {
+		if (meta.inbound_traffic == 1) {
 			if (hdr.inner_ipv6.isValid()) {
 				ecmp_group_ipv6.apply(); // Table to select ECMP path for load balanced traffic based on inner IPv6 header
 				ecmp_nhop_ipv6.apply(); // Table to set the next hop for load balanced traffic based on ECMP selection
@@ -376,7 +387,7 @@ control MyIngress(inout headers hdr,
 				ecmp_group_ipv4.apply(); // Table to select ECMP path for load balanced traffic based on inner IPv4 header
 				ecmp_nhop_ipv4.apply(); // Table to set the next hop for load balanced traffic based on ECMP selection
 			}
-		} else if (meta.return_traffic) {
+		} else if (meta.return_traffic == 1) {
 			if (hdr.inner_ipv6.isValid()) {
 				restore_ipv6_dst_addr(); // Action to restore the original destination address for return traffic based on inner IPv6 header
 			} else {
