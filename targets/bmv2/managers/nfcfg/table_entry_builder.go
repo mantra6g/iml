@@ -186,7 +186,7 @@ func buildAction(action corev1alpha1.ActionConfig, actions []api.ActionMetadata)
 		if !ok {
 			return nil, fmt.Errorf("param %q not found in action %q", p.Name, action.Name)
 		}
-		val, err := encodeValue(p.Value, paramMeta.Bitwidth)
+		val, err := encodeValue(p.ParametrizedValue, paramMeta.Bitwidth)
 		if err != nil {
 			return nil, fmt.Errorf("param %q: %w", p.Name, err)
 		}
