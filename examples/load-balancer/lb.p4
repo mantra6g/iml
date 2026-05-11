@@ -249,7 +249,7 @@ control MyIngress(inout headers hdr,
 			set_ecmp_select_ipv4;
 		}
 		default_action = set_ecmp_select_ipv4(0);
-		size = 1;
+		size = 1000;
 	}
 
 	action set_ecmp_select_ipv6(bit<32> ecmp_count) {
@@ -286,7 +286,7 @@ control MyIngress(inout headers hdr,
 			set_ecmp_select_ipv6;
 		}
 		default_action = set_ecmp_select_ipv6(0);
-		size = 1;
+		size = 1000;
 	}
 
 	action set_nhop_ipv4(bit<32> nhop_ipv4) {
@@ -301,7 +301,7 @@ control MyIngress(inout headers hdr,
 			drop;
 			set_nhop_ipv4;
 		}
-		size = 2;
+		size = 1000;
 	}
 
 	action set_nhop_ipv6(bit<128> nhop_ipv6) {
@@ -316,7 +316,7 @@ control MyIngress(inout headers hdr,
 			drop;
 			set_nhop_ipv6;
 		}
-		size = 2;
+		size = 1000;
 	}
 
 	action restore_ipv4_dst_addr() {

@@ -110,7 +110,7 @@ ENTRYPOINT ["/manager"]
 # BMv2 driver image
 # p4lang/p4c:latest provides p4c at runtime for compiling .p4 source files.
 # libboost libraries are required by p4c's runtime dependencies.
-FROM p4lang/p4c:latest AS bmv2
+FROM p4lang/p4c:1.2.5.13 AS bmv2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-iostreams-dev \
     libboost-graph-dev \
