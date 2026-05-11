@@ -56,7 +56,7 @@ spec:
     name: web-client
     namespace: default
   to:
-    name: web-server
+    name: dummy-web-server
     namespace: default
   functions:
     - matchLabels:
@@ -155,6 +155,7 @@ metadata:
   name: web-client
   namespace: default
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: web-client
