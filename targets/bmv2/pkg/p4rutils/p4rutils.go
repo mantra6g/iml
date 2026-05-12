@@ -1,4 +1,4 @@
-package nfcfg
+package p4rutils
 
 import (
 	"encoding/hex"
@@ -9,13 +9,14 @@ import (
 	"strings"
 
 	"bmv2-driver/api"
+
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 )
 
-// buildTableEntries translates a NetworkFunctionConfig table map into P4Runtime
+// BuildTableEntries translates a NetworkFunctionConfig table map into P4Runtime
 // TableEntry objects using the table/field/action metadata from the loaded P4 program.
-func buildTableEntries(tables map[string]corev1alpha1.TableConfig, tableMetas []api.TableMetadata) ([]*p4v1.TableEntry, error) {
+func BuildTableEntries(tables map[string]corev1alpha1.TableConfig, tableMetas []api.TableMetadata) ([]*p4v1.TableEntry, error) {
 	metaByName := make(map[string]*api.TableMetadata, len(tableMetas))
 	for i := range tableMetas {
 		metaByName[tableMetas[i].TableName] = &tableMetas[i]
@@ -29,7 +30,7 @@ func buildTableEntries(tables map[string]corev1alpha1.TableConfig, tableMetas []
 		}
 
 		if tableConfig.DefaultAction != nil {
-			entry, err := buildDefaultActionEntry(meta, tableConfig.DefaultAction)
+			entry, err := BuildDefaultActionEntry(meta, tableConfig.DefaultAction)
 			if err != nil {
 				return nil, fmt.Errorf("default action for table %q: %w", tableName, err)
 			}
@@ -37,7 +38,7 @@ func buildTableEntries(tables map[string]corev1alpha1.TableConfig, tableMetas []
 		}
 
 		for i := range tableConfig.Entries {
-			entry, err := buildTableEntry(meta, &tableConfig.Entries[i])
+			entry, err := BuildTableEntry(meta, &tableConfig.Entries[i])
 			if err != nil {
 				return nil, fmt.Errorf("entry %d in table %q: %w", i, tableName, err)
 			}
@@ -47,8 +48,8 @@ func buildTableEntries(tables map[string]corev1alpha1.TableConfig, tableMetas []
 	return entries, nil
 }
 
-func buildDefaultActionEntry(meta *api.TableMetadata, action *corev1alpha1.ActionConfig) (*p4v1.TableEntry, error) {
-	a, err := buildAction(*action, meta.Actions)
+func BuildDefaultActionEntry(meta *api.TableMetadata, action *corev1alpha1.ActionConfig) (*p4v1.TableEntry, error) {
+	a, err := BuildAction(*action, meta.Actions)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +60,7 @@ func buildDefaultActionEntry(meta *api.TableMetadata, action *corev1alpha1.Actio
 	}, nil
 }
 
-func buildTableEntry(meta *api.TableMetadata, cfgEntry *corev1alpha1.TableEntry) (*p4v1.TableEntry, error) {
+func BuildTableEntry(meta *api.TableMetadata, cfgEntry *corev1alpha1.TableEntry) (*p4v1.TableEntry, error) {
 	fieldByName := make(map[string]*api.MatchFieldMetadata, len(meta.MatchFields))
 	for i := range meta.MatchFields {
 		fieldByName[meta.MatchFields[i].FieldName] = &meta.MatchFields[i]
@@ -71,14 +72,14 @@ func buildTableEntry(meta *api.TableMetadata, cfgEntry *corev1alpha1.TableEntry)
 		if !ok {
 			return nil, fmt.Errorf("match field %q not found in table %q", mf.Name, meta.TableName)
 		}
-		fm, err := buildFieldMatch(mf, fieldMeta)
+		fm, err := BuildFieldMatch(mf, fieldMeta)
 		if err != nil {
 			return nil, fmt.Errorf("match field %q: %w", mf.Name, err)
 		}
 		matches = append(matches, fm)
 	}
 
-	a, err := buildAction(cfgEntry.Action, meta.Actions)
+	a, err := BuildAction(cfgEntry.Action, meta.Actions)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func buildTableEntry(meta *api.TableMetadata, cfgEntry *corev1alpha1.TableEntry)
 	}, nil
 }
 
-func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (*p4v1.FieldMatch, error) {
+func BuildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (*p4v1.FieldMatch, error) {
 	fm := &p4v1.FieldMatch{FieldId: meta.FieldID}
 	byteLen := int((meta.Bitwidth + 7) / 8)
 
@@ -99,7 +100,7 @@ func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (
 		if mf.Exact == nil {
 			return nil, fmt.Errorf("missing exact value")
 		}
-		val, err := encodeValue(*mf.Exact, meta.Bitwidth)
+		val, err := EncodeValue(*mf.Exact, meta.Bitwidth)
 		if err != nil {
 			return nil, err
 		}
@@ -109,11 +110,11 @@ func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (
 		if mf.Ternary == nil {
 			return nil, fmt.Errorf("missing ternary value")
 		}
-		val, err := encodeValue(mf.Ternary.Value, meta.Bitwidth)
+		val, err := EncodeValue(mf.Ternary.Value, meta.Bitwidth)
 		if err != nil {
 			return nil, fmt.Errorf("value: %w", err)
 		}
-		mask, err := encodeHexString(mf.Ternary.Mask, byteLen)
+		mask, err := EncodeHexString(mf.Ternary.Mask, byteLen)
 		if err != nil {
 			return nil, fmt.Errorf("mask: %w", err)
 		}
@@ -123,7 +124,7 @@ func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (
 		if mf.LPM == nil {
 			return nil, fmt.Errorf("missing LPM value")
 		}
-		val, err := encodeValue(mf.LPM.Value, meta.Bitwidth)
+		val, err := EncodeValue(mf.LPM.Value, meta.Bitwidth)
 		if err != nil {
 			return nil, err
 		}
@@ -137,11 +138,11 @@ func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (
 		if mf.Range == nil {
 			return nil, fmt.Errorf("missing range value")
 		}
-		low, err := encodeValue(mf.Range.Low, meta.Bitwidth)
+		low, err := EncodeValue(mf.Range.Low, meta.Bitwidth)
 		if err != nil {
 			return nil, fmt.Errorf("range low: %w", err)
 		}
-		high, err := encodeValue(mf.Range.High, meta.Bitwidth)
+		high, err := EncodeValue(mf.Range.High, meta.Bitwidth)
 		if err != nil {
 			return nil, fmt.Errorf("range high: %w", err)
 		}
@@ -151,7 +152,7 @@ func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (
 		if mf.Optional == nil {
 			return nil, fmt.Errorf("missing optional value")
 		}
-		val, err := encodeValue(*mf.Optional, meta.Bitwidth)
+		val, err := EncodeValue(*mf.Optional, meta.Bitwidth)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +164,7 @@ func buildFieldMatch(mf corev1alpha1.MatchField, meta *api.MatchFieldMetadata) (
 	return fm, nil
 }
 
-func buildAction(action corev1alpha1.ActionConfig, actions []api.ActionMetadata) (*p4v1.Action, error) {
+func BuildAction(action corev1alpha1.ActionConfig, actions []api.ActionMetadata) (*p4v1.Action, error) {
 	var actionMeta *api.ActionMetadata
 	for i := range actions {
 		if actions[i].ActionName == action.Name {
@@ -186,7 +187,7 @@ func buildAction(action corev1alpha1.ActionConfig, actions []api.ActionMetadata)
 		if !ok {
 			return nil, fmt.Errorf("param %q not found in action %q", p.Name, action.Name)
 		}
-		val, err := encodeValue(p.ParametrizedValue, paramMeta.Bitwidth)
+		val, err := EncodeValue(p.ParametrizedValue, paramMeta.Bitwidth)
 		if err != nil {
 			return nil, fmt.Errorf("param %q: %w", p.Name, err)
 		}
@@ -203,18 +204,18 @@ func buildAction(action corev1alpha1.ActionConfig, actions []api.ActionMetadata)
 }
 
 // encodeValue converts a ParametrizedValue to a big-endian byte slice padded to bitwidth.
-func encodeValue(v corev1alpha1.ParametrizedValue, bitwidth int32) ([]byte, error) {
+func EncodeValue(v corev1alpha1.ParametrizedValue, bitwidth int32) ([]byte, error) {
 	byteLen := int((bitwidth + 7) / 8)
 
 	if v.RawHex != nil {
-		return encodeHexString(*v.RawHex, byteLen)
+		return EncodeHexString(*v.RawHex, byteLen)
 	}
 	if v.Int != nil {
 		n, ok := new(big.Int).SetString(*v.Int, 10)
 		if !ok {
 			return nil, fmt.Errorf("invalid integer %q", *v.Int)
 		}
-		return padToWidth(n.Bytes(), byteLen), nil
+		return PadToWidth(n.Bytes(), byteLen), nil
 	}
 	if v.IPv4Address != nil {
 		ip := net.ParseIP(*v.IPv4Address).To4()
@@ -240,7 +241,7 @@ func encodeValue(v corev1alpha1.ParametrizedValue, bitwidth int32) ([]byte, erro
 	return nil, fmt.Errorf("ParametrizedValue has no value set")
 }
 
-func encodeHexString(s string, byteLen int) ([]byte, error) {
+func EncodeHexString(s string, byteLen int) ([]byte, error) {
 	s = strings.TrimPrefix(s, "0x")
 	s = strings.TrimPrefix(s, "0X")
 	if len(s)%2 != 0 {
@@ -250,10 +251,10 @@ func encodeHexString(s string, byteLen int) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid hex string %q: %w", s, err)
 	}
-	return padToWidth(b, byteLen), nil
+	return PadToWidth(b, byteLen), nil
 }
 
-func padToWidth(b []byte, size int) []byte {
+func PadToWidth(b []byte, size int) []byte {
 	if len(b) == size {
 		return b
 	}
@@ -263,4 +264,14 @@ func padToWidth(b []byte, size int) []byte {
 	padded := make([]byte, size)
 	copy(padded[size-len(b):], b)
 	return padded
+}
+
+func FilterTableEntries(entries []*p4v1.TableEntry, filter func(entry *p4v1.TableEntry) bool) []*p4v1.TableEntry {
+	var filteredEntries = make([]*p4v1.TableEntry, 0, len(entries))
+	for _, entry := range entries {
+		if filter(entry) {
+			filteredEntries = append(filteredEntries, entry)
+		}
+	}
+	return filteredEntries
 }

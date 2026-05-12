@@ -91,6 +91,8 @@ github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
 github.com/mantra6g/iml/api v0.0.0-20260429144718-1893a88760f8 h1:/4H4gybax3J4clP17IC40WLDOONfdhTSOSZbu5Gk1Do=
 github.com/mantra6g/iml/api v0.0.0-20260429144718-1893a88760f8/go.mod h1:kLK900lBqcubRyZErJDVb+WeY09DdWxXvlUcUXfpMPU=
+github.com/mantra6g/iml/api v0.0.0-20260510011614-b08486d7d094 h1:DrPBrxW6nrJ5Q7ACPoe6391inqGsOjJ9ceW7xnQlxMU=
+github.com/mantra6g/iml/api v0.0.0-20260510011614-b08486d7d094/go.mod h1:kLK900lBqcubRyZErJDVb+WeY09DdWxXvlUcUXfpMPU=
 github.com/mantra6g/iml/api v0.0.0-20260510012752-d8421319d17b h1:2GwNIHQBXkv0CpO3b+J/UrFEWjvsDbS3j1ORkC72oNk=
 github.com/mantra6g/iml/api v0.0.0-20260510012752-d8421319d17b/go.mod h1:kLK900lBqcubRyZErJDVb+WeY09DdWxXvlUcUXfpMPU=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
