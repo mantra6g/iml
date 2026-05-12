@@ -20,6 +20,9 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Detect architecture for headers
+ARCH := $(shell uname -m | sed 's/x86_64/x86_64-linux-gnu/;s/aarch64/aarch64-linux-gnu/')
+
 .PHONY: all
 all: build
 
@@ -44,7 +47,7 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=daemon-role paths="./..."
+	$(CONTROLLER_GEN) rbac:roleName=daemon-role paths="./pkg/...;./env/...;./controllers/...;./cni/...;./cmd/..."
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -81,6 +84,15 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	mkdir -p dist
 	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${CNI_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+
+.PHONY: ebpf-compile
+ebpf-compile: ## Compiles the eBPF code with the current version of clang.
+	clang -O2 -g -target bpf -I /usr/include/ -I /usr/include/${ARCH} -c ebpf/src/recalc_csum.c -o /tmp/recalc_csum.o
+
+.PHONY: ebpf-verify
+ebpf-verify: ebpf-compile ## Verifies the eBPF code with the current version of clang.
+	sudo bpftool prog load /tmp/recalc_csum.o /sys/fs/bpf/test_prog
+	sudo rm /sys/fs/bpf/test_prog
 
 ##@ Deployment
 

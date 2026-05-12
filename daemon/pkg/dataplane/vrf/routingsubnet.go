@@ -2,6 +2,7 @@ package vrf
 
 import (
 	"fmt"
+	"iml-daemon/ebpf"
 	"iml-daemon/pkg/dataplane/vrf/util"
 	"net"
 
@@ -71,10 +72,10 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 	if err = netlink.LinkAdd(routerVrf); err != nil {
 		return nil, fmt.Errorf("failed to add router VRF: %w", err)
 	}
+	subnet.Vrf = routerVrf
 	if err = netlink.LinkSetUp(routerVrf); err != nil {
 		return nil, fmt.Errorf("failed to set up router VRF: %w", err)
 	}
-	subnet.Vrf = routerVrf
 
 	bridgeName, err := util.GenerateRandomName("br", 8)
 	if err != nil {
@@ -104,6 +105,10 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 		return nil, fmt.Errorf("failed to add address %s to bridge %s: %w", targetNetwork.String(), bridgeName, err)
 	}
 	subnet.Gateway = gwIPv6.IP
+	err = ebpf.AttachProgramToInterface(ebpf.RecalculateChecksumProgram, bridgeName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach program to bridge %s: %w", bridgeName, err)
+	}
 
 	decapPeerName := fmt.Sprintf("%spipe", DecapInterfaceName)
 	decapIface := &netlink.Veth{
@@ -197,26 +202,31 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 func (r *RoutingSubnet) Teardown() {
 	logger := r.Log
 	logger.Info("Tearing down routing subnet")
-
-	bridge, err := netlink.LinkByName(r.Bridge.Name)
-	if err == nil {
-		err = netlink.LinkDel(bridge)
-		if err != nil {
-			logger.Error(err, "Failed to tear down routing subnet bridge")
+	if r.Bridge != nil {
+		bridge, err := netlink.LinkByName(r.Bridge.Name)
+		if err == nil {
+			err = netlink.LinkDel(bridge)
+			if err != nil {
+				logger.Error(err, "Failed to tear down routing subnet bridge")
+			}
 		}
 	}
-	routerVrf, err := netlink.LinkByName(RoutingVRFName)
-	if err == nil {
-		err = netlink.LinkDel(routerVrf)
-		if err != nil {
-			logger.Error(err, "Failed to tear down router VRF link")
+	if r.Vrf != nil {
+		routerVrf, err := netlink.LinkByName(RoutingVRFName)
+		if err == nil {
+			err = netlink.LinkDel(routerVrf)
+			if err != nil {
+				logger.Error(err, "Failed to tear down router VRF link")
+			}
 		}
 	}
-	decapIface, err := netlink.LinkByName(DecapInterfaceName)
-	if err == nil {
-		err = netlink.LinkDel(decapIface)
-		if err != nil {
-			logger.Error(err, "Failed to tear down router VRF decap0")
+	if r.DecapIface != nil {
+		decapIface, err := netlink.LinkByName(DecapInterfaceName)
+		if err == nil {
+			err = netlink.LinkDel(decapIface)
+			if err != nil {
+				logger.Error(err, "Failed to tear down router VRF decap0")
+			}
 		}
 	}
 }

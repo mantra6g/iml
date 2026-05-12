@@ -155,6 +155,10 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	if err = os.WriteFile("/proc/sys/net/ipv6/conf/all/seg6_enabled", []byte("1"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to set seg6_enabled: %w", err)
 	}
+	// Enable SRv6 by default. Required in host namespace to decapsulate SRv6 packets.
+	if err = os.WriteFile("/proc/sys/net/ipv6/conf/default/seg6_enabled", []byte("1"), 0644); err != nil {
+		return nil, fmt.Errorf("failed to set seg6_enabled: %w", err)
+	}
 	// Enable VRF strict mode. Recommended because of SRv6 and VRF interaction.
 	if err := os.WriteFile("/proc/sys/net/vrf/strict_mode", []byte("1"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to enable VRF strict mode: %s", err)
@@ -172,9 +176,13 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ip6t: %w", err)
 	}
-	err = ensureIPTablesRulesArePresent(ip6t)
+	err = ensureFilterIPTablesRulesArePresent(ip6t)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create iptables rules: %w", err)
+		return nil, fmt.Errorf("failed to create filter iptables rules: %w", err)
+	}
+	err = ensureRawIPTablesRulesArePresent(ip6t)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create raw iptables rules: %w", err)
 	}
 
 	return &Software{
@@ -210,15 +218,47 @@ func (d *Software) Shutdown(ctx context.Context) error {
 	}
 
 	// Delete iptables rules
-	err := ensureIPTablesRulesAreRemoved(d.ipt)
+	err := ensureRawIPTablesRulesAreRemoved(d.ipt)
 	if err != nil {
 		d.log.Error(err, "failed to remove iptables rules. Ignoring error...")
+	}
+	err = ensureFilterIPTablesRulesAreRemoved(d.ipt)
+	if err != nil {
+		d.log.Error(err, "failed to remove filter iptables rules. Ignoring error...")
 	}
 
 	return nil
 }
 
-func ensureIPTablesRulesArePresent(ipt *iptables.IPTables) error {
+func ensureFilterIPTablesRulesArePresent(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear iptables chain: %w", err)
+	}
+	err = ipt.Append("filter", DefaultSRv6TableName,
+		"-m", "rt", "--rt-type", "4", "-j", "ACCEPT")
+	if err != nil {
+		return fmt.Errorf("failed to append SRv6 accept rule: %w", err)
+	}
+	err = ipt.Append("filter", DefaultSRv6TableName,
+		"-j", "RETURN")
+	if err != nil {
+		return fmt.Errorf("failed to append return rule: %w", err)
+	}
+	err = ipt.DeleteIfExists("filter", "FORWARD",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+	}
+	err = ipt.InsertUnique("filter", "FORWARD", 1,
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
+	}
+	return nil
+}
+
+func ensureRawIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	err := ipt.ClearChain("raw", DefaultSRv6TableName)
 	if err != nil {
 		return fmt.Errorf("failed to clear iptables chain: %w", err)
@@ -247,7 +287,7 @@ func ensureIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	return nil
 }
 
-func ensureIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
+func ensureRawIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
 	err := ipt.ClearChain("raw", DefaultSRv6TableName)
 	if err != nil {
 		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
@@ -258,6 +298,23 @@ func ensureIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
 		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
 	}
 	err = ipt.DeleteChain("raw", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
+	}
+	return nil
+}
+
+func ensureFilterIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("filter", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
+	}
+	err = ipt.DeleteIfExists("filter", "FORWARD",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+	}
+	err = ipt.DeleteChain("filter", DefaultSRv6TableName)
 	if err != nil {
 		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
 	}

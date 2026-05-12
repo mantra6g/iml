@@ -201,7 +201,7 @@ metadata:
   name: web-server
   namespace: default
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: web-server
@@ -227,6 +227,8 @@ spec:
         - name: server
           image: tomasagata/lb-server:latest
           imagePullPolicy: Never
+          securityContext:
+            privileged: true
           env:
             - name: POD_NAME
               valueFrom:
