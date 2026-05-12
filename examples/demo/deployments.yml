@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "web-server",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: web-server
+          image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streaming-server
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: streaming-server
+  template:
+    metadata:
+      labels:
+        app: streaming-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "streaming-server",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: streaming-server
+          image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          ports:
+            - containerPort: 80
