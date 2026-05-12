@@ -80,6 +80,7 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
 	container.Args = []string{
 		"--p4target-name", bmv2Target.Name,
+		"--max-nf-slots", "1",
 	}
 	container.Env = EnsureDriverEnvVars(bmv2Target, container.Env)
 	return containers
