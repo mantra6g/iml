@@ -69,7 +69,7 @@ metadata:
   namespace: default
 spec:
   from:
-    name: dummy-web-server
+    name: web-server
     namespace: default
   to:
     name: web-client
