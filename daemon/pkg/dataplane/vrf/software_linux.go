@@ -255,6 +255,10 @@ func ensureFilterIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
 	}
+	err = ipt.DeleteById("filter", "KUBE-FORWARD", 1)
+	if err != nil {
+		return fmt.Errorf("failed to delete hook rule to KUBE-FORWARD chain: %w", err)
+	}
 	return nil
 }
 
