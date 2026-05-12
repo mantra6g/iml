@@ -27,7 +27,7 @@ metadata:
   labels:
     nf: load-balancer
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/load-balancer-example/examples/load-balancer/lb.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/load-balancer/lb.p4"
   configRef:
     name: lb-config
   targetSelector:
