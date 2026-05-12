@@ -494,6 +494,20 @@ control MyComputeChecksum(inout headers hdr, inout metadata_t meta) {
         hdr.tcp.urgent_ptr
       },
       hdr.tcp.checksum, HashAlgorithm.csum16);
+
+    update_checksum_with_payload(
+      hdr.inner_ipv6.isValid() && hdr.icmp6.isValid(),
+      {
+        hdr.inner_ipv6.src_addr,
+        hdr.inner_ipv6.dst_addr,
+        8w0,
+        hdr.inner_ipv6.next_hdr,
+        hdr.inner_ipv6.payload_len,
+        hdr.icmp6.type,
+        hdr.icmp6.code,
+        hdr.icmp6.rest_of_header
+      },
+      hdr.icmp6.checksum, HashAlgorithm.csum16);
   }
 }
 
