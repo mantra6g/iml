@@ -1,10 +1,10 @@
-module lb-control
+module demo-lb-controller
 
 go 1.26.2
 
 require (
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
-	github.com/mantra6g/iml/api v0.0.0-20260429144718-1893a88760f8
+	github.com/mantra6g/iml/api v0.0.0-20260512151156-e5d211b17654
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0

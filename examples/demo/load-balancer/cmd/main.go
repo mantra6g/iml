@@ -17,9 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"demo-lb-controller/reconcilers"
 	"flag"
 	"fmt"
-	"lb-control/reconcilers"
 	"os"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
