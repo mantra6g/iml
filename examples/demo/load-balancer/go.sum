@@ -64,8 +64,6 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
-github.com/mantra6g/iml/api v0.0.0-20260429144718-1893a88760f8 h1:/4H4gybax3J4clP17IC40WLDOONfdhTSOSZbu5Gk1Do=
-github.com/mantra6g/iml/api v0.0.0-20260429144718-1893a88760f8/go.mod h1:kLK900lBqcubRyZErJDVb+WeY09DdWxXvlUcUXfpMPU=
 github.com/mantra6g/iml/api v0.0.0-20260512151156-e5d211b17654 h1:mP2UafhiRjCcCsPh7DgOh9/Brg/h+WLAxN3ZIMt6BhE=
 github.com/mantra6g/iml/api v0.0.0-20260512151156-e5d211b17654/go.mod h1:kLK900lBqcubRyZErJDVb+WeY09DdWxXvlUcUXfpMPU=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
