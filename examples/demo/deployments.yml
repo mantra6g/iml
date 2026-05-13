@@ -28,8 +28,8 @@ spec:
     spec:
       containers:
         - name: web-server
-          image: alpine:3.20
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          image: mantra6g/web-server-pl2:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
 ---
@@ -62,8 +62,8 @@ spec:
     spec:
       containers:
         - name: streaming-server
-          image: alpine:3.20
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          image: mantra6g/streaming-server-pl2:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
 ---
@@ -132,6 +132,74 @@ spec:
         - name: alpine
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-web-proxy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: local-web-proxy
+  template:
+    metadata:
+      labels:
+        app: local-web-proxy
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "local-web-proxy",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: alpine
+          image: mantra6g/web-proxy-pl2:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-streaming-proxy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: local-streaming-proxy
+  template:
+    metadata:
+      labels:
+        app: local-streaming-proxy
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "local-streaming-proxy",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: proxy
+          image: mantra6g/streaming-proxy-pl2:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
 ---
@@ -212,7 +280,7 @@ spec:
                 topologyKey: "kubernetes.io/hostname"
       containers:
         - name: lb-controller
-          image: mantra6g/lb-controller:latest
+          image: mantra6g/lb-controller_pl2:latest
           imagePullPolicy: Never
           args: [
             "--config-name", "web-lb-config",
@@ -252,7 +320,7 @@ spec:
                 topologyKey: "kubernetes.io/hostname"
       containers:
         - name: lb-controller
-          image: mantra6g/lb-controller:latest
+          image: mantra6g/lb-controller_pl2:latest
           imagePullPolicy: Never
           args: [
             "--config-name", "streaming-lb-config",

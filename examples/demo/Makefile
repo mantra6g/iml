@@ -87,15 +87,33 @@ docker-push-all: ## Push all docker images.
 	$(CONTAINER_TOOL) push ${ALL_IMAGES}
 
 .PHONY: kind-load-all
-kind-load-all: kind-load-controller kind-load-webserver ## Load all images into the local cluster.
+kind-load-all: kind-load-lbcontroller kind-load-servers kind-load-proxies ## Load all images into the local cluster.
 
-.PHONY: kind-load-controller
-kind-load-controller: ## Load all images into the local cluster.
+.PHONY: kind-load-lbcontroller
+kind-load-lbcontroller: ## Load the load-balancer controller image into the local cluster.
 	$(KIND) load docker-image ${IMG_LB_CONTROLLER} --name $(KIND_CLUSTER)
 
+.PHONY: kind-load-servers
+kind-load-servers: kind-load-webserver kind-load-streamingserver ## Load all server images into the local cluster.
+
 .PHONY: kind-load-webserver
-kind-load-webserver: ## Load all target images into the local cluster.
-	$(KIND) load docker-image ${IMG_WEBSERVER} --name $(KIND_CLUSTER)
+kind-load-webserver: ## Load the web server image into the local cluster.
+	$(KIND) load docker-image ${IMG_WEB_SERVER} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-streamingserver
+kind-load-streamingserver: ## Load the streaming server image into the local cluster.
+	$(KIND) load docker-image ${IMG_STREAMING_SERVER} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-proxies
+kind-load-proxies: kind-load-webproxy kind-load-streamingproxy ## Load all the proxy images into the local cluster.
+
+.PHONY: kind-load-webproxy
+kind-load-webproxy: ## Load the web proxy image into the local cluster.
+	$(KIND) load docker-image ${IMG_WEB_PROXY} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-streamingproxy
+kind-load-streamingproxy: ## Load the streaming proxy image into the local cluster.
+	$(KIND) load docker-image ${IMG_STREAMING_PROXY} --name $(KIND_CLUSTER)
 
 ## Tool Binaries
 KUSTOMIZE ?= kubectl kustomize
