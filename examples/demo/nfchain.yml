@@ -188,8 +188,8 @@ spec:
     name: local-web-proxy
     namespace: default
   functions:
-  - matchLabels:
-      nf: traffic-manager
+#  - matchLabels:
+#      nf: traffic-manager
   - matchLabels:
       nf: web-lb
 ---
@@ -222,9 +222,9 @@ spec:
     name: local-streaming-proxy
     namespace: default
   functions:
-  - matchLabels:
-      nf: qos
-  - matchLabels:
-      nf: traffic-manager
+#  - matchLabels:
+#      nf: qos
+#  - matchLabels:
+#      nf: traffic-manager
   - matchLabels:
       nf: streaming-lb
