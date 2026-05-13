@@ -20,7 +20,7 @@ metadata:
   labels:
     nf: counter
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/telemetry/counter.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/telemetry/counter.p4"
   targetSelector:
     p4target.loom.io/arch: v1model
 ---

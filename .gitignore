@@ -22,3 +22,6 @@ Chart.lock
 
 # Locally generated installed
 install.yaml
+
+# Binaries for programs and plugins
+*.o

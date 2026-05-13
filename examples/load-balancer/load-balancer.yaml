@@ -27,7 +27,7 @@ metadata:
   labels:
     nf: load-balancer
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/load-balancer-example/examples/load-balancer/lb.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/load-balancer/lb.p4"
   configRef:
     name: lb-config
   targetSelector:
@@ -49,14 +49,30 @@ spec:
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
 metadata:
-  name: client-server-with-logger
+  name: load-balance-webserver
   namespace: default
 spec:
   from:
     name: web-client
     namespace: default
   to:
+    name: dummy-web-server
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: load-balancer
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: return-traffic-to-client
+  namespace: default
+spec:
+  from:
     name: web-server
+    namespace: default
+  to:
+    name: web-client
     namespace: default
   functions:
     - matchLabels:
@@ -155,6 +171,7 @@ metadata:
   name: web-client
   namespace: default
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: web-client
@@ -200,7 +217,7 @@ metadata:
   name: web-server
   namespace: default
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: web-server
@@ -226,6 +243,8 @@ spec:
         - name: server
           image: tomasagata/lb-server:latest
           imagePullPolicy: Never
+          securityContext:
+            privileged: true
           env:
             - name: POD_NAME
               valueFrom:

@@ -20,7 +20,7 @@ metadata:
   labels:
     nf: logger
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/develop/configurable-logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/develop/configurable-logger.p4"
   targetSelector:
     p4target.loom.io/arch: v1model
   configRef:

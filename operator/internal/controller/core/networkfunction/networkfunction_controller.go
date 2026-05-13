@@ -23,6 +23,7 @@ import (
 	"time"
 
 	nfutils "github.com/mantra6g/iml/operator/internal/controller/core/networkfunction/util"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
@@ -113,6 +114,17 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkFunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1alpha1.NetworkFunction{},
+		".spec.targetName", func(rawObj client.Object) []string {
+			if nf, ok := rawObj.(*corev1alpha1.NetworkFunction); ok {
+				return []string{nf.Spec.TargetName}
+			}
+			return []string{}
+		})
+	if err != nil {
+		return fmt.Errorf("failed to set up field indexer for NetworkFunction.spec.targetName: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.NetworkFunction{}).
 		Named("core-networkfunction").
@@ -141,7 +153,7 @@ func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
 		return err
 	}
 
-	feasible := filterFeasible(nf, allTargets)
+	feasible := r.filterFeasible(ctx, nf, allTargets)
 	if len(feasible) == 0 {
 		logger.Info("No feasible P4Targets found for NetworkFunction",
 			"nf", client.ObjectKeyFromObject(nf), "targetsProcessed", len(feasible))
@@ -199,7 +211,7 @@ func (r *NetworkFunctionReconciler) listTargets(ctx context.Context,
 	return targets, nil
 }
 
-func filterFeasible(
+func (r *NetworkFunctionReconciler) filterFeasible(ctx context.Context,
 	nf *corev1alpha1.NetworkFunction, allTargets []*corev1alpha1.P4Target) []*corev1alpha1.P4Target {
 	feasible := make([]*corev1alpha1.P4Target, 0)
 	for _, t := range allTargets {
@@ -211,9 +223,22 @@ func filterFeasible(
 			continue
 		}
 
-		// TODO: Add resource availability checks here
-
-		feasible = append(feasible, t)
+		// List all network functions that are already scheduled to this target and check if we can fit this
+		// new nf in terms of resources.
+		nfList := &corev1alpha1.NetworkFunctionList{}
+		err := r.List(ctx, nfList, client.MatchingFields{".spec.targetName": t.Name})
+		if err != nil {
+			logf.FromContext(ctx).Error(err, "Failed to list NetworkFunctions for target during feasibility check",
+				"target", client.ObjectKeyFromObject(t))
+			continue
+		}
+		totalSlots := t.Status.Capacity.Name("loom.io/nf-slots", resource.DecimalSI)
+		if totalSlots == nil || totalSlots.Value() <= 0 {
+			continue
+		}
+		if totalSlots.Value()-int64(len(nfList.Items)) > 0 {
+			feasible = append(feasible, t)
+		}
 	}
 	return feasible
 }

@@ -203,6 +203,7 @@ func main() {
 		Switch:          switchClient,
 		P4TargetManager: p4targetMgr,
 		NFInterface:     nfIface,
+		MaxNFSlots:      maxNFSlots,
 		Log:             ctrl.Log.WithName("nf-manager"),
 	})
 	if err != nil {
