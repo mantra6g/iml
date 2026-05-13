@@ -18,7 +18,6 @@ import (
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	"github.com/vishvananda/netlink"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -27,6 +26,7 @@ type ManagerConfig struct {
 	P4TargetManager p4targetpkg.Manager
 	NFInterface     string
 	Log             logr.Logger
+	MaxNFSlots      int
 }
 
 type Manager interface {
@@ -51,6 +51,7 @@ type RealManager struct {
 	switchClient    *p4switch.SwitchClient
 	p4targetManager p4targetpkg.Manager
 	nfInterface     string
+	maxNFSlots      int
 	log             logr.Logger
 
 	mu       sync.Mutex
@@ -72,6 +73,7 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 		switchClient:    cfg.Switch,
 		p4targetManager: cfg.P4TargetManager,
 		nfInterface:     cfg.NFInterface,
+		maxNFSlots:      cfg.MaxNFSlots,
 		programs:        make(map[client.ObjectKey]*api.P4Program),
 		ops:             make(map[client.ObjectKey]*trackedOp),
 		log:             cfg.Log,
@@ -225,19 +227,35 @@ func (m *RealManager) compile(ctx context.Context, nf *corev1alpha1.NetworkFunct
 }
 
 // preCheck verifies there are available NF slots and table entries before deploying.
-func (m *RealManager) preCheck(_ context.Context, _ *corev1alpha1.NetworkFunction) error {
-	allocatable := m.p4targetManager.GetAllocatable()
-
-	slots := allocatable[p4targetpkg.ResourceNFSlots]
-	if slots.Cmp(resource.MustParse("1")) < 0 {
-		return fmt.Errorf("no NF slots available on target")
-	}
-
-	if tableEntries, ok := allocatable[p4targetpkg.ResourceTableEntries]; ok {
-		if tableEntries.Cmp(resource.MustParse("1")) < 0 {
-			return fmt.Errorf("no table entries available on target")
+func (m *RealManager) preCheck(ctx context.Context, _ *corev1alpha1.NetworkFunction) error {
+	deployed := 0
+	for _, op := range m.ops {
+		if op.opType != opPresent {
+			continue
+		}
+		if op.handle == nil {
+			continue
+		}
+		if op.handle.status.Phase == PhaseReady {
+			deployed++
 		}
 	}
+
+	availableSlots := m.maxNFSlots - deployed
+	if availableSlots <= 0 {
+		return fmt.Errorf("no available NF slots on target (max: %d, allocated: %d)", m.maxNFSlots, deployed)
+	}
+
+	//slots := allocatable[p4targetpkg.ResourceNFSlots]
+	//if slots.Cmp(resource.MustParse("1")) < 0 {
+	//	return fmt.Errorf("no NF slots available on target")
+	//}
+
+	//if tableEntries, ok := allocatable[p4targetpkg.ResourceTableEntries]; ok {
+	//	if tableEntries.Cmp(resource.MustParse("1")) < 0 {
+	//		return fmt.Errorf("no table entries available on target")
+	//	}
+	//}
 
 	return nil
 }

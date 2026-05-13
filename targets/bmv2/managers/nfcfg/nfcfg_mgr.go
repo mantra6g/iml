@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"bmv2-driver/api"
+	"bmv2-driver/pkg/p4rutils"
 	p4switch "bmv2-driver/pkg/p4switch"
 
 	"github.com/go-logr/logr"
@@ -86,27 +87,16 @@ func (m *RealManager) EnsurePresentConfigForNF(ctx context.Context, nfConfig *co
 		return nil // no program loaded yet; reconciler will retry
 	}
 
-	entries, err := buildTableEntries(nfConfig.Spec.Tables, tables)
+	entries, err := p4rutils.BuildTableEntries(nfConfig.Spec.Tables, tables)
 	if err != nil {
 		return fmt.Errorf("building table entries: %w", err)
 	}
 
-	if existing != nil && len(existing.entries) > 0 {
-		writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err := m.switchClient.EditTableEntries(writeCtx, existing.entries, p4v1.Update_DELETE)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("removing stale entries: %w", err)
-		}
-	}
-
-	if len(entries) > 0 {
-		writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err := m.switchClient.EditTableEntries(writeCtx, entries, p4v1.Update_INSERT)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("inserting table entries: %w", err)
-		}
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	err = m.switchClient.SetAllTableEntries(writeCtx, entries)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("setting table entries: %w", err)
 	}
 
 	m.mu.Lock()
