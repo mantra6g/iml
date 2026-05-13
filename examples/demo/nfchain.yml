@@ -28,6 +28,20 @@ metadata:
 spec: {}
 ---
 apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-server
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: streaming-server
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
   name: qos
@@ -35,10 +49,9 @@ metadata:
   labels:
     nf: qos
 spec:
-  p4File: ./qos.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/qos/qos.p4
   targetSelector:
-    matchLabels:
-      p4target.loom.io/arch: v1model
+    p4target.loom.io/arch: v1model
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
@@ -48,12 +61,11 @@ metadata:
   labels:
     nf: traffic-manager
 spec:
-  p4File: ./traffic-manager.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/traffic-manager/tm.p4
 #  configRef:
 #    name: my-nf-config
   targetSelector:
-    matchLabels:
-      p4target.loom.io/arch: v1model
+    p4target.loom.io/arch: v1model
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
@@ -63,10 +75,11 @@ metadata:
   labels:
     nf: web-lb
 spec:
-  p4File: ./web-lb.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/load-balancer/lb.p4
+  configRef:
+    name: web-lb-config
   targetSelector:
-    matchLabels:
-      p4target.loom.io/arch: v1model
+    p4target.loom.io/arch: v1model
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
@@ -76,25 +89,23 @@ metadata:
   labels:
     nf: streaming-lb
 spec:
-  p4File: ./streaming-lb.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/load-balancer/lb.p4
+  configRef:
+    name: streaming-lb-config
   targetSelector:
-    matchLabels:
-      p4target.loom.io/arch: v1model
+    p4target.loom.io/arch: v1model
 ---
-#apiVersion: core.loom.io/v1alpha1
-#kind: NetworkFunctionConfig
-#metadata:
-#  name: my-nf-config
-#spec:
-#  table: my_table
-#  entries:
-#    - match:
-#        field1: value1
-#        field2: value2
-#      action:
-#        name: my_action
-#        params:
-#          param1: value1
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunctionConfig
+metadata:
+  name: streaming-lb-config
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunctionConfig
+metadata:
+  name: web-lb-config
+spec: {}
 ---
 apiVersion: infra.loom.io/v1alpha1
 kind: BMv2Target
@@ -108,7 +119,32 @@ spec:
     requests:
       cpu: "250m"
       memory: "128Mi"
-
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-2
+spec:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "250m"
+      memory: "128Mi"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-3
+spec:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "250m"
+      memory: "128Mi"
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
@@ -123,8 +159,8 @@ spec:
     name: dummy-web-server
     namespace: default
   functions:
-    - matchLabels:
-        nf: web-lb
+  - matchLabels:
+      nf: web-lb
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
@@ -133,14 +169,16 @@ metadata:
   namespace: default
 spec:
   from:
-    name: dummy-web-server
+    name: web-server
     namespace: default
   to:
     name: local-web-proxy
     namespace: default
   functions:
-    - matchLabels:
-        nf: traffic-manager
+  - matchLabels:
+      nf: traffic-manager
+  - matchLabels:
+      nf: web-lb
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
@@ -155,8 +193,8 @@ spec:
     name: dummy-streaming-server
     namespace: default
   functions:
-    - matchLabels:
-        nf: streaming-lb
+  - matchLabels:
+      nf: streaming-lb
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
@@ -165,12 +203,15 @@ metadata:
   namespace: default
 spec:
   from:
-    name: dummy-streaming-server
+    name: streaming-server
     namespace: default
   to:
     name: local-streaming-proxy
     namespace: default
   functions:
-    - matchLabels:
-        nf: qos
-        nf: traffic-manager
+  - matchLabels:
+      nf: qos
+  - matchLabels:
+      nf: traffic-manager
+  - matchLabels:
+      nf: streaming-lb
