@@ -18,13 +18,11 @@ package reconcilers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
-	"net/netip"
 	"strconv"
 
-	netdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	"demo-lb-controller/utils"
+
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,21 +39,21 @@ import (
 )
 
 const (
-	DummyPodIPv4Table        = "dummy_pod_ipv4_table"
-	DummyPodIPv6Table        = "dummy_pod_ipv6_table"
-	LoadBalancedPodIPv4Table = "lb_pod_ipv4_table"
-	LoadBalancedPodIPv6Table = "lb_pod_ipv6_table"
-	ECMPGroupIPv4Table       = "ecmp_group_ipv4"
-	ECMPGroupIPv6Table       = "ecmp_group_ipv6"
-	ECMPNextHopIPv6Table     = "ecmp_nhop_ipv6"
-	ECMPNextHopIPv4Table     = "ecmp_nhop_ipv4"
+	DummyPodIPv4Table        = "MyIngress.dummy_pod_ipv4_table"
+	DummyPodIPv6Table        = "MyIngress.dummy_pod_ipv6_table"
+	LoadBalancedPodIPv4Table = "MyIngress.lb_pod_ipv4_table"
+	LoadBalancedPodIPv6Table = "MyIngress.lb_pod_ipv6_table"
+	ECMPGroupIPv4Table       = "MyIngress.ecmp_group_ipv4"
+	ECMPGroupIPv6Table       = "MyIngress.ecmp_group_ipv6"
+	ECMPNextHopIPv6Table     = "MyIngress.ecmp_nhop_ipv6"
+	ECMPNextHopIPv4Table     = "MyIngress.ecmp_nhop_ipv4"
 
-	MarkAsInboundTrafficAction = "mark_to_load_balance"
-	MarkAsReturnTrafficAction  = "mark_to_return"
-	SetECMPSelectIPv4Action    = "set_ecmp_select_ipv4"
-	SetECMPSelectIPv6Action    = "set_ecmp_select_ipv6"
-	SetIPv4NextHopAction       = "set_nhop_ipv4"
-	SetIPv6NextHopAction       = "set_nhop_ipv6"
+	MarkAsInboundTrafficAction = "MyIngress.mark_to_load_balance"
+	MarkAsReturnTrafficAction  = "MyIngress.mark_to_return"
+	SetECMPSelectIPv4Action    = "MyIngress.set_ecmp_select_ipv4"
+	SetECMPSelectIPv6Action    = "MyIngress.set_ecmp_select_ipv6"
+	SetIPv4NextHopAction       = "MyIngress.set_nhop_ipv4"
+	SetIPv6NextHopAction       = "MyIngress.set_nhop_ipv6"
 )
 
 type Config struct {
@@ -76,33 +74,6 @@ func (r *NetworkFunctionConfigReconciler) matchesLoadBalancedOrDummyPods(object 
 	}
 	value, ok := labels[r.Config.AppLabel]
 	return ok && (value == r.Config.DummyAppLabelValue || value == r.Config.LoadBalancedAppLabelValue)
-}
-
-func getMultusNetworkStatusString(object client.Object) string {
-	if object == nil {
-		return ""
-	}
-	annotations := object.GetAnnotations()
-	if annotations == nil {
-		return ""
-	}
-	netStatus, ok := annotations[netdefv1.NetworkStatusAnnot]
-	if !ok {
-		return ""
-	}
-	return netStatus
-}
-
-func getMultusNetworkStatus(object client.Object) *netdefv1.NetworkStatus {
-	statusString := getMultusNetworkStatusString(object)
-	if statusString == "" {
-		return nil
-	}
-	status := &netdefv1.NetworkStatus{}
-	if err := json.Unmarshal([]byte(statusString), status); err != nil {
-		return nil
-	}
-	return status
 }
 
 // NetworkFunctionConfigReconciler reconciles the configuration for a NetworkFunction resource
@@ -136,8 +107,13 @@ func (r *NetworkFunctionConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 					if !r.matchesLoadBalancedOrDummyPods(e.ObjectNew) {
 						return false
 					}
-					oldNetStatus := getMultusNetworkStatusString(e.ObjectOld)
-					newNetStatus := getMultusNetworkStatusString(e.ObjectNew)
+					oldPod, okOld := e.ObjectOld.(*v1.Pod)
+					newPod, okNew := e.ObjectNew.(*v1.Pod)
+					if !okOld || !okNew {
+						return false
+					}
+					oldNetStatus := utils.GetMultusNetworkStatusString(oldPod)
+					newNetStatus := utils.GetMultusNetworkStatusString(newPod)
 					return oldNetStatus != newNetStatus
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool {
@@ -170,6 +146,7 @@ func (r *NetworkFunctionConfigReconciler) Reconcile(ctx context.Context, req ctr
 	var dummyPodLabels = map[string]string{
 		r.Config.AppLabel: r.Config.DummyAppLabelValue,
 	}
+	logger.V(1).Info("Listing dummy pods", "dummyPodLabels", dummyPodLabels)
 	var dummyPodList = &v1.PodList{}
 	if err := r.List(ctx, dummyPodList, client.MatchingLabels(dummyPodLabels)); err != nil {
 		logger.Error(err, "Failed to list dummy web server pods")
@@ -179,10 +156,12 @@ func (r *NetworkFunctionConfigReconciler) Reconcile(ctx context.Context, req ctr
 		logger.V(1).Info("No dummy web server pods found with labels", "labels", dummyPodLabels)
 		return ctrl.Result{}, nil
 	}
+	logger.V(1).Info("Found dummy pods", "dummyPodLabels", dummyPodLabels, "count", len(dummyPodList.Items))
 
 	var loadBalancedPodLabels = map[string]string{
 		r.Config.AppLabel: r.Config.LoadBalancedAppLabelValue,
 	}
+	logger.V(1).Info("Listing load-balanced pods", "loadBalancedPodLabels", loadBalancedPodLabels)
 	var loadBalancedPodList = &v1.PodList{}
 	if err := r.List(ctx, loadBalancedPodList, client.MatchingLabels(loadBalancedPodLabels)); err != nil {
 		logger.Error(err, "Failed to list pods to load balance")
@@ -192,6 +171,7 @@ func (r *NetworkFunctionConfigReconciler) Reconcile(ctx context.Context, req ctr
 		logger.V(1).Info("No load-balanced pods found with labels", "labels", loadBalancedPodLabels)
 		return ctrl.Result{}, nil
 	}
+	logger.V(1).Info("Found load-balanced pods", "loadBalancedPodLabels", loadBalancedPodLabels, "count", len(loadBalancedPodList.Items))
 
 	if err := r.updateNetworkFunctionConfig(ctx, nfConfig, dummyPodList, loadBalancedPodList); err != nil {
 		logger.Error(err, "Failed to update NetworkFunctionConfig with new pod information")
@@ -225,12 +205,12 @@ func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 	var ipv6Entries = make([]corev1alpha1.TableEntry, 0, len(dummyPodList.Items))
 	for i := range dummyPodList.Items {
 		pod := &dummyPodList.Items[i]
-		podIPv4 := getPodIMLIPv4Addr(pod)
-		podIPv6 := getPodIMLIPv6Addr(pod)
+		podIPv4 := utils.GetPodIMLIPv4Addr(pod)
+		podIPv6 := utils.GetPodIMLIPv6Addr(pod)
 		if podIPv4 != nil {
 			ipv4Entries = append(ipv4Entries, corev1alpha1.TableEntry{
 				MatchFields: []corev1alpha1.MatchField{{
-					Name: "hdr.inner_ipv4.src_addr",
+					Name: "hdr.inner_ipv4.dst_addr",
 					Type: corev1alpha1.ExactMatch,
 					Exact: &corev1alpha1.ParametrizedValue{
 						IPv4Address: new(podIPv4.String()),
@@ -244,7 +224,7 @@ func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
 		if podIPv6 != nil {
 			ipv6Entries = append(ipv6Entries, corev1alpha1.TableEntry{
 				MatchFields: []corev1alpha1.MatchField{{
-					Name: "hdr.inner_ipv6.src_addr",
+					Name: "hdr.inner_ipv6.dst_addr",
 					Type: corev1alpha1.ExactMatch,
 					Exact: &corev1alpha1.ParametrizedValue{
 						IPv6Address: new(podIPv6.String()),
@@ -276,8 +256,8 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 	var ipv6EcmpNhTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
 	for i := range lbPodList.Items {
 		pod := &lbPodList.Items[i]
-		podIPv4 := getPodIMLIPv4Addr(pod)
-		podIPv6 := getPodIMLIPv6Addr(pod)
+		podIPv4 := utils.GetPodIMLIPv4Addr(pod)
+		podIPv6 := utils.GetPodIMLIPv6Addr(pod)
 		if podIPv4 != nil {
 			ipv4LbTableEntries = append(ipv4LbTableEntries, corev1alpha1.TableEntry{
 				MatchFields: []corev1alpha1.MatchField{{
@@ -376,40 +356,6 @@ func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
 	}
 	nfConfig.Spec.Tables[ECMPNextHopIPv6Table] = corev1alpha1.TableConfig{
 		Entries: ipv6EcmpNhTableEntries,
-	}
-	return nil
-}
-
-func getPodIMLIPv4Addr(pod *v1.Pod) net.IP {
-	status := getMultusNetworkStatus(pod)
-	if status == nil {
-		return nil
-	}
-	for _, ip := range status.IPs {
-		addr, _ := netip.ParseAddr(ip)
-		if !addr.IsValid() {
-			continue
-		}
-		if addr.Is4() {
-			return addr.AsSlice()
-		}
-	}
-	return nil
-}
-
-func getPodIMLIPv6Addr(pod *v1.Pod) net.IP {
-	status := getMultusNetworkStatus(pod)
-	if status == nil {
-		return nil
-	}
-	for _, ip := range status.IPs {
-		addr, _ := netip.ParseAddr(ip)
-		if !addr.IsValid() {
-			continue
-		}
-		if addr.Is6() {
-			return addr.AsSlice()
-		}
 	}
 	return nil
 }

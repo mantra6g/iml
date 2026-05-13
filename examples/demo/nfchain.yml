@@ -49,7 +49,7 @@ metadata:
   labels:
     nf: qos
 spec:
-  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/qos/qos.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_webproxy/examples/demo/qos/qos.p4
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -61,7 +61,7 @@ metadata:
   labels:
     nf: traffic-manager
 spec:
-  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/traffic-manager/tm.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_webproxy/examples/demo/traffic-manager/tm.p4
 #  configRef:
 #    name: my-nf-config
   targetSelector:
@@ -75,7 +75,7 @@ metadata:
   labels:
     nf: web-lb
 spec:
-  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/load-balancer/lb.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_webproxy/examples/demo/load-balancer/lb.p4
   configRef:
     name: web-lb-config
   targetSelector:
@@ -89,7 +89,7 @@ metadata:
   labels:
     nf: streaming-lb
 spec:
-  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_loadbalancers/examples/demo/load-balancer/lb.p4
+  p4File: https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days_webproxy/examples/demo/load-balancer/lb.p4
   configRef:
     name: streaming-lb-config
   targetSelector:
