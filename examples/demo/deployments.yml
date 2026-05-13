@@ -280,7 +280,7 @@ spec:
                 topologyKey: "kubernetes.io/hostname"
       containers:
         - name: lb-controller
-          image: mantra6g/lb-controller_pl2:latest
+          image: mantra6g/lb-controller-pl2:latest
           imagePullPolicy: Never
           args: [
             "--config-name", "web-lb-config",
@@ -320,7 +320,7 @@ spec:
                 topologyKey: "kubernetes.io/hostname"
       containers:
         - name: lb-controller
-          image: mantra6g/lb-controller_pl2:latest
+          image: mantra6g/lb-controller-pl2:latest
           imagePullPolicy: Never
           args: [
             "--config-name", "streaming-lb-config",
