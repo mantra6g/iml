@@ -7,8 +7,7 @@ metadata:
   labels:
     nf: qos
 spec:
-  #p4File: ./qos.p4
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/simple/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/qos/marker.p4"
   targetName: bmv2-target-1
   targetSelector:
     p4target.loom.io/arch: v1model
@@ -21,8 +20,7 @@ metadata:
   labels:
     nf: traffic-manager
 spec:
-  #p4File: ./traffic-manager.p4
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/simple/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/rifo.p4"
   targetName: bmv2-target-2
   targetSelector:
     p4target.loom.io/arch: v1model
