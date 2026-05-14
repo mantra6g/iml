@@ -165,7 +165,7 @@ parser MyParser(packet_in packet,
 
 	state parse_inner_ipv4 {
 		packet.extract(hdr.inner_ipv4);
-		transition select(hdr.inner_ipv6.next_hdr) {
+		transition select(hdr.inner_ipv4.next_hdr) {
       IPPROTO_TCP: parse_tcp;
       IPPROTO_UDP: parse_udp;
       IPPROTO_ICMP4: parse_icmp4;
@@ -534,7 +534,6 @@ control MyComputeChecksum(inout headers hdr, inout metadata_t meta) {
           hdr.inner_ipv4.version,
           hdr.inner_ipv4.ihl,
           hdr.inner_ipv4.diffserv,
-          hdr.inner_ipv4.ecn,
           hdr.inner_ipv4.payload_len,
           hdr.inner_ipv4.identification,
           hdr.inner_ipv4.flags,
