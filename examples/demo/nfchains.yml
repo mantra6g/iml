@@ -29,6 +29,8 @@ spec:
     namespace: default
   functions:
     - matchLabels:
+        nf: web-lb
+    - matchLabels:
         nf: traffic-manager
 ---
 apiVersion: core.loom.io/v1alpha1
@@ -61,6 +63,8 @@ spec:
     namespace: default
   functions:
     - matchLabels:
+        nf: streaming-lb
+    - matchLabels:
         nf: qos
-#    - matchLabels:
-#        nf: traffic-manager
+    - matchLabels:
+        nf: traffic-manager

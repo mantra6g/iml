@@ -33,7 +33,6 @@ metadata:
   labels:
     nf: web-lb
 spec:
-  #p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/load-balancer/lb.p4"
   configRef:
     name: web-lb-config
@@ -48,7 +47,6 @@ metadata:
   labels:
     nf: streaming-lb
 spec:
-  #p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/load-balancer/lb.p4"
   configRef:
     name: streaming-lb-config
