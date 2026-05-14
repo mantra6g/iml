@@ -20,9 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"proxy/internal/proxy"
+	"proxy/internal/watcher"
 	"time"
-	"web-proxy/internal/proxy"
-	"web-proxy/internal/watcher"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -34,10 +34,7 @@ import (
 )
 
 const (
-	DefaultPollFrequency        = 10 * time.Second
-	DefaultPrimaryInterface     = "eth0"
-	DefaultPreroutingChainName  = "IML_PREROUTING"
-	DefaultPostroutingChainName = "IML_POSTROUTING"
+	DefaultPollFrequency = 10 * time.Second
 )
 
 var (
@@ -50,14 +47,13 @@ func init() {
 }
 
 func main() {
-	var namespace, labelName, labelValue, primaryIface, protocol string
+	var namespace, labelName, labelValue, protocol string
 	var pollFrequency time.Duration
 	var port uint
 	flag.StringVar(&namespace, "namespace", "", "Namespace of the pods to watch")
 	flag.StringVar(&labelName, "label-name", "", "Name of the label that is used to list the pods")
 	flag.StringVar(&labelValue, "label-value", "", "Value of the label that is used to list the pods")
 	flag.DurationVar(&pollFrequency, "poll-frequency", DefaultPollFrequency, "Frequency at which to poll for pod changes")
-	flag.StringVar(&primaryIface, "primary-iface", DefaultPrimaryInterface, "Primary interface to use")
 	flag.UintVar(&port, "port", 80, "Port to forward to")
 	flag.StringVar(&protocol, "proto", "tcp", "Protocol to use")
 	opts := zap.Options{
@@ -100,12 +96,6 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-
-	//ownAddr, err := utils.GetPrimaryCNIAddress(primaryIface)
-	//if err != nil {
-	//	setupLog.Error(err, "unable to get primary interface address")
-	//	os.Exit(1)
-	//}
 
 	proxyClient, err := proxy.NewSocat(proxy.Config{
 		Port:     uint16(port),

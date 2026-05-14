@@ -2,37 +2,11 @@ package utils
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/netip"
 
 	netdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
-	"github.com/vishvananda/netlink"
 	v1 "k8s.io/api/core/v1"
 )
-
-func GetPrimaryCNIAddress(ifaceName string) (netip.Addr, error) {
-	link, err := netlink.LinkByName(ifaceName)
-	if err != nil {
-		return netip.Addr{}, fmt.Errorf("unable to find link %s: %v", ifaceName, err)
-	}
-	addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
-	if err != nil {
-		return netip.Addr{}, fmt.Errorf("unable to list addrs for %s: %v", ifaceName, err)
-	}
-	for _, addr := range addrs {
-		ipnetAddr, ok := netip.AddrFromSlice(addr.IP)
-		if !ok ||
-			ipnetAddr.IsLoopback() ||
-			ipnetAddr.IsMulticast() ||
-			ipnetAddr.IsLinkLocalMulticast() ||
-			ipnetAddr.IsLinkLocalUnicast() ||
-			ipnetAddr.IsUnspecified() {
-			continue
-		}
-		return ipnetAddr, nil
-	}
-	return netip.Addr{}, fmt.Errorf("unable to find primary addr for %s", ifaceName)
-}
 
 func GetPodIMLIPv6Addr(pod *v1.Pod) netip.Addr {
 	status := GetIMLMultusNetworkStatus(pod)

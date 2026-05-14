@@ -165,7 +165,7 @@ spec:
       serviceAccountName: lb-controller-sa
       containers:
         - name: proxy
-          image: mantra6g/web-proxy-pl2:latest
+          image: mantra6g/proxy-pl2:latest
           imagePullPolicy: Never
           securityContext:
             capabilities:
@@ -208,7 +208,7 @@ spec:
       serviceAccountName: lb-controller-sa
       containers:
         - name: proxy
-          image: mantra6g/web-proxy-pl2:latest
+          image: mantra6g/proxy-pl2:latest
           imagePullPolicy: Never
           securityContext:
             capabilities:

@@ -2,10 +2,9 @@ package watcher
 
 import (
 	"context"
+	"proxy/internal/proxy"
+	"proxy/pkg/utils"
 	"time"
-	"web-proxy/internal/nat"
-	"web-proxy/internal/proxy"
-	"web-proxy/pkg/utils"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +24,7 @@ type Watcher struct {
 	client.Client
 	podLabels     map[string]string
 	pollFrequency time.Duration
-	proxy         nat.Box
+	proxy         proxy.Client
 	log           logr.Logger
 }
 

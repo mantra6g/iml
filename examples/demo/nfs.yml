@@ -8,7 +8,8 @@ metadata:
     nf: qos
 spec:
   #p4File: ./qos.p4
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/simple/logger.p4"
+  targetName: bmv2-target-1
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -21,7 +22,8 @@ metadata:
     nf: traffic-manager
 spec:
   #p4File: ./traffic-manager.p4
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/simple/logger.p4"
+  targetName: bmv2-target-2
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -34,6 +36,7 @@ metadata:
     nf: web-lb
 spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/load-balancer/lb.p4"
+  targetName: bmv2-target-3
   configRef:
     name: web-lb-config
   targetSelector:
@@ -48,6 +51,7 @@ metadata:
     nf: streaming-lb
 spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/load-balancer/lb.p4"
+  targetName: bmv2-target-4
   configRef:
     name: streaming-lb-config
   targetSelector:
