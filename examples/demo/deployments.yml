@@ -216,7 +216,7 @@ spec:
           args: [
             "--namespace", "default",
             "--label-name", "app",
-            "--label-value", "dummy-web-server",
+            "--label-value", "dummy-streaming-server",
             "--port", "5201",
             "--proto", "both"
           ]
