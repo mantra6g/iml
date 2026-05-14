@@ -9,3 +9,4 @@ resources:
   - nfchains.yml
   - nfs.yml
   - targets.yml
+  - nodeports.yml
