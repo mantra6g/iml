@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	"web-proxy/internal/nat"
+	"web-proxy/internal/proxy"
 	"web-proxy/pkg/utils"
 
 	"github.com/go-logr/logr"
@@ -15,7 +16,7 @@ import (
 type Config struct {
 	PodLabels     map[string]string
 	PollFrequency time.Duration
-	NatBox        nat.Box
+	Proxy         proxy.Client
 	Client        client.Client
 	Log           logr.Logger
 }
@@ -24,7 +25,7 @@ type Watcher struct {
 	client.Client
 	podLabels     map[string]string
 	pollFrequency time.Duration
-	natBox        nat.Box
+	proxy         nat.Box
 	log           logr.Logger
 }
 
@@ -33,7 +34,7 @@ func NewWatcher(cfg Config) *Watcher {
 		Client:        cfg.Client,
 		podLabels:     cfg.PodLabels,
 		pollFrequency: cfg.PollFrequency,
-		natBox:        cfg.NatBox,
+		proxy:         cfg.Proxy,
 		log:           cfg.Log,
 	}
 }
@@ -50,7 +51,7 @@ func (w *Watcher) Watch(ctx context.Context) {
 		if !addr.IsValid() {
 			continue
 		}
-		err = w.natBox.SetDestination(addr)
+		err = w.proxy.SetDestination(addr)
 		if err != nil {
 			w.log.Error(err, "unable to set destination")
 			continue

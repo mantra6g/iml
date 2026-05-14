@@ -15,7 +15,7 @@ func GetPrimaryCNIAddress(ifaceName string) (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, fmt.Errorf("unable to find link %s: %v", ifaceName, err)
 	}
-	addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
+	addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
 	if err != nil {
 		return netip.Addr{}, fmt.Errorf("unable to list addrs for %s: %v", ifaceName, err)
 	}

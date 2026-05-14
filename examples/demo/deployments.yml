@@ -165,18 +165,18 @@ spec:
       serviceAccountName: lb-controller-sa
       containers:
         - name: proxy
-          image: alpine:3.20
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
-#          image: mantra6g/web-proxy-pl2:latest
-#          imagePullPolicy: Never
-#          securityContext:
-#            capabilities:
-#              add: ["NET_ADMIN"]
-#          args: [
-#            "--namespace", "default",
-#            "--label-name", "app",
-#            "--label-value", "dummy-web-server",
-#          ]
+          image: mantra6g/web-proxy-pl2:latest
+          imagePullPolicy: Never
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          args: [
+            "--namespace", "default",
+            "--label-name", "app",
+            "--label-value", "dummy-web-server",
+            "--port", "5201",
+            "--proto", "tcp"
+          ]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -205,12 +205,21 @@ spec:
             }
           ]
     spec:
+      serviceAccountName: lb-controller-sa
       containers:
         - name: proxy
-          image: mantra6g/streaming-proxy-pl2:latest
+          image: mantra6g/web-proxy-pl2:latest
           imagePullPolicy: Never
-          ports:
-            - containerPort: 80
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          args: [
+            "--namespace", "default",
+            "--label-name", "app",
+            "--label-value", "dummy-web-server",
+            "--port", "5201",
+            "--proto", "both"
+          ]
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -372,4 +381,4 @@ spec:
       protocol: UDP
       port: 5201
       targetPort: 5201
-      nodePort: 31202
+      nodePort: 31201

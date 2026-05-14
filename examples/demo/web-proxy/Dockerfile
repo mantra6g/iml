@@ -12,9 +12,7 @@ COPY internal/ internal/
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/proxy cmd/main.go
 
-FROM alpine:3.20
-
-RUN apk add --no-cache iptables ip6tables
+FROM leodotcloud/swiss-army-knife:v0.15
 
 WORKDIR /
 COPY --from=proxy-builder /workspace/bin/proxy .

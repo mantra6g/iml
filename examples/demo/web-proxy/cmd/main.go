@@ -21,9 +21,8 @@ import (
 	"fmt"
 	"os"
 	"time"
-	"web-proxy/internal/nat"
+	"web-proxy/internal/proxy"
 	"web-proxy/internal/watcher"
-	"web-proxy/pkg/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -51,13 +50,16 @@ func init() {
 }
 
 func main() {
-	var namespace, labelName, labelValue, primaryIface string
+	var namespace, labelName, labelValue, primaryIface, protocol string
 	var pollFrequency time.Duration
+	var port uint
 	flag.StringVar(&namespace, "namespace", "", "Namespace of the pods to watch")
 	flag.StringVar(&labelName, "label-name", "", "Name of the label that is used to list the pods")
 	flag.StringVar(&labelValue, "label-value", "", "Value of the label that is used to list the pods")
 	flag.DurationVar(&pollFrequency, "poll-frequency", DefaultPollFrequency, "Frequency at which to poll for pod changes")
 	flag.StringVar(&primaryIface, "primary-iface", DefaultPrimaryInterface, "Primary interface to use")
+	flag.UintVar(&port, "port", 80, "Port to forward to")
+	flag.StringVar(&protocol, "proto", "tcp", "Protocol to use")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -67,14 +69,21 @@ func main() {
 	// Set up structured logging with zap
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	if protocol != proxy.ProtocolTCP && protocol != proxy.ProtocolUDP && protocol != proxy.ProtocolBoth {
+		setupLog.Error(fmt.Errorf("protocol %s not supported", protocol), "")
+		os.Exit(1)
+	}
 	if namespace == "" {
 		setupLog.Error(fmt.Errorf("must provide --namespace"), "Missing pod namespace")
+		os.Exit(1)
 	}
 	if labelName == "" {
 		setupLog.Error(fmt.Errorf("must provide --label-name"), "Missing label name")
+		os.Exit(1)
 	}
 	if labelValue == "" {
 		setupLog.Error(fmt.Errorf("must provide --label-value"), "Missing label value")
+		os.Exit(1)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -92,25 +101,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	ownAddr, err := utils.GetPrimaryCNIAddress(primaryIface)
-	if err != nil {
-		setupLog.Error(err, "unable to get primary interface address")
-	}
+	//ownAddr, err := utils.GetPrimaryCNIAddress(primaryIface)
+	//if err != nil {
+	//	setupLog.Error(err, "unable to get primary interface address")
+	//	os.Exit(1)
+	//}
 
-	natBox, err := nat.NewBox(nat.Config{
-		PreroutingChainName:  DefaultPreroutingChainName,
-		PostroutingChainName: DefaultPostroutingChainName,
-		OwnAddress:           ownAddr,
+	proxyClient, err := proxy.NewSocat(proxy.Config{
+		Port:     uint16(port),
+		Protocol: protocol,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to create natbox")
+		setupLog.Error(err, "unable to create socat proxy")
 		os.Exit(1)
 	}
 
 	wtchr := watcher.NewWatcher(watcher.Config{
 		PodLabels:     map[string]string{labelName: labelValue},
 		PollFrequency: pollFrequency,
-		NatBox:        natBox,
+		Proxy:         proxyClient,
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("watcher"),
 	})
