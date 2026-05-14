@@ -28,9 +28,8 @@ spec:
     spec:
       containers:
         - name: web-server
-          image: leodotcloud/swiss-army-knife:v0.15
-          #image: mantra6g/web-server-pl2:latest
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          image: mantra6g/web-server-pl2:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
 ---
@@ -63,8 +62,8 @@ spec:
     spec:
       containers:
         - name: streaming-server
-          image: leodotcloud/swiss-army-knife:v0.15
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          image: mantra6g/streaming-server-pl2:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
 ---
@@ -97,8 +96,7 @@ spec:
     spec:
       containers:
         - name: alpine
-          #image: alpine:3.20
-          image: leodotcloud/swiss-army-knife:v0.15
+          image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
           ports:
             - containerPort: 80
@@ -132,12 +130,10 @@ spec:
     spec:
       containers:
         - name: alpine
-          #image: alpine:3.20
-          image: leodotcloud/swiss-army-knife:v0.15
+          image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
           ports:
             - containerPort: 80
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -166,13 +162,21 @@ spec:
             }
           ]
     spec:
+      serviceAccountName: lb-controller-sa
       containers:
-        - name: local-web-proxy
-          image: leodotcloud/swiss-army-knife:v0.15
-          #image: mantra6g/web-proxy-pl2:latest
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
-          ports:
-            - containerPort: 80
+        - name: proxy
+          image: mantra6g/proxy-pl2:latest
+          imagePullPolicy: Never
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          args: [
+            "--namespace", "default",
+            "--label-name", "app",
+            "--label-value", "dummy-web-server",
+            "--port", "5201",
+            "--proto", "tcp"
+          ]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -201,13 +205,21 @@ spec:
             }
           ]
     spec:
+      serviceAccountName: lb-controller-sa
       containers:
-        - name: local-streaming-proxy
-          image: leodotcloud/swiss-army-knife:v0.15
-          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
-          #command: socat TCP4-LISTEN:80,fork,reuseaddr,su=nobody TCP6:[fd00::3:0:2]:80
-          ports:
-            - containerPort: 80
+        - name: proxy
+          image: mantra6g/proxy-pl2:latest
+          imagePullPolicy: Never
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          args: [
+            "--namespace", "default",
+            "--label-name", "app",
+            "--label-value", "dummy-streaming-server",
+            "--port", "5201",
+            "--proto", "both"
+          ]
 ---
 apiVersion: v1
 kind: ServiceAccount

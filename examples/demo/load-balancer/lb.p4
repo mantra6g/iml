@@ -12,6 +12,7 @@ const bit<8> IPPROTO_SRH  = 43;
 const bit<8> IPPROTO_TCP  = 6;
 const bit<8> IPPROTO_UDP  = 17;
 const bit<8> IPPROTO_ICMP6 = 58;
+const bit<8> IPPROTO_ICMP4 = 1;
 
 const bit<32> MAX_TRACKED_FLOWS = 512;
 
@@ -25,7 +26,7 @@ header ipv4_h {
 	bit<4> version;
 	bit<4> ihl;
 	bit<8> diffserv;
-	bit<16> totalLen;
+	bit<16> payload_len;
 	bit<16> identification;
 	bit<3> flags;
 	bit<13> fragOffset;
@@ -88,6 +89,13 @@ header icmp6_h {
   bit<32> rest_of_header;
 }
 
+header icmp4_h {
+  bit<8> type;
+  bit<8> code;
+  bit<16> checksum;
+  bit<32> rest_of_header;
+}
+
 struct metadata_t {
   // Flag to indicate if the traffic is destined for source pods (will remove the NAT translation and send to
   // the source pods)
@@ -111,6 +119,7 @@ struct headers {
 	tcp_h tcp;
 	udp_h udp;
 	icmp6_h icmp6;
+	icmp4_h icmp4;
 }
 
 parser MyParser(packet_in packet,
@@ -155,18 +164,23 @@ parser MyParser(packet_in packet,
 	}
 
 	state parse_inner_ipv4 {
-		packet.extract(hdr.inner_ipv4);
-		transition accept;
+      packet.extract(hdr.inner_ipv4);
+      transition select(hdr.inner_ipv4.protocol) {
+        IPPROTO_TCP: parse_tcp;
+        IPPROTO_UDP: parse_udp;
+        IPPROTO_ICMP4: parse_icmp4;
+        default: accept;
+      }
 	}
 
 	state parse_inner_ipv6 {
-		packet.extract(hdr.inner_ipv6);
-		transition select(hdr.inner_ipv6.next_hdr) {
-      IPPROTO_TCP: parse_tcp;
-      IPPROTO_UDP: parse_udp;
-      IPPROTO_ICMP6: parse_icmp6;
-      default: accept;
-    }
+      packet.extract(hdr.inner_ipv6);
+      transition select(hdr.inner_ipv6.next_hdr) {
+        IPPROTO_TCP: parse_tcp;
+        IPPROTO_UDP: parse_udp;
+        IPPROTO_ICMP6: parse_icmp6;
+        default: accept;
+      }
 	}
 
 	state parse_tcp {
@@ -181,6 +195,11 @@ parser MyParser(packet_in packet,
 
   state parse_icmp6 {
     packet.extract(hdr.icmp6);
+    transition accept;
+  }
+
+  state parse_icmp4 {
+    packet.extract(hdr.icmp4);
     transition accept;
   }
 }
@@ -508,6 +527,72 @@ control MyComputeChecksum(inout headers hdr, inout metadata_t meta) {
         hdr.icmp6.rest_of_header
       },
       hdr.icmp6.checksum, HashAlgorithm.csum16);
+
+    update_checksum(
+      hdr.inner_ipv4.isValid(),
+      {
+          hdr.inner_ipv4.version,
+          hdr.inner_ipv4.ihl,
+          hdr.inner_ipv4.diffserv,
+          hdr.inner_ipv4.payload_len,
+          hdr.inner_ipv4.identification,
+          hdr.inner_ipv4.flags,
+          hdr.inner_ipv4.fragOffset,
+          hdr.inner_ipv4.ttl,
+          hdr.inner_ipv4.protocol,
+          16w0,
+          hdr.inner_ipv4.src_addr,
+          hdr.inner_ipv4.dst_addr
+      },
+      hdr.inner_ipv4.hdrChecksum, HashAlgorithm.csum16);
+
+    update_checksum_with_payload(
+      hdr.inner_ipv4.isValid() && hdr.udp.isValid(),
+      {
+          hdr.inner_ipv4.src_addr,
+          hdr.inner_ipv4.dst_addr,
+          8w0,
+          hdr.inner_ipv4.protocol,
+          hdr.inner_ipv4.payload_len,
+          hdr.udp.src_port,
+          hdr.udp.dst_port,
+          hdr.udp.length
+      },
+      hdr.udp.checksum, HashAlgorithm.csum16);
+
+    update_checksum_with_payload(
+      hdr.inner_ipv4.isValid() && hdr.tcp.isValid(),
+      {
+        hdr.inner_ipv4.src_addr,
+        hdr.inner_ipv4.dst_addr,
+        8w0,
+        hdr.inner_ipv4.protocol,
+        hdr.inner_ipv4.payload_len,
+        hdr.tcp.src_port,
+        hdr.tcp.dst_port,
+        hdr.tcp.seq_no,
+        hdr.tcp.ack_no,
+        hdr.tcp.data_offset,
+        hdr.tcp.reserved,
+        hdr.tcp.flags,
+        hdr.tcp.window,
+        hdr.tcp.urgent_ptr
+      },
+      hdr.tcp.checksum, HashAlgorithm.csum16);
+
+    update_checksum_with_payload(
+      hdr.inner_ipv4.isValid() && hdr.icmp4.isValid(),
+      {
+        hdr.inner_ipv4.src_addr,
+        hdr.inner_ipv4.dst_addr,
+        8w0,
+        hdr.inner_ipv4.protocol,
+        hdr.inner_ipv4.payload_len,
+        hdr.icmp4.type,
+        hdr.icmp4.code,
+        hdr.icmp4.rest_of_header
+      },
+      hdr.icmp4.checksum, HashAlgorithm.csum16);
   }
 }
 
@@ -520,8 +605,9 @@ control MyDeparser(packet_out packet, in headers hdr) {
 		packet.emit(hdr.inner_ipv4);
 		packet.emit(hdr.inner_ipv6);
 		packet.emit(hdr.tcp);
-    packet.emit(hdr.udp);
-    packet.emit(hdr.icmp6);
+        packet.emit(hdr.udp);
+        packet.emit(hdr.icmp6);
+        packet.emit(hdr.icmp4);
 	}
 }
 

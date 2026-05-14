@@ -8,19 +8,28 @@ spec:
   selector:
     app: local-web-proxy
   ports:
-    - port: 80
-      targetPort: 80
+    - name: iperf3
+      protocol: TCP
+      port: 5201
+      targetPort: 5201
       nodePort: 30007
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: streaming-service
+  name: iperf-streaming-service
 spec:
   type: NodePort
   selector:
     app: local-streaming-proxy
   ports:
-    - port: 80
-      targetPort: 80
-      nodePort: 30008
+  - name: iperf3-ctrl
+    protocol: TCP
+    port: 5201
+    targetPort: 5201
+    nodePort: 30008
+  - name: iperf3-data
+    protocol: UDP
+    port: 5201
+    targetPort: 5201
+    nodePort: 30008
