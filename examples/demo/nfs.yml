@@ -1,0 +1,70 @@
+#---
+#apiVersion: core.loom.io/v1alpha1
+#kind: NetworkFunction
+#metadata:
+#  name: qos
+#  namespace: default
+#  labels:
+#    nf: qos
+#spec:
+#  #p4File: ./qos.p4
+#  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
+#  targetSelector:
+#    p4target.loom.io/arch: v1model
+#---
+#apiVersion: core.loom.io/v1alpha1
+#kind: NetworkFunction
+#metadata:
+#  name: traffic-manager
+#  namespace: default
+#  labels:
+#    nf: traffic-manager
+#spec:
+#  #p4File: ./traffic-manager.p4
+#  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
+#
+##  configRef:
+##    name: my-nf-config
+#  targetSelector:
+#    p4target.loom.io/arch: v1model
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: web-lb
+  namespace: default
+  labels:
+    nf: web-lb
+spec:
+  #p4File: ./web-lb.p4
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model
+#---
+#apiVersion: core.loom.io/v1alpha1
+#kind: NetworkFunction
+#metadata:
+#  name: streaming-lb
+#  namespace: default
+#  labels:
+#    nf: streaming-lb
+#spec:
+#  #p4File: ./streaming-lb.p4
+#  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/develop/examples/simple/logger.p4"
+#  targetSelector:
+#    p4target.loom.io/arch: v1model
+#---
+#apiVersion: core.loom.io/v1alpha1
+#kind: NetworkFunctionConfig
+#metadata:
+#  name: my-nf-config
+#spec:
+#  table: my_table
+#  entries:
+#    - match:
+#        field1: value1
+#        field2: value2
+#      action:
+#        name: my_action
+#        params:
+#          param1: value1
