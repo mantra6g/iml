@@ -3,8 +3,14 @@
 #include <core.p4>
 #include <v1model.p4>
 
+#define MAX_SEGMENTS 8
+
 const bit<16> ETYPE_IPV4 = 0x0800;
 const bit<16> ETYPE_IPV6 = 0x86DD;
+
+const bit<8> IPPROTO_IPV4 = 4;
+const bit<8> IPPROTO_IPV6 = 41;
+const bit<8> IPPROTO_SRH  = 43;
 
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
@@ -50,7 +56,7 @@ header ipv6_t {
     bit<128> dstAddr;
 }
 
-header srv6_h {
+header srv6_t {
 	bit<8> next_hdr;
 	bit<8> hdr_ext_len;
 	bit<8> routing_type;
@@ -60,16 +66,16 @@ header srv6_h {
 	bit<16> tag;
 }
 
-header segment_h {
+header segment_t {
 	bit<128> segment;
 }
 
 struct headers {
     ethernet_t ethernet;
-    ipv4_t ipv4;
-    ipv6_t ipv6;
-    //srv6_h srv6;
-    //segment_h segment;
+    //ipv4_t ipv4;
+    ipv6_t outer_ipv6;
+    srv6_t srh;
+    segment_t[MAX_SEGMENTS] segment_list;
 }
 
 struct metadata {
@@ -80,22 +86,37 @@ parser MyParser(packet_in packet, out headers hdr, inout metadata meta, inout st
     state start {
         packet.extract(hdr.ethernet);
         transition select(hdr.ethernet.etherType) {
-            ETYPE_IPV4: parse_ipv4;
-            ETYPE_IPV6: parse_ipv6;
+            //ETYPE_IPV4: parse_ipv4;
+            ETYPE_IPV6: parse_outer_ipv6;
             default: accept;
         }
     }
-    state parse_ipv4 {
-        packet.extract(hdr.ipv4);
-        meta.rank = (bit<16>)hdr.ipv4.dscp;
-        transition accept;
-    }
-    state parse_ipv6 {
-        packet.extract(hdr.ipv6);
-        meta.rank = (bit<16>)hdr.ipv6.dscp;
-        transition accept;
-    }
+    //state parse_ipv4 {
+    //    packet.extract(hdr.ipv4);
+    //    meta.rank = (bit<16>)hdr.ipv4.dscp;
+    //    transition accept;
+    //}
+	  state parse_outer_ipv6 {
+	  	packet.extract(hdr.outer_ipv6);
+      meta.rank = (bit<16>)hdr.outer_ipv6.dscp;
+	  	transition select(hdr.outer_ipv6.nextHdr) {
+	  		IPPROTO_SRH: parse_srh;
+	  		default: accept;
+	  	}
+	  }
 
+	  state parse_srh {
+	  	packet.extract(hdr.srh);
+	  	transition parse_srh_segments;
+	  }
+
+	  state parse_srh_segments {
+	  	packet.extract(hdr.segment_list.next);
+	  	transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.first_segment) {
+	  		true: parse_srh_segments; // Loop to extract all segments
+	  		false: accept;
+	  	}
+	  }
 }
 
 control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
@@ -142,46 +163,41 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
         //increment_queue();
         standard_metadata.egress_spec = port;
     }
+    action srv6_forward() {
+        if (hdr.srh.segments_left > 0) {
+            hdr.srh.segments_left = hdr.srh.segments_left - 1;
+            hdr.outer_ipv6.dstAddr = hdr.segment_list[hdr.srh.segments_left].segment;
+        } else {
+            drop();
+        }
 
-    table mac_forward {
-        key = {
-            hdr.ethernet.dstAddr: exact;
-        }
-        actions = {
-            forward;
-            drop;
-            NoAction;
-        }
-        size = 1024;
+        bit<48> original_src  = hdr.ethernet.srcAddr;
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = original_src;
+
+        standard_metadata.egress_spec = standard_metadata.ingress_port;
     }
 
     apply {
-
-        if (standard_metadata.ingress_port == 2) {
-            if (hdr.ipv4.dstAddr == 0x0A000001) {
-                standard_metadata.egress_spec = 1;
-            } else {
-                standard_metadata.egress_spec = 3;
-            }
-            return;
-        }
 
         if (meta.rank == 0) {
             meta.rank = 7;
         }
 
         bit<1> forward_packet = 0;
-        bit<1> rank_valid = 0;
+        //bit<1> rank_valid = 0;
 
 
-        if (hdr.ipv4.isValid()) {
-            rank_valid = 1;
-        } else if (hdr.ipv6.isValid()) {
-            rank_valid = 1;
-        }
+        //if (hdr.ipv4.isValid()) {
+        //    rank_valid = 1;
+        //} else if (hdr.ipv6.isValid()) {
+        //    rank_valid = 1;
+        //}
 
-        if (rank_valid == 0) {
-            standard_metadata.egress_spec = 2;
+        //if (rank_valid == 0) {
+        //    return;
+        //}
+        if (!hdr.outer_ipv6.isValid()) {
             return;
         }
 
@@ -189,7 +205,6 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
         bit<16> threshold;
         reg_count.read(count, 0);
         reg_threshold.read(threshold, 0);
-
 
         if (count == 0) {
             reg_min.write(0, INIT_MIN);
@@ -238,8 +253,8 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
             }
         }
 
-        if (forward_packet == 1) {
-            standard_metadata.egress_spec = 2;
+        if (forward_packet == 1 && hdr.srh.isValid()) {
+            srv6_forward();
         } else {
             drop();
         }
@@ -264,8 +279,10 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
-        packet.emit(hdr.ipv4);
-        packet.emit(hdr.ipv6);
+        //packet.emit(hdr.ipv4);
+        packet.emit(hdr.outer_ipv6);
+        packet.emit(hdr.srh);
+        packet.emit(hdr.segment_list);
     }
 }
 
