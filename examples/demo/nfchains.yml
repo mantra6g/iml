@@ -22,7 +22,7 @@ metadata:
   namespace: default
 spec:
   from:
-    name: dummy-web-server
+    name: web-server
     namespace: default
   to:
     name: local-web-proxy
@@ -54,7 +54,7 @@ metadata:
   namespace: default
 spec:
   from:
-    name: dummy-streaming-server
+    name: streaming-server
     namespace: default
   to:
     name: local-streaming-proxy
