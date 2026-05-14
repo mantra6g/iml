@@ -165,7 +165,7 @@ parser MyParser(packet_in packet,
 
 	state parse_inner_ipv4 {
 		packet.extract(hdr.inner_ipv4);
-		transition select(hdr.inner_ipv4.next_hdr) {
+		transition select(hdr.inner_ipv4.protocol) {
       IPPROTO_TCP: parse_tcp;
       IPPROTO_UDP: parse_udp;
       IPPROTO_ICMP4: parse_icmp4;
