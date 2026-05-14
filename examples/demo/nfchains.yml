@@ -9,59 +9,58 @@ spec:
     name: local-web-proxy
     namespace: default
   to:
-    name: web-server
+    name: dummy-web-server
     namespace: default
   functions:
     - matchLabels:
         nf: web-lb
-#---
-#apiVersion: core.loom.io/v1alpha1
-#kind: ServiceChain
-#metadata:
-#  name: web-downlink
-#  namespace: default
-#spec:
-#  from:
-#    name: web-server
-#    namespace: default
-#  to:
-#    name: local-web-proxy
-#    namespace: default
-#  functions:
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: web-downlink
+  namespace: default
+spec:
+  from:
+    name: dummy-web-server
+    namespace: default
+  to:
+    name: local-web-proxy
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: traffic-manager
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: streaming-uplink
+  namespace: default
+spec:
+  from:
+    name: local-streaming-proxy
+    namespace: default
+  to:
+    name: dummy-streaming-server
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: streaming-lb
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: streaming-downlink
+  namespace: default
+spec:
+  from:
+    name: dummy-streaming-server
+    namespace: default
+  to:
+    name: local-streaming-proxy
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: qos
 #    - matchLabels:
 #        nf: traffic-manager
-
-#---
-#apiVersion: core.loom.io/v1alpha1
-#kind: ServiceChain
-#metadata:
-#  name: streaming-uplink
-#  namespace: default
-#spec:
-#  from:
-#    name: local-streaming-proxy
-#    namespace: default
-#  to:
-#    name: streaming-server
-#    namespace: default
-#  functions:
-#    - matchLabels:
-#        nf: streaming-lb
-
-#---
-#apiVersion: core.loom.io/v1alpha1
-#kind: ServiceChain
-#metadata:
-#  name: streaming-downlink
-#  namespace: default
-#spec:
-#  from:
-#    name: streaming-server
-#    namespace: default
-#  to:
-#    name: local-streaming-proxy
-#    namespace: default
-#  functions:
-#    - matchLabels:
-#        nf: qos
-#          #nf: traffic-manager

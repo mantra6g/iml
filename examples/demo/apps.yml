@@ -5,26 +5,38 @@ metadata:
   name: local-web-proxy
   namespace: default
 spec: {}
-#---
-#apiVersion: core.loom.io/v1alpha1
-#kind: Application
-#metadata:
-#  name: local-streaming-proxy
-#  namespace: default
-#spec: {}
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: Application
 metadata:
-  #name: dummy-web-server
+  name: local-streaming-proxy
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: dummy-web-server
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: dummy-streaming-server
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
   name: web-server
   namespace: default
 spec: {}
-#---
-#apiVersion: core.loom.io/v1alpha1
-#kind: Application
-#metadata:
-#  #name: dummy-streaming-server
-#  name: streaming-server
-#  namespace: default
-#spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: streaming-server
+  namespace: default
+spec: {}
