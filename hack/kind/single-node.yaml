@@ -1,11 +1,5 @@
 apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
-networking:
-  # Enable dual-stack
-  ipFamily: dual
-  # Define the pod and service CIDRs for both address families
-  podSubnet: "10.244.0.0/16,fd10:10:244::/56"
-  serviceSubnet: "10.96.0.0/16,fd10:10:96::/112"
 nodes:
   - role: control-plane
 

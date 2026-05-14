@@ -165,16 +165,18 @@ spec:
       serviceAccountName: lb-controller-sa
       containers:
         - name: proxy
-          image: mantra6g/web-proxy-pl2:latest
-          imagePullPolicy: Never
-          securityContext:
-            capabilities:
-              add: ["NET_ADMIN"]
-          args: [
-            "--namespace", "default",
-            "--label-name", "app",
-            "--label-value", "dummy-web-server",
-          ]
+          image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+#          image: mantra6g/web-proxy-pl2:latest
+#          imagePullPolicy: Never
+#          securityContext:
+#            capabilities:
+#              add: ["NET_ADMIN"]
+#          args: [
+#            "--namespace", "default",
+#            "--label-name", "app",
+#            "--label-value", "dummy-web-server",
+#          ]
 ---
 apiVersion: apps/v1
 kind: Deployment
