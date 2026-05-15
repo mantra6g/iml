@@ -174,8 +174,8 @@ spec:
             "--namespace", "default",
             "--label-name", "app",
             "--label-value", "dummy-web-server",
-            "--port", "5201",
-            "--proto", "tcp"
+            "--port", "3000",
+            "--proto", "both"
           ]
 ---
 apiVersion: apps/v1
@@ -217,7 +217,7 @@ spec:
             "--namespace", "default",
             "--label-name", "app",
             "--label-value", "dummy-streaming-server",
-            "--port", "5201",
+            "--port", "3000",
             "--proto", "both"
           ]
 ---
