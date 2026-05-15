@@ -3,8 +3,9 @@ IMG_LB_CONTROLLER ?= mantra6g/lb-controller-pl2:latest
 IMG_WEB_SERVER ?= mantra6g/web-server-pl2:latest
 IMG_PROXY ?= mantra6g/proxy-pl2:latest
 IMG_STREAMING_SERVER ?= mantra6g/streaming-server-pl2:latest
+IMG_BMV2_PERF ?= mantra6g/bmv2-perf-pl2:latest
 
-ALL_IMAGES = $(IMG_LB_CONTROLLER) $(IMG_WEB_SERVER) $(IMG_STREAMING_SERVER) $(IMG_WEB_PROXY) $(IMG_STREAMING_PROXY)
+ALL_IMAGES = $(IMG_LB_CONTROLLER) $(IMG_WEB_SERVER) $(IMG_STREAMING_SERVER) $(IMG_WEB_PROXY) $(IMG_STREAMING_PROXY) ${IMG_BMV2_PERF}
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -53,7 +54,7 @@ help: ## Display this help.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build-all
-docker-build-all: docker-build-lbcontroller docker-build-servers docker-build-proxy ## Build all docker images.
+docker-build-all: docker-build-lbcontroller docker-build-servers docker-build-proxy docker-build-bmv2 ## Build all docker images.
 
 .PHONY: docker-build-lbcontroller
 docker-build-lbcontroller: ## Build docker images for the load-balancer controller.
@@ -74,12 +75,16 @@ docker-build-streamingserver: ## Build docker image for the cni.
 docker-build-proxy: ## Build docker image for the proxy.
 	$(CONTAINER_TOOL) build -t ${IMG_PROXY} -f ./proxy/Dockerfile ./proxy
 
+.PHONY: docker-build-bmv2
+docker-build-bmv2: ## Build docker image for the perf bmv2
+	$(CONTAINER_TOOL) build -t ${IMG_BMV2_PERF} -f ./perf-bmv2/Dockerfile ./perf-bmv2
+
 .PHONY: docker-push-all
 docker-push-all: ## Push all docker images.
 	$(CONTAINER_TOOL) push ${ALL_IMAGES}
 
 .PHONY: kind-load-all
-kind-load-all: kind-load-lbcontroller kind-load-servers kind-load-proxy ## Load all images into the local cluster.
+kind-load-all: kind-load-lbcontroller kind-load-servers kind-load-proxy kind-load-bmv2 ## Load all images into the local cluster.
 
 .PHONY: kind-load-lbcontroller
 kind-load-lbcontroller: ## Load the load-balancer controller image into the local cluster.
@@ -99,6 +104,10 @@ kind-load-streamingserver: ## Load the streaming server image into the local clu
 .PHONY: kind-load-proxy
 kind-load-proxy: ## Load the proxy image into the local cluster.
 	$(KIND) load docker-image ${IMG_PROXY} --name $(KIND_CLUSTER)
+
+.PHONY: kind-load-bmv2
+kind-load-bmv2: ## Load the bmv2 perf image into the local cluster.
+	$(KIND) load docker-image ${IMG_BMV2_PERF} --name $(KIND_CLUSTER)
 
 ## Tool Binaries
 KUSTOMIZE ?= kubectl kustomize
