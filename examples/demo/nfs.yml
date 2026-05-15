@@ -20,7 +20,7 @@ metadata:
   labels:
     nf: traffic-manager
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/rifo.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/traffic-manager/rifo.p4"
   targetName: bmv2-target-2
   targetSelector:
     p4target.loom.io/arch: v1model
