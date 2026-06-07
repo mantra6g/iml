@@ -1,0 +1,15 @@
+# Experiment 1 — the over-limit NF. Applied after the slots are full.
+# Expected outcome: rejected at the scheduler with a structured condition
+#   type=Scheduled, status=False, reason=Unschedulable
+# It never receives a spec.targetName and never reaches the driver / P4Runtime.
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: exp1-nf-overlimit
+  namespace: default
+  labels:
+    experiment: exp1
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model

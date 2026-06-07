@@ -1,0 +1,13 @@
+# Experiment 1 — second NF. Only used when running with slot limit N >= 2
+# (raise --max-nf-slots in bmv2_util.go and rebuild the operator first).
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: exp1-nf-2
+  namespace: default
+  labels:
+    experiment: exp1
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model

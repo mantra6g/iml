@@ -1,0 +1,19 @@
+# Experiment 1 — the BMv2 target under test.
+# Applying this asks IML to provision a driver+switch pod (in loom-system) and a
+# derived P4Target carrying the slot capacity (loom.io/nf-slots). The slot limit
+# comes from the driver's --max-nf-slots flag (default 1, set in
+# operator/internal/controller/infra/bmv2target/util/bmv2_util.go).
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target
+  labels:
+    experiment: exp1
+spec:
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"

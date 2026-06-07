@@ -1,0 +1,13 @@
+# Experiment 1 — first NF. No spec.targetName is set, so the operator scheduler
+# runs admission control and binds it to a feasible target (consuming a slot).
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: exp1-nf-1
+  namespace: default
+  labels:
+    experiment: exp1
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model
