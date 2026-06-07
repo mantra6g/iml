@@ -76,9 +76,17 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if nf.Spec.TargetName == "" {
 		err := r.scheduleNetworkFunction(ctx, nf)
 		if errors.Is(err, NoMatchingTargetsError{}) {
+			original := nf.DeepCopy()
 			cond := nfutils.NewScheduledCondition(metav1.ConditionFalse, "Unschedulable", "No matching targets found")
-			nfutils.UpdateNFCondition(&nf.Status, cond)
-			_ = r.updateStatus(ctx, nf)
+			nf.Status.Conditions = nfutils.UpdateNFCondition(&nf.Status, cond)
+			if nf.Status.Phase == "" {
+				nf.Status.Phase = corev1alpha1.NetworkFunctionPending
+			}
+			if !nfutils.StatusesAreEqual(&original.Status, &nf.Status) {
+				if err := r.Status().Patch(ctx, nf, client.MergeFrom(original)); err != nil {
+					logger.Error(err, "failed to update NetworkFunction status with Unschedulable condition")
+				}
+			}
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		} else if err != nil {
 			logger.Error(err, "failed to schedule NetworkFunction")
@@ -186,6 +194,11 @@ func calculateStatus(nf *corev1alpha1.NetworkFunction) *corev1alpha1.NetworkFunc
 		newCondition = nfutils.NewScheduledCondition(metav1.ConditionTrue, "Scheduled",
 			fmt.Sprintf("The NetworkFunction is scheduled to target %s.", nf.Spec.TargetName))
 		status.Conditions = nfutils.UpdateNFCondition(status, newCondition)
+	} else if existing := nfutils.GetScheduledCondition(status); existing != nil &&
+		existing.Status == metav1.ConditionFalse && existing.Reason == "Unschedulable" {
+		// Preserve the terminal rejection reason set by the scheduler instead of
+		// overwriting it with the generic pending reason.
+		newCondition = *existing
 	} else {
 		newCondition = nfutils.NewScheduledCondition(metav1.ConditionFalse,
 			"SchedulingPending", "The NetworkFunction has not been scheduled to a target yet.")
