@@ -110,8 +110,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	cd config/bmv2 && $(KUSTOMIZE) edit add configmap bmv2-config \
-		--from-file=bmv2_configmap.yaml \
+	cd config/configmaps && $(KUSTOMIZE) edit set configmap bmv2-config \
 		--from-literal=bmv2-data-plane-image=$(IMG_BMV2_DP) \
 		--from-literal=bmv2-control-plane-image=$(IMG_BMV2_CP)
 	$(KUSTOMIZE) build config/default > dist/install.yaml
@@ -133,8 +132,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	cd config/bmv2 && $(KUSTOMIZE) edit add configmap bmv2-config \
-		--from-file=bmv2_configmap.yaml \
+	cd config/configmaps && $(KUSTOMIZE) edit add configmap bmv2-config \
 		--from-literal=bmv2-data-plane-image=$(IMG_BMV2_DP) \
 		--from-literal=bmv2-control-plane-image=$(IMG_BMV2_CP)
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
