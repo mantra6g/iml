@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bmv2-config
+  namespace: loom-system
+data:
+  bmv2-data-plane-container-name: "bmv2-switch"
+  bmv2-data-plane-image: "p4lang/behavioral-model:latest"
+  bmv2-control-plane-container-name: "bmv2-driver"
+  bmv2-control-plane-image: "mantra6g/bmv2-driver:latest"
+  bmv2-pod-namespace: "loom-system"
+  bmv2-service-account-name: "bmv2-service-account"
