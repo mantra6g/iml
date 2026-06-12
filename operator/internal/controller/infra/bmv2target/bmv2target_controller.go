@@ -36,10 +36,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// BMv2TargetReconciler reconciles a BMv2Target object
-type BMv2TargetReconciler struct {
+// Reconciler reconciles a BMv2Target object
+type Reconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config *bmv2utils.BMv2Config
 }
 
 // +kubebuilder:rbac:groups=infra.loom.io,resources=bmv2targets,verbs=get;list;watch;create;update;patch;delete
@@ -54,7 +55,7 @@ type BMv2TargetReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
-func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.V(1).Info("Reconciling BMv2Target")
 
@@ -98,7 +99,11 @@ func (r *BMv2TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *BMv2TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Config == nil {
+		return fmt.Errorf("config is nil")
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1alpha1.BMv2Target{}).
 		Owns(&corev1alpha1.P4Target{}).
@@ -108,7 +113,7 @@ func (r *BMv2TargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *BMv2TargetReconciler) ensureP4Target(
+func (r *Reconciler) ensureP4Target(
 	ctx context.Context, bmv2tgt *infrav1alpha1.BMv2Target) (*corev1alpha1.P4Target, error) {
 	p4target := &corev1alpha1.P4Target{
 		ObjectMeta: metav1.ObjectMeta{
@@ -126,12 +131,12 @@ func (r *BMv2TargetReconciler) ensureP4Target(
 	return p4target, err
 }
 
-func (r *BMv2TargetReconciler) ensureDeployment(ctx context.Context,
+func (r *Reconciler) ensureDeployment(ctx context.Context,
 	target *infrav1alpha1.BMv2Target) (*appsv1.Deployment, error) {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      target.Name,
-			Namespace: infrav1alpha1.BMV2_POD_NAMESPACE,
+			Namespace: r.Config.PodNamespace,
 		},
 	}
 
@@ -139,13 +144,13 @@ func (r *BMv2TargetReconciler) ensureDeployment(ctx context.Context,
 		dep.Labels = bmv2utils.EnsureBMv2DeploymentLabels(target, dep.Labels)
 		dep.Annotations = bmv2utils.EnsureBMv2DeploymentAnnotations(target, dep.Annotations)
 		dep.Finalizers = bmv2utils.EnsureBMv2DeploymentFinalizers(target, dep.Finalizers)
-		dep.Spec = *bmv2utils.EnsureBMv2DeploymentSpec(target, &dep.Spec)
+		dep.Spec = *bmv2utils.EnsureBMv2DeploymentSpec(target, &dep.Spec, r.Config)
 		return controllerutil.SetControllerReference(target, dep, r.Scheme) // BMv2Target owns Deployment
 	})
 	return dep, err
 }
 
-func (r *BMv2TargetReconciler) updateStatus(
+func (r *Reconciler) updateStatus(
 	ctx context.Context, bmv2Target *infrav1alpha1.BMv2Target,
 	p4target *corev1alpha1.P4Target, dep *appsv1.Deployment) error {
 	newStatus := calculateStatus(bmv2Target, p4target, dep)

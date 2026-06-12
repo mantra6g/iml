@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 
+	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
 	webhookschedulingv1alpha1 "github.com/mantra6g/iml/operator/internal/webhook/scheduling/v1alpha1/networkfunctiondeployment"
 
 	rsutil "github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctionreplicaset/util"
@@ -56,6 +57,10 @@ import (
 
 	webhookcorev1alpha1 "github.com/mantra6g/iml/operator/internal/webhook/core/v1alpha1"
 	// +kubebuilder:scaffold:imports
+)
+
+const (
+	BMv2ConfigPath = "/etc/bmv2/config"
 )
 
 var (
@@ -196,6 +201,12 @@ func main() {
 		})
 	}
 
+	bmv2Cfg, err := bmv2utils.ParseBMv2ConfigFromPath(BMv2ConfigPath)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse BMv2 configuration")
+		os.Exit(1)
+	}
+
 	var clusterCIDRv4Allocator, clusterCIDRv6Allocator ipam.PrefixAllocator
 	clusterCIDRConfig, err := envutils.ParseClusterCIDRConfig()
 	if err != nil {
@@ -294,9 +305,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)
 	}
-	if err := (&bmv2target.BMv2TargetReconciler{
+	if err := (&bmv2target.Reconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: bmv2Cfg,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BMv2Target")
 		os.Exit(1)
