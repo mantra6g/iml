@@ -1,0 +1,19 @@
+# Experiment 2 — the BMv2 target under test (lifecycle & recovery, RQ2).
+# Identical to Experiment 1's target: applying this asks IML to provision a
+# driver+switch pod (in loom-system) and a derived P4Target. One NF slot is
+# enough — Experiment 2 deploys a single NF at a time and measures how long it
+# takes to converge to Ready, then disrupts the target and watches it recover.
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target
+  labels:
+    experiment: exp2
+spec:
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"

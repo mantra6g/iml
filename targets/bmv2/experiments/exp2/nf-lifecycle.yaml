@@ -1,0 +1,16 @@
+# Experiment 2 — the NF whose lifecycle we measure.
+# No spec.targetName, so the operator schedules it onto bmv2-target; the driver
+# then compiles, deploys and wires it. We time creation -> Ready over repeated
+# trials and compare against the direct-gRPC baseline. Uses the same logger.p4
+# program as the baseline so the data-plane work is identical.
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: exp2-nf
+  namespace: default
+  labels:
+    experiment: exp2
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model
