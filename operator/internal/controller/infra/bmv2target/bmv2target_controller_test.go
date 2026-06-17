@@ -19,6 +19,7 @@ package bmv2target
 import (
 	"context"
 
+	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -84,15 +85,23 @@ var _ = Describe("BMv2Target Controller", func() {
 
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
+		var bmv2Cfg = &bmv2utils.BMv2Config{
+			ControlPlaneContainerName: bmv2utils.DefaultBMv2ControlPlaneContainerName,
+			DataPlaneContainerName:    bmv2utils.DefaultBMv2DataPlaneContainerName,
+			ControlPlaneImage:         "test-ctrl:latest",
+			DataPlaneImage:            "test-dataplane:latest",
+			PodNamespace:              "test-pod-namespace",
+			DriverServiceAccount:      "test-driver-sa",
+		}
 
 		ctx := context.Background()
 
 		infraNamespace := types.NamespacedName{
-			Name: infrav1alpha1.BMV2_POD_NAMESPACE,
+			Name: bmv2Cfg.PodNamespace,
 		}
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: infrav1alpha1.BMV2_POD_NAMESPACE,
+			Namespace: bmv2Cfg.PodNamespace,
 		}
 
 		BeforeEach(func() {
@@ -105,7 +114,7 @@ var _ = Describe("BMv2Target Controller", func() {
 				}
 				namespace = &corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: infrav1alpha1.BMV2_POD_NAMESPACE,
+						Name: bmv2Cfg.PodNamespace,
 					},
 				}
 				Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
@@ -126,13 +135,13 @@ var _ = Describe("BMv2Target Controller", func() {
 			By("Cleaning up the replicas Deployments and P4Targets")
 			err = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{},
 				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: resourceName},
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
 			)
 			Expect(err).NotTo(HaveOccurred())
 
 			err = k8sClient.DeleteAllOf(ctx, &corev1alpha1.P4Target{},
 				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: resourceName},
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
 			)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -149,9 +158,10 @@ var _ = Describe("BMv2Target Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &BMv2TargetReconciler{
+			controllerReconciler := &Reconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -162,9 +172,10 @@ var _ = Describe("BMv2Target Controller", func() {
 
 		It("should handle reconciliation when the resource is not found", func() {
 			By("Reconciling a non-existing resource")
-			controllerReconciler := &BMv2TargetReconciler{
+			controllerReconciler := &Reconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -188,9 +199,10 @@ var _ = Describe("BMv2Target Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &BMv2TargetReconciler{
+			controllerReconciler := &Reconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -202,7 +214,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			deploymentList := &appsv1.DeploymentList{}
 			err = k8sClient.List(ctx, deploymentList,
 				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: resourceName},
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploymentList.Items).To(HaveLen(1))
@@ -211,7 +223,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			p4TargetList := &corev1alpha1.P4TargetList{}
 			err = k8sClient.List(ctx, p4TargetList,
 				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: resourceName},
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p4TargetList.Items).To(HaveLen(1))
@@ -229,9 +241,10 @@ var _ = Describe("BMv2Target Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			By("Reconciling the created resource")
-			controllerReconciler := &BMv2TargetReconciler{
+			controllerReconciler := &Reconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -248,7 +261,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			p4TargetList := &corev1alpha1.P4TargetList{}
 			err = k8sClient.List(ctx, p4TargetList,
 				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: resourceName},
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p4TargetList.Items).To(HaveLen(1))
@@ -257,7 +270,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			deploymentList := &appsv1.DeploymentList{}
 			err = k8sClient.List(ctx, deploymentList,
 				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: resourceName},
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploymentList.Items).To(HaveLen(1))

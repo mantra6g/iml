@@ -4,8 +4,9 @@ IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
 IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
 
-IMG_TARGET_BMV2 ?= mantra6g/bmv2-driver:latest
-TARGET_IMAGES = $(IMG_TARGET_BMV2)
+IMG_BMV2_CP ?= bmv2-driver:local
+IMG_BMV2_DP ?= p4lang/behavioral-model:latest
+TARGET_IMAGES = $(IMG_BMV2_CP)
 
 IMG_EXAMPLE_LOADBALANCER ?= loadbalancer:local
 EXAMPLE_IMAGES = $(IMG_EXAMPLE_LOADBALANCER)
@@ -85,7 +86,7 @@ docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
 
 .PHONY: docker-build-bmv2
 docker-build-bmv2: ## Build docker image for the bmv2 target.
-	$(CONTAINER_TOOL) build -t ${IMG_TARGET_BMV2} --target bmv2 .
+	$(CONTAINER_TOOL) build -t ${IMG_BMV2_CP} --target bmv2 .
 
 .PHONY: docker-build-examples
 docker-build-examples: ## Build docker images for the examples.
@@ -141,7 +142,7 @@ kind-load-targets: ## Load all target images into the local cluster.
 
 .PHONY: build-installer
 build-installer: ## Generate a consolidated YAML with CRDs and deployment.
-	$(MAKE) -C operator build-installer IMG=${IMG_OPERATOR}
+	$(MAKE) -C operator build-installer IMG=${IMG_OPERATOR} IMG_BMV2_CP=${IMG_BMV2_CP} IMG_BMV2_DP=${IMG_BMV2_DP}
 	$(MAKE) -C daemon build-installer IMG=${IMG_DAEMON} IMG_CNI=${IMG_CNI}
 	$(KUSTOMIZE) . > install.yaml
 
