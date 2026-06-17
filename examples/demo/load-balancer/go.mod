@@ -1,4 +1,4 @@
-module lb-control
+module demo-lb-controller
 
 go 1.26.2
 
