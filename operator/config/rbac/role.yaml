@@ -39,6 +39,7 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
+  - forwardinggroups
   - networkfunctions
   - p4targets
   verbs:
@@ -52,6 +53,7 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
+  - forwardinggroups/finalizers
   - networkfunctions/finalizers
   - p4targets/finalizers
   verbs:
@@ -59,6 +61,7 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
+  - forwardinggroups/status
   - networkfunctions/status
   - p4targets/status
   verbs:
