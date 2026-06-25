@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- iml_configmap.yaml
+
+configMapGenerator:
+- envs:
+  - bmv2_config.env
+  literals:
+  - bmv2-data-plane-image=p4lang/behavioral-model:latest
+  - bmv2-control-plane-image=bmv2-driver:local
+  name: bmv2-config
+  options:
+    disableNameSuffixHash: true

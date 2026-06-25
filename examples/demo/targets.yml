@@ -1,0 +1,52 @@
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-1
+spec:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "250m"
+      memory: "128Mi"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-2
+spec:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "250m"
+      memory: "128Mi"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-3
+spec:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "250m"
+      memory: "128Mi"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-4
+spec:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "250m"
+      memory: "128Mi"

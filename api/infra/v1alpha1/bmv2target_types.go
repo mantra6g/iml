@@ -21,16 +21,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const TGT_DEP_FINALIZER_LABEL = "bmv2target.loom.io/finalizer"
-
-const BMV2_POD_NAMESPACE = "loom-system"
-const BMV2_TARGET_DEPLOYMENT_LABEL = "infra.loom.io/targetDeployment"
-const BMV2_TARGET_REPLICA_INDEX_LABEL = "infra.loom.io/targetReplicaIndex"
-const BMV2_DATAPLANE_CONTAINER_NAME = "bmv2-switch"
-const BMV2_DATAPLANE_CONTAINER_IMAGE = "p4lang/behavioral-model:latest"
-const BMV2_CONTROLPLANE_CONTAINER_NAME = "bmv2-driver"
-const BMV2_CONTROLPLANE_CONTAINER_IMAGE = "mantra6g/bmv2-driver:latest"
-const BMV2_DRIVER_SERVICE_ACCOUNT_NAME = "loom-bmv2-driver"
+const (
+	BMv2TargetLabel = "bmv2target.loom.io/name"
+)
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.

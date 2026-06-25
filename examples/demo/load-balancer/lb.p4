@@ -164,23 +164,23 @@ parser MyParser(packet_in packet,
 	}
 
 	state parse_inner_ipv4 {
-		packet.extract(hdr.inner_ipv4);
-		transition select(hdr.inner_ipv4.protocol) {
-      IPPROTO_TCP: parse_tcp;
-      IPPROTO_UDP: parse_udp;
-      IPPROTO_ICMP4: parse_icmp4;
-      default: accept;
-    }
+      packet.extract(hdr.inner_ipv4);
+      transition select(hdr.inner_ipv4.protocol) {
+        IPPROTO_TCP: parse_tcp;
+        IPPROTO_UDP: parse_udp;
+        IPPROTO_ICMP4: parse_icmp4;
+        default: accept;
+      }
 	}
 
 	state parse_inner_ipv6 {
-		packet.extract(hdr.inner_ipv6);
-		transition select(hdr.inner_ipv6.next_hdr) {
-      IPPROTO_TCP: parse_tcp;
-      IPPROTO_UDP: parse_udp;
-      IPPROTO_ICMP6: parse_icmp6;
-      default: accept;
-    }
+      packet.extract(hdr.inner_ipv6);
+      transition select(hdr.inner_ipv6.next_hdr) {
+        IPPROTO_TCP: parse_tcp;
+        IPPROTO_UDP: parse_udp;
+        IPPROTO_ICMP6: parse_icmp6;
+        default: accept;
+      }
 	}
 
 	state parse_tcp {
@@ -605,9 +605,9 @@ control MyDeparser(packet_out packet, in headers hdr) {
 		packet.emit(hdr.inner_ipv4);
 		packet.emit(hdr.inner_ipv6);
 		packet.emit(hdr.tcp);
-    packet.emit(hdr.udp);
-    packet.emit(hdr.icmp6);
-    packet.emit(hdr.icmp4);
+        packet.emit(hdr.udp);
+        packet.emit(hdr.icmp6);
+        packet.emit(hdr.icmp4);
 	}
 }
 

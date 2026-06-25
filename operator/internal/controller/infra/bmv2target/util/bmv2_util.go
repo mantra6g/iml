@@ -2,6 +2,10 @@ package util
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
@@ -11,14 +15,70 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	DefaultBMv2ControlPlaneContainerName = "bmv2-driver"
+	DefaultBMv2DataPlaneContainerName    = "bmv2-switch"
+)
+
+type BMv2Config struct {
+	ControlPlaneContainerName string
+	ControlPlaneImage         string
+	DataPlaneContainerName    string
+	DataPlaneImage            string
+	PodNamespace              string
+	DriverServiceAccount      string
+}
+
+func ParseBMv2ConfigFromPath(path string) (*BMv2Config, error) {
+	get := func(key string) (string, error) {
+		data, err := os.ReadFile(filepath.Join(path, key))
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	controlPlaneContainerName, err := get("bmv2-data-plane-container-name")
+	if controlPlaneContainerName == "" {
+		controlPlaneContainerName = DefaultBMv2ControlPlaneContainerName
+	}
+	controlPlaneImage, err := get("bmv2-control-plane-image")
+	if err != nil {
+		return nil, fmt.Errorf("required configuration \"bmv2-control-plane-image\" is missing or empty")
+	}
+	dataPlaneContainerName, err := get("bmv2-data-plane-container-name")
+	if dataPlaneContainerName == "" {
+		dataPlaneContainerName = DefaultBMv2DataPlaneContainerName
+	}
+	dataPlaneImage, err := get("bmv2-data-plane-image")
+	if err != nil {
+		return nil, fmt.Errorf("required configuration \"bmv2-data-plane-image\" is missing or empty")
+	}
+	podNamespace, err := get("bmv2-pod-namespace")
+	if err != nil {
+		return nil, fmt.Errorf("required configuration \"bmv2-pod-namespace\" is missing or empty")
+	}
+	driverServiceAccount, err := get("bmv2-driver-service-account-name")
+	if err != nil {
+		return nil, fmt.Errorf("required configuration \"bmv2-driver-service-account-name\" is missing or empty")
+	}
+	return &BMv2Config{
+		ControlPlaneContainerName: controlPlaneContainerName,
+		ControlPlaneImage:         controlPlaneImage,
+		DataPlaneContainerName:    dataPlaneContainerName,
+		DataPlaneImage:            dataPlaneImage,
+		PodNamespace:              podNamespace,
+		DriverServiceAccount:      driverServiceAccount,
+	}, nil
+}
+
 func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
-	containers []corev1.Container) []corev1.Container {
+	containers []corev1.Container, cfg *BMv2Config) []corev1.Container {
 	if containers == nil {
 		containers = []corev1.Container{}
 	}
 	containerIndex := -1
 	for i, container := range containers {
-		if container.Name == infrav1alpha1.BMV2_DATAPLANE_CONTAINER_NAME {
+		if container.Name == cfg.DataPlaneContainerName {
 			containerIndex = i
 			break
 		}
@@ -28,8 +88,8 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 		containerIndex = len(containers) - 1
 	}
 	container := &containers[containerIndex]
-	container.Name = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_NAME
-	container.Image = infrav1alpha1.BMV2_DATAPLANE_CONTAINER_IMAGE
+	container.Name = cfg.DataPlaneContainerName
+	container.Image = cfg.DataPlaneImage
 	container.ImagePullPolicy = corev1.PullIfNotPresent
 	if container.SecurityContext == nil {
 		container.SecurityContext = &corev1.SecurityContext{}
@@ -52,13 +112,13 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 }
 
 func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
-	containers []corev1.Container) []corev1.Container {
+	containers []corev1.Container, cfg *BMv2Config) []corev1.Container {
 	if containers == nil {
 		containers = []corev1.Container{}
 	}
 	containerIndex := -1
 	for i, container := range containers {
-		if container.Name == infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_NAME {
+		if container.Name == cfg.ControlPlaneContainerName {
 			containerIndex = i
 			break
 		}
@@ -68,8 +128,8 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 		containerIndex = len(containers) - 1
 	}
 	container := &containers[containerIndex]
-	container.Name = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_NAME
-	container.Image = infrav1alpha1.BMV2_CONTROLPLANE_CONTAINER_IMAGE
+	container.Name = cfg.ControlPlaneContainerName
+	container.Image = cfg.ControlPlaneImage
 	container.ImagePullPolicy = corev1.PullIfNotPresent
 	if container.SecurityContext == nil {
 		container.SecurityContext = &corev1.SecurityContext{}
@@ -80,6 +140,7 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
 	container.Args = []string{
 		"--p4target-name", bmv2Target.Name,
+		"--max-nf-slots", "1",
 	}
 	container.Env = EnsureDriverEnvVars(bmv2Target, container.Env)
 	return containers
@@ -153,7 +214,7 @@ func EnsurePodNamespaceEnvVar(existing []corev1.EnvVar) []corev1.EnvVar {
 }
 
 func EnsureBMv2DeploymentSpec(bmv2Target *infrav1alpha1.BMv2Target,
-	spec *appsv1.DeploymentSpec) *appsv1.DeploymentSpec {
+	spec *appsv1.DeploymentSpec, cfg *BMv2Config) *appsv1.DeploymentSpec {
 	if spec == nil {
 		spec = &appsv1.DeploymentSpec{}
 	}
@@ -163,7 +224,7 @@ func EnsureBMv2DeploymentSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	}
 	spec.Template = corev1.PodTemplateSpec{
 		ObjectMeta: *EnsureBMv2PodMeta(bmv2Target, &spec.Template.ObjectMeta),
-		Spec:       *EnsureBMv2PodSpec(bmv2Target, &spec.Template.Spec),
+		Spec:       *EnsureBMv2PodSpec(bmv2Target, &spec.Template.Spec, cfg),
 	}
 	return spec
 }
@@ -179,16 +240,16 @@ func EnsureBMv2PodMeta(bmv2Target *infrav1alpha1.BMv2Target,
 }
 
 func EnsureBMv2PodSpec(bmv2Target *infrav1alpha1.BMv2Target,
-	spec *corev1.PodSpec) *corev1.PodSpec {
+	spec *corev1.PodSpec, cfg *BMv2Config) *corev1.PodSpec {
 	if spec == nil {
 		spec = &corev1.PodSpec{}
 	}
-	spec.ServiceAccountName = infrav1alpha1.BMV2_DRIVER_SERVICE_ACCOUNT_NAME
+	spec.ServiceAccountName = cfg.DriverServiceAccount
 	if spec.Containers == nil {
 		spec.Containers = []corev1.Container{}
 	}
-	spec.Containers = EnsureBMv2DriverContainer(bmv2Target, spec.Containers)
-	spec.Containers = EnsureBMv2DataPlaneContainer(bmv2Target, spec.Containers)
+	spec.Containers = EnsureBMv2DriverContainer(bmv2Target, spec.Containers, cfg)
+	spec.Containers = EnsureBMv2DataPlaneContainer(bmv2Target, spec.Containers, cfg)
 	return spec
 }
 
@@ -197,7 +258,7 @@ func EnsureBMv2DeploymentLabels(bmv2Target *infrav1alpha1.BMv2Target,
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	labels[infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL] = bmv2Target.Name
+	labels[infrav1alpha1.BMv2TargetLabel] = bmv2Target.Name
 	return labels
 }
 
@@ -251,7 +312,7 @@ func GetBMv2PodTemplateAnnotations(bmv2Target *infrav1alpha1.BMv2Target) map[str
 
 func GetBMv2PodTemplateLabels(bmv2Target *infrav1alpha1.BMv2Target) map[string]string {
 	return map[string]string{
-		infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL: bmv2Target.Name,
+		infrav1alpha1.BMv2TargetLabel: bmv2Target.Name,
 	}
 }
 
@@ -260,7 +321,7 @@ func EnsureP4TargetLabels(bmv2Target *infrav1alpha1.BMv2Target,
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	labels[infrav1alpha1.BMV2_TARGET_DEPLOYMENT_LABEL] = bmv2Target.Name
+	labels[infrav1alpha1.BMv2TargetLabel] = bmv2Target.Name
 	return labels
 }
 
