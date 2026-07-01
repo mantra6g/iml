@@ -38,7 +38,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        target: ['operator']
+        target: ['cni', 'daemon', 'operator'] #, 'targets/bmv2']
     env:
       ENVTEST_K8S_VERSION: 1.34.1
       GINKGO_NO_COLOR: TRUE
@@ -59,7 +59,7 @@ jobs:
           cache-dependency-path: |
             k8sver
             tools/go.mod
-            operator/go.mod
+            ${{ matrix.target }}/go.mod
 
       - name: Cache envtest
         id: cache-envtest
@@ -75,10 +75,10 @@ jobs:
       - name: Run tests with coverage
         run: |
           set +e
-          go -C tools tool gotestsum --no-color --junitfile unit-tests.xml -- -coverprofile=coverage.out ../operator/...
+          go -C tools tool gotestsum --no-color --junitfile unit-tests.xml -- -coverprofile=coverage.out ../${{ matrix.target }}/...
           test_exit_code=$?
-          ls -lah tools
-          go tool cover -html=./tools/coverage.out -o ./tools/coverage.html
+          # mkdir -p ./tools/${{ matrix.target }}
+          go tool cover -html=./tools/coverage.out -o ./tools/${{ matrix.target }}.coverage.html
           go -C tools tool gocover-cobertura < ./tools/coverage.out > ./tools/coverage.xml
           exit "$test_exit_code"
 
@@ -109,7 +109,7 @@ jobs:
         if: "!cancelled()"
         uses: actions/upload-artifact@v7
         with:
-          path: "tools/coverage.html"
+          path: "tools/${{ matrix.target }}.coverage.html"
           archive: false
 
       - name: Write coverage to job summary
