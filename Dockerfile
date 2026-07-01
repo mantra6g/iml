@@ -17,6 +17,7 @@ COPY cni/go.mod cni/go.sum cni/
 COPY api/go.mod api/go.sum api/
 COPY daemon/go.mod daemon/go.sum daemon/
 COPY operator/go.mod operator/go.sum operator/
+COPY tools/go.mod tools/go.sum tools/
 
 # Common builder for CNI (loom) - golang:1.24
 FROM golang:1.26 AS cni-builder
