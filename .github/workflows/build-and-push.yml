@@ -125,7 +125,8 @@ jobs:
 
     strategy:
       matrix:
-        target: ['cni', 'daemon', 'operator', 'bmv2']
+        #target: ['cni', 'daemon', 'operator', 'bmv2']
+        target: ['cni']
     steps:
       - name: Docker meta
         id: meta
@@ -151,6 +152,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Test module
+        uses: docker/build-push-action@v7
+        with:
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          target: ${{ matrix.target }}-test
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,scope=${{ matrix.target }},mode=max
+
       - name: Build image
         uses: docker/build-push-action@v7
         with:
@@ -160,5 +171,3 @@ jobs:
           target: ${{ matrix.target }}
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,scope=${{ matrix.target }},mode=max
-          build-args: |
-            --progress=plain

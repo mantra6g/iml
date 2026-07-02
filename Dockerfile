@@ -32,6 +32,10 @@ COPY cni/ cni/
 
 RUN cd cni && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/loom cmd/main.go
 
+FROM cni-builder AS cni-test
+WORKDIR /workspace/cni
+RUN go tool gotestsum --no-color --junitfile unit-tests.xml -- -coverprofile=coverage.out ./...
+
 # ============================================================================
 # Daemon pre-builder - ubuntu:24.04
 FROM ubuntu:24.04 AS daemon-ebpf-builder
