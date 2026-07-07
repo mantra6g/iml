@@ -11,7 +11,7 @@ resources:
 - bases/infra.loom.io_bmv2targets.yaml
 - bases/infra.loom.io_loomnodes.yaml
 - bases/core.loom.io_networkfunctionconfigs.yaml
-- bases/core.loom.io_forwardinggroups.yaml
+- bases/core.loom.io_networkservices.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

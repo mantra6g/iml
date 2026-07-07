@@ -48,9 +48,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the loom-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- core_forwardinggroup_admin_role.yaml
-- core_forwardinggroup_editor_role.yaml
-- core_forwardinggroup_viewer_role.yaml
+- core_networkservice_admin_role.yaml
+- core_networkservice_editor_role.yaml
+- core_networkservice_viewer_role.yaml
 - core_networkfunctionconfig_admin_role.yaml
 - core_networkfunctionconfig_editor_role.yaml
 - core_networkfunctionconfig_viewer_role.yaml

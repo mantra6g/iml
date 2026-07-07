@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: forwardinggroups.core.loom.io
+  name: networkservices.core.loom.io
 spec:
   group: core.loom.io
   names:
-    kind: ForwardingGroup
-    listKind: ForwardingGroupList
-    plural: forwardinggroups
-    singular: forwardinggroup
+    kind: NetworkService
+    listKind: NetworkServiceList
+    plural: networkservices
+    singular: networkservice
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ForwardingGroup is the Schema for the forwardinggroups API
+        description: NetworkService is the Schema for the networkservices API
         properties:
           apiVersion:
             description: |-
@@ -37,19 +37,89 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of ForwardingGroup
+            description: spec defines the desired state of NetworkService
             properties:
-              foo:
-                description: foo is an example field of ForwardingGroup. Edit forwardinggroup_types.go
-                  to remove/update
+              lbPolicy:
+                description: lbPolicy states how to load balance the traffic across
+                  the matching network functions.
+                properties:
+                  type:
+                    type: string
+                required:
+                - type
+                type: object
+              segmentID:
+                description: |-
+                  segmentID is the SRv6 identifier for this service.
+                  Automatically assigned by the controller if not specified.
+                  Immutable after being set.
                 type: string
+              selector:
+                description: selector defines the network functions that will be part
+                  of this network service.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              unavailabilityPolicy:
+                default: Drop
+                description: |-
+                  unavailabilityPolicy determines how the data-plane should behave when no matching network functions are found.
+                  Possible values include:
+                  - "Drop": drops incoming packets
+                  - "Bypass": the network service is skipped
+
+                  Defaults to "Drop".
+                type: string
+            required:
+            - selector
             type: object
           status:
-            description: status defines the observed state of ForwardingGroup
+            description: status defines the observed state of NetworkService
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the ForwardingGroup resource.
+                  conditions represent the current state of the NetworkService resource.
                   Each condition has a unique type and reflects the status of a specific aspect of the resource.
 
                   Standard condition types include:

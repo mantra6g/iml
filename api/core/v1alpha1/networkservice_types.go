@@ -23,37 +23,70 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type LoadBalancingPolicy string
-
 const (
-	BalancingPolicyRoundRobin LoadBalancingPolicy = "RoundRobin"
+	LabelNetworkServiceName string = "loom.io/network-service-name"
+	LabelManagedBy          string = "loom.io/managed-by"
 )
 
-// ForwardingGroupSpec defines the desired state of ForwardingGroup
-type ForwardingGroupSpec struct {
+type UnavailabilityPolicyType string
+
+const (
+	PolicyDrop   UnavailabilityPolicyType = "Drop"
+	PolicyBypass UnavailabilityPolicyType = "Bypass"
+)
+
+type LoadBalancingPolicy struct {
+	Type LoadBalancingType `json:"type"`
+}
+
+type LoadBalancingType string
+
+const (
+	RoundRobinLoadBalancing LoadBalancingType = "RoundRobin"
+	ECMPLoadBalancing       LoadBalancingType = "HashBased"
+)
+
+// NetworkServiceSpec defines the desired state of NetworkService
+type NetworkServiceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// selector
+	// selector defines the network functions that will be part of this network service.
 	// +required
-	Selector metav1.LabelSelector `json:"selector"`
+	Selector map[string]string `json:"selector"`
 
-	// lbPolicy defines how to load balance
+	// lbPolicy states how to load balance the traffic across the matching network functions.
 	// +optional
-	LoadBalancingPolicy LoadBalancingPolicy `json:"lbPolicy"`
+	LoadBalancingPolicy *LoadBalancingPolicy `json:"lbPolicy,omitempty"`
+
+	// segmentID is the SRv6 identifier for this service.
+	// Automatically assigned by the controller if not specified.
+	// Immutable after being set.
+	// +optional
+	SegmentID string `json:"segmentID,omitempty"`
+
+	// unavailabilityPolicy determines how the data-plane should behave when no matching network functions are found.
+	// Possible values include:
+	// - "Drop": drops incoming packets
+	// - "Bypass": the network service is skipped
+	//
+	// Defaults to "Drop".
+	// +optional
+	// +kubebuilder:default:="Drop"
+	UnavailabilityPolicy UnavailabilityPolicyType `json:"unavailabilityPolicy,omitempty"`
 }
 
-// ForwardingGroupStatus defines the observed state of ForwardingGroup.
-type ForwardingGroupStatus struct {
+// NetworkServiceStatus defines the observed state of NetworkService.
+type NetworkServiceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
-	// conditions represent the current state of the ForwardingGroup resource.
+	// conditions represent the current state of the NetworkService resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
 	// Standard condition types include:
@@ -71,32 +104,32 @@ type ForwardingGroupStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// ForwardingGroup is the Schema for the forwardinggroups API
-type ForwardingGroup struct {
+// NetworkService is the Schema for the networkservices API
+type NetworkService struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
-	// spec defines the desired state of ForwardingGroup
+	// spec defines the desired state of NetworkService
 	// +required
-	Spec ForwardingGroupSpec `json:"spec"`
+	Spec NetworkServiceSpec `json:"spec"`
 
-	// status defines the observed state of ForwardingGroup
+	// status defines the observed state of NetworkService
 	// +optional
-	Status ForwardingGroupStatus `json:"status,omitzero"`
+	Status NetworkServiceStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// ForwardingGroupList contains a list of ForwardingGroup
-type ForwardingGroupList struct {
+// NetworkServiceList contains a list of NetworkService
+type NetworkServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitzero"`
-	Items           []ForwardingGroup `json:"items"`
+	Items           []NetworkService `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ForwardingGroup{}, &ForwardingGroupList{})
+	SchemeBuilder.Register(&NetworkService{}, &NetworkServiceList{})
 }

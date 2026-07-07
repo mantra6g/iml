@@ -44,8 +44,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/mantra6g/iml/operator/internal/controller/core/fwgrp"
 	"github.com/mantra6g/iml/operator/internal/controller/core/networkfunction"
+	"github.com/mantra6g/iml/operator/internal/controller/core/nsendpoint"
 	"github.com/mantra6g/iml/operator/internal/controller/core/p4target"
 	"github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target"
 	"github.com/mantra6g/iml/operator/internal/controller/infra/loomnode"
@@ -339,11 +339,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if err := (&fwgrp.ForwardingGroupReconciler{
+	if err := (&nsendpoint.Reconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "ForwardingGroup")
+		setupLog.Error(err, "Failed to create controller", "controller", "NetworkService")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -35,6 +35,10 @@ func (ref *ApplicationReference) ToNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
 }
 
+type ChainElementSpec struct {
+	NetworkServiceName string `json:"networkServiceName"`
+}
+
 // ServiceChainSpec defines the desired state of ServiceChain
 type ServiceChainSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -50,9 +54,10 @@ type ServiceChainSpec struct {
 	// +required
 	To *ApplicationReference `json:"to"`
 
-	// Specifies the intermediate functions between the source and destination applications
-	// +optional
-	Functions []metav1.LabelSelector `json:"functions,omitempty"`
+	// Specifies the intermediate network services between the source and destination applications
+	// +required
+	// +kubebuilder:validation:MinItems:=1
+	Through []ChainElementSpec `json:"through"`
 }
 
 // ServiceChainStatus defines the observed state of ServiceChain.

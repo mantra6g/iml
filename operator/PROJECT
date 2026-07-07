@@ -103,7 +103,7 @@ resources:
   controller: true
   domain: loom.io
   group: core
-  kind: ForwardingGroup
+  kind: NetworkService
   path: github.com/mantra6g/iml/operator/api/core/v1alpha1
   version: v1alpha1
 version: "3"

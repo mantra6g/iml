@@ -9,5 +9,5 @@ resources:
 - infra_v1alpha1_bmv2target.yaml
 - infra_v1alpha1_loomnode.yaml
 - core_v1alpha1_networkfunctionconfig.yaml
-- core_v1alpha1_forwardinggroup.yaml
+- core_v1alpha1_networkservice.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

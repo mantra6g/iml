@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fwgrp
+package nsendpoint
 
 import (
 	"context"
@@ -30,7 +30,7 @@ import (
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 )
 
-var _ = Describe("ForwardingGroup Controller", func() {
+var _ = Describe("NetworkService Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("ForwardingGroup Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		forwardinggroup := &corev1alpha1.ForwardingGroup{}
+		ns := &corev1alpha1.NetworkService{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind ForwardingGroup")
-			err := k8sClient.Get(ctx, typeNamespacedName, forwardinggroup)
+			By("creating the custom resource for the Kind NetworkService")
+			err := k8sClient.Get(ctx, typeNamespacedName, ns)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.ForwardingGroup{
+				resource := &corev1alpha1.NetworkService{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("ForwardingGroup Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &corev1alpha1.ForwardingGroup{}
+			resource := &corev1alpha1.NetworkService{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance ForwardingGroup")
+			By("Cleanup the specific resource instance NetworkService")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &ForwardingGroupReconciler{
+			controllerReconciler := &Reconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

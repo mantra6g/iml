@@ -39,8 +39,8 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - forwardinggroups
   - networkfunctions
+  - networkservices
   - p4targets
   verbs:
   - create
@@ -53,21 +53,29 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - forwardinggroups/finalizers
   - networkfunctions/finalizers
+  - networkservices/finalizers
   - p4targets/finalizers
   verbs:
   - update
 - apiGroups:
   - core.loom.io
   resources:
-  - forwardinggroups/status
   - networkfunctions/status
+  - networkservices/status
   - p4targets/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - infra.loom.io
   resources:

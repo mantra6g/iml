@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: loom-operator
     app.kubernetes.io/managed-by: kustomize
-  name: core-forwardinggroup-editor-role
+  name: core-networkservice-editor-role
 rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - forwardinggroups
+  - networkservices
   verbs:
   - create
   - delete
@@ -28,6 +28,6 @@ rules:
 - apiGroups:
   - core.loom.io
   resources:
-  - forwardinggroups/status
+  - networkservices/status
   verbs:
   - get
