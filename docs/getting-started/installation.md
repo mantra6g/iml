@@ -14,9 +14,17 @@ Before installing IML, you need:
      - **cert-manager** - for certificate management and webhook validation
 
 3. **Tools installed locally:**
+     - `docker` (for building/running containers)
      - `kubectl` (v1.11.3 or higher)
+     - `kind` (if you don't already have a cluster — see below)
      - `helm` (v3.0 or higher)
      - `docker` (for building/running containers)
+
+4. Enable vrf kernel module.
+
+```bash
+sudo modprobe vrf
+```
 
 ## Setting Up a Kubernetes Cluster
 
@@ -61,7 +69,7 @@ kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-c
 Flannel provides pod-to-pod networking:
 
 ```bash
-kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.28.4/Documentation/kube-flannel.yml
 
 # Wait for Flannel to be ready
 kubectl wait --for=condition=Ready pod -l app=flannel -n kube-flannel --timeout=300s
@@ -81,6 +89,22 @@ helm install cert-manager jetstack/cert-manager --namespace cert-manager --creat
 
 # Wait for cert-manager to be ready
 kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+```
+
+### 4. Build and Load Local Images (kind/dev clusters)
+
+The `operator`, `daemon`, and `cni` images are not published to a public registry, so for local/dev clusters (e.g. kind) you must build and load them yourself before installing IML — with either installation method below:
+
+```bash
+make docker-build-iml
+make kind-load-iml
+```
+
+If you plan to run network functions on a local programmable target (e.g. the bundled `examples/`, which use BMv2), also build and load the target images:
+
+```bash
+make docker-build-targets
+make kind-load-targets
 ```
 
 
@@ -119,7 +143,6 @@ Then, apply the kubectl manifests:
 
 ```bash
 kubectl apply -f operator/dist/install.yaml
-kubectl apply -f cni/dist/install.yaml
 kubectl apply -f daemon/dist/install.yaml
 ```
 
@@ -157,8 +180,7 @@ cd iml
 Then, delete the kubectl manifests:
 
 ```bash
-kubectl delete -f go-daemon/dist/install.yaml
-kubectl delete -f cni/dist/install.yaml
+kubectl delete -f daemon/dist/install.yaml
 kubectl delete -f operator/dist/install.yaml
 ```
 
@@ -180,8 +202,8 @@ If you no longer need the cluster dependencies, you can remove them:
 # Remove Multus
 kubectl delete -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
 
-# Remove Flannel
-kubectl delete -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+# Remove Flannel (use the same version tag you installed)
+kubectl delete -f https://raw.githubusercontent.com/flannel-io/flannel/v0.28.4/Documentation/kube-flannel.yml
 
 # Remove cert-manager
 helm uninstall cert-manager --namespace cert-manager

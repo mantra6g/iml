@@ -37,7 +37,7 @@ func ParseBMv2ConfigFromPath(path string) (*BMv2Config, error) {
 		}
 		return strings.TrimSpace(string(data)), nil
 	}
-	controlPlaneContainerName, err := get("bmv2-data-plane-container-name")
+	controlPlaneContainerName, err := get("bmv2-control-plane-container-name")
 	if controlPlaneContainerName == "" {
 		controlPlaneContainerName = DefaultBMv2ControlPlaneContainerName
 	}
