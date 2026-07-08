@@ -1,9 +1,9 @@
-go 1.26.2
+go 1.25.3
 
 use (
 	api
-	operator
-	daemon
 	cni
-  tools
+	daemon
+	operator
+	tools
 )
