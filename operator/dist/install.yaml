@@ -6118,6 +6118,19 @@ subjects:
 ---
 apiVersion: v1
 data:
+  bmv2-control-plane-container-name: bmv2-driver
+  bmv2-control-plane-image: bmv2-driver:local
+  bmv2-data-plane-container-name: bmv2-switch
+  bmv2-data-plane-image: p4lang/behavioral-model:latest
+  bmv2-driver-service-account-name: loom-bmv2-driver
+  bmv2-pod-namespace: loom-system
+kind: ConfigMap
+metadata:
+  name: loom-bmv2-config
+  namespace: loom-system
+---
+apiVersion: v1
+data:
   cluster-pool-ipv4-cidr: 10.123.0.0/16
   cluster-pool-ipv4-mask-size: "24"
   cluster-pool-ipv6-cidr: fd00::/16
@@ -6256,6 +6269,9 @@ spec:
         - mountPath: /etc/iml/config
           name: iml-config
           readOnly: true
+        - mountPath: /etc/bmv2/config
+          name: bmv2-config
+          readOnly: true
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: webhook-certs
           readOnly: true
@@ -6269,6 +6285,9 @@ spec:
       - configMap:
           name: loom-iml-config
         name: iml-config
+      - configMap:
+          name: loom-bmv2-config
+        name: bmv2-config
       - name: webhook-certs
         secret:
           secretName: webhook-server-cert

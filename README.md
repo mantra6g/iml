@@ -133,8 +133,8 @@ IML consists of three main components:
 | Component | Purpose | Location |
 |-----------|---------|----------|
 | **Operator** | Kubernetes controller for global orchestration and resource scheduling | `operator/` |
-| **Go-Daemon** | Local node orchestration and data plane management | `go-daemon/` |
-| **CNI Plugin** | Kubernetes network interface configuration | `cni/` |
+| **Daemon** | Local node orchestration and data plane management | `daemon/` |
+| **CNI Plugin** | Kubernetes network interface configuration (bundled into the Daemon's deployment, not deployed on its own) | `cni/` |
 
 For detailed explanations, see the [Contributing Guide - Project Structure](docs/contributing/contributing.md#project-structure).
 
@@ -158,8 +158,7 @@ helm uninstall iml --namespace loom-system
 
 # Or via kubectl manifests
 kubectl delete -f operator/dist/install.yaml
-kubectl delete -f cni/dist/install.yaml
-kubectl delete -f go-daemon/dist/install.yaml
+kubectl delete -f daemon/dist/install.yaml
 ```
 
 For complete cleanup instructions, see the [Installation Guide - Uninstalling](docs/getting-started/installation.md#uninstalling-iml).
@@ -188,4 +187,3 @@ For questions, issues, or suggestions:
 - 📖 Check the [documentation](docs/index.md)
 - 💬 Review existing issues and discussions
 - 📧 Contact: tomas@tomasagata.dev
-
