@@ -25,3 +25,5 @@ install.yaml
 
 # Binaries for programs and plugins
 *.o
+
+artifacts/
