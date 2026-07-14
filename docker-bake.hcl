@@ -2,52 +2,55 @@ variable "CI" {
   default = false
 }
 
+variable "MODS" {
+  type = list(object({
+    name = string
+    bin  = string
+  }))
+  default = [
+      {name = "cni", bin = "loom"},
+      {name = "operator", bin = "manager"},
+      {name = "daemon", bin = "daemon"}
+    ]
+}
+
 target "docker-metadata-action" {
   tags = ["__target__:local"]
 }
 
 target "_common" {
+  matrix = {
+    mod = MODS
+  }
   context = "."
   dockerfile = "Dockerfile"
-}
-
-target "image-all" {
-  inherits = ["_common", "docker-metadata-action"]
-  matrix = {
-    mod = [
-      {name = "cni", bin = "loom"},
-      {name = "operator", bin = "manager"},
-      {name = "daemon", bin = "daemon"}
-    ]
-  }
-  target = "runtime"
-  name = "image-${mod.name}"
+  name = "_common-${mod.name}"
   args = {
     MOD = mod.name
     BIN = mod.bin
   }
   cache-from = ["type=gha,scope=${mod.name}"]
   cache-to   = ["type=gha,scope=${mod.name},mode=max"]
+}
+
+target "image-all" {
+  matrix = {
+    mod = MODS
+  }
+  inherits = ["_common-${mod.name}", "docker-metadata-action"]
+  target = "runtime"
+  name = "image-${mod.name}"
   tags = [for tag in target.docker-metadata-action.tags : replace(tag, "__target__", "${mod.name}")]
 }
 
 target "test-all" {
-  inherits = ["_common"]
   matrix = {
-    mod = [
-      "cni",
-      "operator",
-      "daemon"
-    ]
+    mod = MODS
   }
+  inherits = ["_common-${mod.name}"]
   target = "test"
-  name = "test-${mod}"
-  args = {
-    MOD = mod
-  }
+  name = "test-${mod.name}"
   output = [
     "type=local,dest=artifacts"
   ]
-  cache-from = ["type=gha,scope=${mod}"]
-  cache-to   = ["type=gha,scope=${mod},mode=max"]
 }
