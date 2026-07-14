@@ -8,7 +8,7 @@ target "docker-metadata-action" {
 
 target "_common" {
   context = "."
-  dockerfile = "Dockerfile.CI"
+  dockerfile = "Dockerfile"
 }
 
 target "image-all" {
