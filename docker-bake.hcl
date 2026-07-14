@@ -2,7 +2,9 @@ variable "CI" {
   default = false
 }
 
-target "docker-metadata-action" {}
+target "docker-metadata-action" {
+  tags = ["__target__:local"]
+}
 
 target "_common" {
   context = "."
@@ -10,7 +12,7 @@ target "_common" {
 }
 
 target "image-all" {
-  inherits = ["_common"]
+  inherits = ["_common", "docker-metadata-action"]
   matrix = {
     mod = [
       {name = "cni", bin = "loom"},
@@ -26,9 +28,7 @@ target "image-all" {
   }
   cache-from = ["type=gha,scope=${mod.name}"]
   cache-to   = ["type=gha,scope=${mod.name},mode=max"]
-  tags = CI ? [
-    for tag in target.docker-metadata-action.tags : replace(tag, "__service__", "${mod.name}")
-  ] : ["${mod.name}:local"]
+  tags = [for tag in target.docker-metadata-action.tags : replace(tag, "__target__", "${mod.name}")]
 }
 
 target "test-all" {
@@ -48,4 +48,6 @@ target "test-all" {
   output = [
     "type=local,dest=artifacts"
   ]
+  cache-from = ["type=gha,scope=${mod}"]
+  cache-to   = ["type=gha,scope=${mod},mode=max"]
 }
