@@ -23,7 +23,6 @@ jobs:
       contents: read
       packages: write
     env:
-      GINKGO_NO_COLOR: TRUE
       MODULES: '["cni", "daemon", "operator"]'
 
     steps:

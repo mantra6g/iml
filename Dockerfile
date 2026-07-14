@@ -69,6 +69,7 @@ RUN GOPROXY=off CGO_ENABLED=0 go build -o bin/ ./${MOD}/...
 FROM prebuilder AS test-runner
 ARG MOD
 ARG ENVTEST_K8S_VERSION
+ENV GINKGO_NO_COLOR=TRUE
 
 COPY --from=test-base /assets /assets
 COPY api/ api/
