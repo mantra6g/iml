@@ -10,129 +10,40 @@ on:
       - api/**
       - daemon/**
       - operator/**
-      - targets/bmv2/**
+      #- targets/bmv2/**
   pull_request:
     branches: [ main ]
     paths: *paths
 
 jobs:
-  # changes:
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     pull-requests: read
-  #   outputs:
-  #     images: ${{ steps.filter.outputs.changes }}
-  #   steps:
-  #   - uses: actions/checkout@v6
-  #   - uses: dorny/paths-filter@v4
-  #     id: filter
-  #     with:
-  #       filters: |
-  #         cni: ['cni/**', 'api/**', 'go.work', 'go.work.sum']
-  #         daemon: ['daemon/**', 'api/**', 'go.work', 'go.work.sum']
-  #         operator: ['operator/**', 'api/**', 'go.work', 'go.work.sum']
-
-  test-and-coverage:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        target: ['cni', 'daemon', 'operator'] #, 'targets/bmv2']
-    env:
-      ENVTEST_K8S_VERSION: 1.34.1
-      GINKGO_NO_COLOR: TRUE
-
-    steps:
-      - run: echo "$ENVTEST_K8S_VERSION" > k8sver
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-
-      - name: Set up Go
-        id: setupgo
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26.2'
-          cache: true
-          #cache-dependency-path: '**/go.mod'
-          cache-dependency-path: |
-            k8sver
-            tools/go.mod
-            ${{ matrix.target }}/go.mod
-
-      - name: Cache envtest
-        id: cache-envtest
-        uses: actions/cache@v6
-        with:
-          path: tools/bin
-          key: "envtest-${{ env.ENVTEST_K8S_VERSION }}"
-
-      - name: Run setup-envtest
-        run: |
-          echo "KUBEBUILDER_ASSETS=${{ github.workspace }}/tools/$(go -C tools tool setup-envtest use ${ENVTEST_K8S_VERSION} --bin-dir ./bin -p path)" >> "$GITHUB_ENV"
-
-      - name: Run tests with coverage
-        run: |
-          set +e
-          go -C tools tool gotestsum --no-color --junitfile unit-tests.xml -- -coverprofile=coverage.out ../${{ matrix.target }}/...
-          test_exit_code=$?
-          # mkdir -p ./tools/${{ matrix.target }}
-          go tool cover -html=./tools/coverage.out -o ./tools/${{ matrix.target }}.coverage.html
-          go -C tools tool gocover-cobertura < ./tools/coverage.out > ./tools/coverage.xml
-          exit "$test_exit_code"
-
-      #- name: Publish Test Report
-      #  uses: mikepenz/action-junit-report@v6
-      #  if: success() || failure() # always run even if the previous step fails
-      #  with:
-      #    report_paths: unit-tests.xml
-      #    detailed_summary: true
-      #    include_passed: true
-      #    include_time_in_summary: true
-
-      - name: Generate unit test summary
-        if: "!cancelled()"
-        uses: test-summary/action@v2
-        with:
-          paths: "tools/unit-tests.xml"
-
-      - name: Generate coverage summary
-        if: "!cancelled()"
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: "./tools/coverage.xml"
-          format: markdown
-          output: file
-
-      - name: Upload coverage as artifact
-        if: "!cancelled()"
-        uses: actions/upload-artifact@v7
-        with:
-          path: "tools/${{ matrix.target }}.coverage.html"
-          archive: false
-
-      - name: Write coverage to job summary
-        if: "!cancelled()"
-        run: cat ./code-coverage-results.md >> $GITHUB_STEP_SUMMARY
-
-  build-and-push:
+  test-build-and-push:
     runs-on: ubuntu-latest
     #needs: test-and-coverage
     permissions:
       contents: read
       packages: write
+    env:
+      GINKGO_NO_COLOR: TRUE
+      MODULES: '["cni", "daemon", "operator"]'
 
-    strategy:
-      matrix:
-        #target: ['cni', 'daemon', 'operator', 'bmv2']
-        target: ['cni']
     steps:
+      - name: Generate bake targets
+        id: targets
+        env:
+          MODULES: ${{ env.MODULES }}
+        run: |
+          echo "tests=$(jq -cn --jsonargs \
+            '$ARGS.positional[] | map("test-" + .) | join(",")' \
+            "$MODULES")" >> "$GITHUB_OUTPUT"
+          echo "images=$(jq -cn --jsonargs \
+            '$ARGS.positional[] | map("image-" + .) | join(",")' \
+            "$MODULES")" >> "$GITHUB_OUTPUT"
+
       - name: Docker meta
-        id: meta
+        id: metadata
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}/${{ matrix.target }}
+          images: ghcr.io/${{ github.repository }}/__target__
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -152,22 +63,45 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Test module
-        uses: docker/build-push-action@v7
+      - name: Run tests
+        uses: docker/bake-action@v7
         with:
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          target: ${{ matrix.target }}-test
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,scope=${{ matrix.target }},mode=max
+          push: false
+          files: |
+            ./docker-bake.hcl
+            cwd://${{ steps.metadata.outputs.bake-file }}
+          targets: ${{ steps.targets.outputs.tests }}
 
-      - name: Build image
-        uses: docker/build-push-action@v7
+      - name: Generate unit test summary
+        id: summary
+        uses: test-summary/action@v2
         with:
-          platforms: linux/amd64
+          paths: "artifacts/*.unit-tests.xml"
+
+      - name: Generate coverage summary
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: "./artifacts/*.coverage.xml"
+          format: markdown
+          output: file
+
+      - name: Upload coverage as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: "artifacts/*.coverage.html"
+
+      - name: Write coverage to job summary
+        run: cat ./code-coverage-results.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if tests failed
+        if: steps.summary.outputs.failed != '0'
+        run: exit 1
+
+      - name: Build and push images
+        uses: docker/bake-action@v7
+        with:
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          target: ${{ matrix.target }}
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,scope=${{ matrix.target }},mode=max
+          files: |
+            ./docker-bake.hcl
+            cwd://${{ steps.metadata.outputs.bake-file }}
+          targets: ${{ steps.targets.outputs.images }}
