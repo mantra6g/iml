@@ -1,50 +1,36 @@
-# This is a multi-stage Dockerfile that builds all services in the project.
-# Use 'docker build --target <service-name>' to build a specific service.
-# Available targets: cni, daemon, operator, bmv2
+ARG GOVERSION=1.25.3
+ARG ENVTEST_K8S_VERSION=1.34.1
+ARG UBUNTUVERSION=24.04
+ARG ALPINEVERSION=3.20
+#GOOS=${TARGETOS:-linux}
+#GOARCH=${TARGETARCH}
+ARG MOD=cni
 
-# ============================================================================
-# Build stages
-# ============================================================================
+# BASE
 
-# Common base build stage for all services
-FROM golang:1.26 AS base-builder
-ARG TARGETOS
-ARG TARGETARCH
+FROM golang:${GOVERSION} AS base
 
 WORKDIR /workspace
-COPY go.work go.work.sum ./
-COPY cni/go.mod cni/go.sum cni/
+COPY go.work ./
 COPY api/go.mod api/go.sum api/
+COPY cni/go.mod cni/go.sum cni/
 COPY daemon/go.mod daemon/go.sum daemon/
 COPY operator/go.mod operator/go.sum operator/
 COPY tools/go.mod tools/go.sum tools/
+#RUN --mount=type=cache,target=/go/pkg/mod \
+RUN go mod download
 
-# Common builder for CNI (loom) - golang:1.24
-FROM golang:1.26 AS cni-builder
-ARG TARGETOS
-ARG TARGETARCH
+FROM base AS test-base
+ARG ENVTEST_K8S_VERSION
+#RUN --mount=type=cache,target=/assets \
+RUN go tool setup-envtest use ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path
 
-COPY --from=base-builder /workspace /workspace
-WORKDIR /workspace
-RUN cd cni && go mod download && mkdir bin
+# BUILD
 
-COPY cni/ cni/
-
-RUN cd cni && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/loom cmd/main.go
-
-FROM cni-builder AS cni-test
-WORKDIR /workspace/cni
-RUN go tool gotestsum --no-color --junitfile unit-tests.xml -- -coverprofile=coverage.out ./...
-
-# ============================================================================
-# Daemon pre-builder - ubuntu:24.04
-FROM ubuntu:24.04 AS daemon-ebpf-builder
-
-# Install build dependencies
-# clang/llvm for BPF compilation
-# libbpf-dev for the BPF headers
-# linux-headers-generic for asm/types.h and other kernel definitions
-RUN apt-get update && apt-get install -y \
+FROM ubuntu:${UBUNTUVERSION} AS daemon-ebpf-builder
+RUN DEBIAN_FRONTEND=noninteractive \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     clang \
     llvm \
     libbpf-dev \
@@ -52,104 +38,64 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=base-builder /workspace /workspace
 WORKDIR /workspace
 COPY daemon/ebpf/ daemon/ebpf/
 
-# Find the architecture-specific include path dynamically and compile.
-# We include /usr/include/$(uname -m)-linux-gnu to resolve 'asm/types.h'.
 RUN ARCH=$(uname -m | sed 's/x86_64/x86_64-linux-gnu/') && \
     clang -O2 -g -target bpf \
     -I/usr/include/$ARCH \
     -I/usr/include \
     -c daemon/ebpf/src/recalc_csum.c -o daemon/ebpf/recalc_csum.o
 
-# ============================================================================
-# Daemon builder - golang:1.25
-FROM golang:1.26 AS daemon-builder
-ARG TARGETOS
-ARG TARGETARCH
-
+FROM base AS pre-daemon-builder
 COPY --from=daemon-ebpf-builder /workspace /workspace
-WORKDIR /workspace
-RUN cd daemon && go mod download && mkdir bin
+
+FROM base AS operator-prebuilder
+FROM base AS cni-prebuilder
+FROM pre-daemon-builder AS daemon-prebuilder
+FROM ${MOD}-prebuilder AS prebuilder
+
+FROM prebuilder AS builder
+ARG MOD
 
 COPY api/ api/
-COPY daemon/ daemon/
+COPY ${MOD}/ ${MOD}/
+#RUN --mount=type=cache,target=/go/pkg/mod \
+#    --mount=type=cache,target=/root/.cache/go-build \
+RUN GOPROXY=off CGO_ENABLED=0 go build -o bin/ ./${MOD}/...
 
-RUN cd daemon && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/daemon cmd/main.go
+# TEST
 
-# ============================================================================
-# Operator builder - golang:1.24
-FROM golang:1.26 AS operator-builder
-ARG TARGETOS
-ARG TARGETARCH
+FROM prebuilder AS test-runner
+ARG MOD
+ARG ENVTEST_K8S_VERSION
 
-COPY --from=base-builder /workspace /workspace
-WORKDIR /workspace
-RUN cd operator && go mod download && mkdir bin
-
+COPY --from=test-base /assets /assets
 COPY api/ api/
-COPY operator/ operator/
+COPY ${MOD}/ ${MOD}/
+#RUN --mount=type=cache,target=/go/pkg/mod \
+#    --mount=type=cache,target=/root/.cache/go-build \
+#    --mount=type=cache,target=/assets \
+RUN KUBEBUILDER_ASSETS=$(go tool setup-envtest use -i ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path) \
+    GOPROXY=off go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MOD}/... || true
 
-RUN cd operator && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o bin/manager cmd/main.go
+RUN go tool cover -html=./coverage.out -o ./artifacts/${MOD}.coverage.html && \
+    go tool gocover-cobertura < ./coverage.out > ./artifacts/${MOD}.coverage.xml
 
-# ============================================================================
-# BMv2 driver builder — standalone module (not in go.work), final image needs
-# p4c at runtime to compile P4 source files downloaded via URL.
-# ============================================================================
-FROM golang:1.26 AS bmv2-builder
-ARG TARGETOS
-ARG TARGETARCH
+FROM scratch AS test
+COPY --from=test-runner /workspace/artifacts/ /
 
-WORKDIR /workspace
-COPY targets/bmv2/go.mod targets/bmv2/go.sum ./
-RUN go mod download
+# RUNTIME
 
-COPY targets/bmv2/cmd/ cmd/
-COPY targets/bmv2/api/ api/
-COPY targets/bmv2/handlers/ handlers/
-COPY targets/bmv2/controllers/ controllers/
-COPY targets/bmv2/http/ http/
-COPY targets/bmv2/managers/ managers/
-COPY targets/bmv2/pkg/ pkg/
-
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o driver cmd/main.go
-
-# ============================================================================
-# Final images
-# ============================================================================
-
-# CNI image (loom)
-FROM alpine:3.19 AS cni
-WORKDIR /
-COPY --from=cni-builder /workspace/cni/bin/loom .
-ENTRYPOINT ["/loom"]
-
-# Daemon image
-FROM alpine:3.20 AS daemon
+FROM alpine:${ALPINEVERSION} AS pre-daemon-runtime
 RUN apk add --no-cache iptables iptables-legacy
-WORKDIR /
-COPY --from=daemon-builder /workspace/daemon/bin/daemon .
-ENTRYPOINT ["/daemon"]
 
-# Operator image (manager)
-FROM gcr.io/distroless/static:nonroot AS operator
-WORKDIR /
-COPY --from=operator-builder /workspace/operator/bin/manager .
-USER 65532:65532
-ENTRYPOINT ["/manager"]
+FROM scratch AS operator-preruntime
+FROM scratch AS cni-preruntime
+FROM pre-daemon-runtime AS daemon-preruntime
+FROM ${MOD}-preruntime AS preruntime
 
-# BMv2 driver image
-# p4lang/p4c:latest provides p4c at runtime for compiling .p4 source files.
-# libboost libraries are required by p4c's runtime dependencies.
-FROM p4lang/p4c:1.2.5.13 AS bmv2
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libboost-iostreams-dev \
-    libboost-graph-dev \
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /
-COPY --from=bmv2-builder /workspace/driver .
-ENTRYPOINT ["/driver"]
-
-
+FROM preruntime AS runtime
+ARG BIN
+COPY --from=builder /workspace/bin/${BIN} .
+ENTRYPOINT ["/${BIN}"]
