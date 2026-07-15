@@ -17,15 +17,15 @@ COPY cni/go.mod cni/go.sum cni/
 COPY daemon/go.mod daemon/go.sum daemon/
 COPY operator/go.mod operator/go.sum operator/
 COPY tools/go.mod tools/go.sum tools/
-#RUN --mount=type=cache,target=/go/pkg/mod \
-RUN go mod download
+RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
+    go mod download
 
 FROM base AS test-base
 ARG ENVTEST_K8S_VERSION
-#RUN --mount=type=cache,target=/assets \
-RUN go tool setup-envtest use ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path
+RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
+    go tool setup-envtest use ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path
 
-# BUILD
+# PREBUILD
 
 FROM ubuntu:${UBUNTUVERSION} AS daemon-ebpf-builder
 RUN DEBIAN_FRONTEND=noninteractive \
@@ -55,15 +55,6 @@ FROM base AS cni-prebuilder
 FROM pre-daemon-builder AS daemon-prebuilder
 FROM ${MOD}-prebuilder AS prebuilder
 
-FROM prebuilder AS builder
-ARG MOD
-
-COPY api/ api/
-COPY ${MOD}/ ${MOD}/
-#RUN --mount=type=cache,target=/go/pkg/mod \
-#    --mount=type=cache,target=/root/.cache/go-build \
-RUN GOPROXY=off CGO_ENABLED=0 go build -o bin/ ./${MOD}/...
-
 # TEST
 
 FROM prebuilder AS test-runner
@@ -73,18 +64,29 @@ ENV GINKGO_NO_COLOR=TRUE
 
 COPY --from=test-base /assets /assets
 COPY api/ api/
-COPY ${MOD}/ ${MOD}/
-#RUN --mount=type=cache,target=/go/pkg/mod \
-#    --mount=type=cache,target=/root/.cache/go-build \
-#    --mount=type=cache,target=/assets \
-RUN KUBEBUILDER_ASSETS=$(go tool setup-envtest use -i ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path) \
-    GOPROXY=off go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MOD}/... || true
+COPY ${MOD}/ ${MOD}
 
-RUN go tool cover -html=./coverage.out -o ./artifacts/${MOD}.coverage.html && \
+RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
+    --mount=type=cache,id=go-build,target=/root/.cache/go-build \
+    KUBEBUILDER_ASSETS=$(go tool setup-envtest use -i ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path) \
+    GOPROXY=off \
+    go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MOD}/... || true && \
+    go tool cover -html=./coverage.out -o ./artifacts/${MOD}.coverage.html && \
     go tool gocover-cobertura < ./coverage.out > ./artifacts/${MOD}.coverage.xml
 
 FROM scratch AS test
 COPY --from=test-runner /workspace/artifacts/ /
+
+# BUILD
+
+FROM prebuilder AS builder
+ARG MOD
+
+COPY api/ api/
+COPY ${MOD}/ ${MOD}/
+RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
+    --mount=type=cache,id=go-build,target=/root/.cache/go-build \
+    GOPROXY=off CGO_ENABLED=0 go build -o bin/ ./${MOD}/...
 
 # RUNTIME
 
