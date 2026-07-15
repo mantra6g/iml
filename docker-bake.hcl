@@ -2,6 +2,10 @@ variable "CI" {
   default = false
 }
 
+#variable "GITHUB_EVENT_NAME" {
+#  default = ""
+#}
+
 variable "MODS" {
   type = list(object({
     name = string
@@ -29,6 +33,12 @@ target "_common" {
     MOD = mod.name
     BIN = mod.bin
   }
+  #cache-from = ["type=gha,scope=${mod.name}"]
+  #cache-to = [
+  #  GITHUB_EVENT_NAME == "pull_request"
+  #    ? ""
+  #    : "type=gha,scope=${mod.name},mode=max"
+  #]
   cache-from = ["type=gha,scope=${mod.name}"]
   cache-to   = ["type=gha,scope=${mod.name},mode=max"]
 }
