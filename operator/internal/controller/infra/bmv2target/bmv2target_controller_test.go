@@ -68,19 +68,6 @@ var _ = Describe("BMv2Target Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 		})
-
-		It("should succeed to create a resource when replicas are non-nil", func() {
-			By("Creating the custom resource for the Kind BMv2Target with unknown class")
-			resource := &infrav1alpha1.BMv2Target{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
-				Spec: infrav1alpha1.BMv2TargetSpec{},
-			}
-			err := k8sClient.Create(ctx, resource)
-			Expect(err).ToNot(HaveOccurred())
-		})
 	})
 
 	Context("When reconciling a resource", func() {
@@ -168,6 +155,15 @@ var _ = Describe("BMv2Target Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that 1 Deployment is created by default")
+			deploymentList := &appsv1.DeploymentList{}
+			err = k8sClient.List(ctx, deploymentList,
+				client.InNamespace(infraNamespace.Name),
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentList.Items).To(HaveLen(1))
 		})
 
 		It("should handle reconciliation when the resource is not found", func() {
@@ -187,49 +183,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should default to 1 replica when replicas is nil", func() {
-			By("creating the custom resource for the Kind BMv2Target with nil replicas")
-			resource := &infrav1alpha1.BMv2Target{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
-				Spec: infrav1alpha1.BMv2TargetSpec{},
-			}
-			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-
-			By("Reconciling the created resource")
-			controllerReconciler := &Reconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-				Config: bmv2Cfg,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying that 1 Deployment is created by default")
-			deploymentList := &appsv1.DeploymentList{}
-			err = k8sClient.List(ctx, deploymentList,
-				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deploymentList.Items).To(HaveLen(1))
-
-			By("Verifying that 1 P4Target is created by default")
-			p4TargetList := &corev1alpha1.P4TargetList{}
-			err = k8sClient.List(ctx, p4TargetList,
-				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(p4TargetList.Items).To(HaveLen(1))
-		})
-
-		It("should successfully set ownership of both P4Target and appsv1.Deployment to itself", func() {
+		It("should successfully set ownership of appsv1.Deployment to itself", func() {
 			By("creating the custom resource for the Kind BMv2Target")
 			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
@@ -257,16 +211,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, retrievedResource)
 			Expect(err).ToNot(HaveOccurred())
 
-			By("Retrieving the created P4Target and appsv1.Deployment")
-			p4TargetList := &corev1alpha1.P4TargetList{}
-			err = k8sClient.List(ctx, p4TargetList,
-				client.InNamespace(infraNamespace.Name),
-				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(p4TargetList.Items).To(HaveLen(1))
-			p4Target := &p4TargetList.Items[0]
-
+			By("Retrieving the created appsv1.Deployment")
 			deploymentList := &appsv1.DeploymentList{}
 			err = k8sClient.List(ctx, deploymentList,
 				client.InNamespace(infraNamespace.Name),
@@ -276,7 +221,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			Expect(deploymentList.Items).To(HaveLen(1))
 			deployment := &deploymentList.Items[0]
 
-			By("Verifying that the P4Target's owner reference is set to itself")
+			By("Verifying that the appsv1.Deployment's owner reference is set to the BMv2Target")
 			controllerBool := true
 			blockOwnerDeletionBool := true
 			bmv2TargetOwnerReference := metav1.OwnerReference{
@@ -287,10 +232,6 @@ var _ = Describe("BMv2Target Controller", func() {
 				Controller:         &controllerBool,
 				BlockOwnerDeletion: &blockOwnerDeletionBool,
 			}
-			Expect(p4Target.OwnerReferences).To(HaveLen(1))
-			Expect(p4Target.ObjectMeta.OwnerReferences).To(ContainElement(bmv2TargetOwnerReference))
-
-			By("Verifying that the appsv1.Deployment's owner reference is set to the BMv2Target")
 			Expect(deployment.OwnerReferences).To(HaveLen(1))
 			Expect(deployment.ObjectMeta.OwnerReferences).To(ContainElement(bmv2TargetOwnerReference))
 		})
