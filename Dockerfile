@@ -5,6 +5,7 @@ ARG ALPINEVERSION=3.20
 #GOOS=${TARGETOS:-linux}
 #GOARCH=${TARGETARCH}
 ARG MOD=cni
+ARG MODPATH=cni
 
 # BASE
 
@@ -17,6 +18,7 @@ COPY cni/go.mod cni/go.sum cni/
 COPY daemon/go.mod daemon/go.sum daemon/
 COPY operator/go.mod operator/go.sum operator/
 COPY tools/go.mod tools/go.sum tools/
+COPY targets/bmv2/go.mod targets/bmv2/go.sum targets/bmv2/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     go mod download
 
@@ -52,6 +54,7 @@ COPY --from=daemon-ebpf-builder /workspace /workspace
 
 FROM base AS operator-prebuilder
 FROM base AS cni-prebuilder
+FROM base AS targets-bmv2-prebuilder
 FROM pre-daemon-builder AS daemon-prebuilder
 FROM ${MOD}-prebuilder AS prebuilder
 
@@ -59,18 +62,20 @@ FROM ${MOD}-prebuilder AS prebuilder
 
 FROM prebuilder AS test-runner
 ARG MOD
+ARG MODPATH
+
 ARG ENVTEST_K8S_VERSION
 ENV GINKGO_NO_COLOR=TRUE
 
 COPY --from=test-base /assets /assets
 COPY api/ api/
-COPY ${MOD}/ ${MOD}
+COPY ${MODPATH}/ ${MODPATH}
 
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=go-build,target=/root/.cache/go-build \
     KUBEBUILDER_ASSETS=$(go tool setup-envtest use -i ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path) \
     GOPROXY=off \
-    go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MOD}/... || true && \
+    go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MODPATH}/... || true && \
     go tool cover -html=./coverage.out -o ./artifacts/${MOD}.coverage.html && \
     go tool gocover-cobertura < ./coverage.out > ./artifacts/${MOD}.coverage.xml
 
@@ -80,22 +85,30 @@ COPY --from=test-runner /workspace/artifacts/ /
 # BUILD
 
 FROM prebuilder AS builder
-ARG MOD
+ARG MODPATH
 
 COPY api/ api/
-COPY ${MOD}/ ${MOD}/
+COPY ${MODPATH}/ ${MODPATH}/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=go-build,target=/root/.cache/go-build \
-    GOPROXY=off CGO_ENABLED=0 go build -o bin/ ./${MOD}/...
+    GOPROXY=off CGO_ENABLED=0 /usr/local/go/bin/go build -o bin/ ./${MODPATH}/...
 
 # RUNTIME
 
 FROM alpine:${ALPINEVERSION} AS pre-daemon-runtime
 RUN apk add --no-cache iptables iptables-legacy
 
+FROM p4lang/p4c:latest AS pre-bmv2-runtime
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libboost-iostreams-dev \
+    libboost-graph-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 FROM scratch AS operator-preruntime
 FROM scratch AS cni-preruntime
 FROM pre-daemon-runtime AS daemon-preruntime
+FROM pre-bmv2-runtime AS targets-bmv2-preruntime
 FROM ${MOD}-preruntime AS preruntime
 
 FROM preruntime AS runtime

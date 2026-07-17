@@ -4,7 +4,7 @@ IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
 IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
 
-IMG_BMV2_CP ?= bmv2-driver:local
+IMG_BMV2_CP ?= targets-bmv2:local
 IMG_BMV2_DP ?= p4lang/behavioral-model:latest
 TARGET_IMAGES = $(IMG_BMV2_CP)
 
