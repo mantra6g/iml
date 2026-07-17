@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"bmv2-driver/api"
-	"bmv2-driver/pkg/p4rutils"
-	p4switch "bmv2-driver/pkg/p4switch"
+	"github.com/mantra6g/iml/targets/bmv2/api"
+	"github.com/mantra6g/iml/targets/bmv2/pkg/p4rutils"
+	p4switch "github.com/mantra6g/iml/targets/bmv2/pkg/p4switch"
 
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"

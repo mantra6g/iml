@@ -1,4 +1,4 @@
-module imlcni
+module github.com/mantra6g/iml/cni
 
 go 1.26.1
 

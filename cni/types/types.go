@@ -1,7 +1,7 @@
 package types
 
 import (
-	netutils "imlcni/utils/net"
+	netutils "github.com/mantra6g/iml/cni/utils/net"
 
 	"github.com/containernetworking/cni/pkg/types"
 )

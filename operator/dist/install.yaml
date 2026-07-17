@@ -6119,7 +6119,7 @@ subjects:
 apiVersion: v1
 data:
   bmv2-control-plane-container-name: bmv2-driver
-  bmv2-control-plane-image: bmv2-driver:local
+  bmv2-control-plane-image: targets-bmv2:local
   bmv2-data-plane-container-name: bmv2-switch
   bmv2-data-plane-image: p4lang/behavioral-model:latest
   bmv2-driver-service-account-name: loom-bmv2-driver

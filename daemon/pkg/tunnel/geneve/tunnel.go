@@ -3,8 +3,8 @@ package geneve
 import (
 	"fmt"
 
-	vrfutils "iml-daemon/pkg/dataplane/vrf/util"
-	netutils "iml-daemon/pkg/utils/net"
+	vrfutils "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	corev1 "k8s.io/api/core/v1"

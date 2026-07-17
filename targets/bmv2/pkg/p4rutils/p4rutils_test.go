@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"bmv2-driver/api"
+	"github.com/mantra6g/iml/targets/bmv2/api"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"

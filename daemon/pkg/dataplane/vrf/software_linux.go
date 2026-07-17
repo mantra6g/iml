@@ -7,11 +7,11 @@ import (
 	"os"
 	"sync"
 
-	"iml-daemon/env"
-	"iml-daemon/pkg/dataplane"
-	vrfutil "iml-daemon/pkg/dataplane/vrf/util"
-	"iml-daemon/pkg/tunnel"
-	netutils "iml-daemon/pkg/utils/net"
+	"github.com/mantra6g/iml/daemon/env"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane"
+	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
+	"github.com/mantra6g/iml/daemon/pkg/tunnel"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"

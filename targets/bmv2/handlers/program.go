@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"bmv2-driver/api"
-	"bmv2-driver/pkg/p4compile"
+	"github.com/mantra6g/iml/targets/bmv2/api"
+	"github.com/mantra6g/iml/targets/bmv2/pkg/p4compile"
 	"context"
 	"encoding/json"
 	"fmt"

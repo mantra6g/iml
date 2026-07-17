@@ -2,18 +2,18 @@ package main
 
 import (
 	"flag"
-	"iml-daemon/pkg/janitor"
+	"github.com/mantra6g/iml/daemon/pkg/janitor"
 	"os"
 	"time"
 
-	"iml-daemon/cni"
-	loomnodecontroller "iml-daemon/controllers/loomnode"
-	nodecontroller "iml-daemon/controllers/node"
-	p4tcontroller "iml-daemon/controllers/p4target"
-	sccontroller "iml-daemon/controllers/servicechain"
-	"iml-daemon/env"
-	"iml-daemon/pkg/dataplane/vrf"
-	"iml-daemon/pkg/tunnel/geneve"
+	"github.com/mantra6g/iml/daemon/cni"
+	loomnodecontroller "github.com/mantra6g/iml/daemon/controllers/loomnode"
+	nodecontroller "github.com/mantra6g/iml/daemon/controllers/node"
+	p4tcontroller "github.com/mantra6g/iml/daemon/controllers/p4target"
+	sccontroller "github.com/mantra6g/iml/daemon/controllers/servicechain"
+	"github.com/mantra6g/iml/daemon/env"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane/vrf"
+	"github.com/mantra6g/iml/daemon/pkg/tunnel/geneve"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"

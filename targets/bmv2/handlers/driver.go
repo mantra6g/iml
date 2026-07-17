@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"bmv2-driver/api"
-	p4switch "bmv2-driver/pkg/p4switch"
+	"github.com/mantra6g/iml/targets/bmv2/api"
+	p4switch "github.com/mantra6g/iml/targets/bmv2/pkg/p4switch"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"

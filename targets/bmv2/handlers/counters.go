@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"bmv2-driver/api"
+	"github.com/mantra6g/iml/targets/bmv2/api"
 	"context"
 	"encoding/json"
 	"log"

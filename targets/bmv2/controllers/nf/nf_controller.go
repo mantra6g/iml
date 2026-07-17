@@ -17,10 +17,10 @@ limitations under the License.
 package nf
 
 import (
-	"bmv2-driver/managers/nf"
-	"bmv2-driver/managers/nfcfg"
-	"bmv2-driver/managers/p4target"
-	"bmv2-driver/pkg/strutils"
+	"github.com/mantra6g/iml/targets/bmv2/managers/nf"
+	"github.com/mantra6g/iml/targets/bmv2/managers/nfcfg"
+	"github.com/mantra6g/iml/targets/bmv2/managers/p4target"
+	"github.com/mantra6g/iml/targets/bmv2/pkg/strutils"
 	"context"
 	"fmt"
 	"net/netip"

@@ -2,12 +2,12 @@ package vrf
 
 import (
 	"fmt"
-	"iml-daemon/ebpf"
-	"iml-daemon/pkg/dataplane/vrf/util"
+	"github.com/mantra6g/iml/daemon/ebpf"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
 	"net"
 
-	"iml-daemon/pkg/dataplane"
-	netutils "iml-daemon/pkg/utils/net"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"

@@ -17,7 +17,7 @@ limitations under the License.
 package lease
 
 import (
-	"bmv2-driver/managers/p4target"
+	"github.com/mantra6g/iml/targets/bmv2/managers/p4target"
 	"context"
 	"time"
 

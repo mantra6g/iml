@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"iml-daemon/pkg/tunnel"
+	"github.com/mantra6g/iml/daemon/pkg/tunnel"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"

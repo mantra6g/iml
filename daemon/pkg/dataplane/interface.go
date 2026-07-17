@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	netutils "iml-daemon/pkg/utils/net"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"

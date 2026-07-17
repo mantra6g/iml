@@ -23,9 +23,9 @@ import (
 	"reflect"
 	"time"
 
-	"iml-daemon/env"
-	"iml-daemon/pkg/dataplane"
-	netutils "iml-daemon/pkg/utils/net"
+	"github.com/mantra6g/iml/daemon/env"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
