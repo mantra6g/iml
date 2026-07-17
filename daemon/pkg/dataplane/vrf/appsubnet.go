@@ -395,7 +395,7 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, d
 			},
 			LinkIndex: tun.Attrs().Index,
 		}
-		if err := netlink.RouteAdd(route); err != nil {
+		if err := netlink.RouteReplace(route); err != nil {
 			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv4Net.String(), sids, err)
 		}
 	}
@@ -411,7 +411,7 @@ func (s *AppSubnet) AddSRv6Route(dst netutils.DualStackNetwork, sids []net.IP, d
 			},
 			LinkIndex: tun.Attrs().Index,
 		}
-		if err := netlink.RouteAdd(route); err != nil {
+		if err := netlink.RouteReplace(route); err != nil {
 			return fmt.Errorf("failed to add SRv6 route to %s with segs %s: %w", dst.IPv6Net.String(), sids, err)
 		}
 	}
