@@ -36,8 +36,6 @@ spec:
       containers:
         - name: daemon
           image: daemon:latest
-          command:
-          - /daemon
           securityContext:
             privileged: true
           resources:
