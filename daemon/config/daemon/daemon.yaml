@@ -26,7 +26,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              cp /loom /host/opt/cni/bin/
+              cp /app /host/opt/cni/bin/loom
               chmod +x /host/opt/cni/bin/loom
           securityContext:
             privileged: true
