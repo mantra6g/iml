@@ -6,6 +6,8 @@ variable "CI" {
 #  default = ""
 #}
 
+variable "GOVERSION" { }
+
 variable "MODS" {
   type = list(object({
     name = string
@@ -14,7 +16,8 @@ variable "MODS" {
   default = [
       {name = "cni", bin = "loom"},
       {name = "operator", bin = "manager"},
-      {name = "daemon", bin = "daemon"}
+      {name = "daemon", bin = "daemon"},
+      {name = "targets-bmv2", bin = "driver"}
     ]
 }
 
@@ -32,6 +35,7 @@ target "_common" {
   args = {
     MOD = mod.name
     BIN = mod.bin
+    MODPATH = replace(mod.name, "-", "/")
   }
   #cache-from = ["type=gha,scope=${mod.name}"]
   #cache-to = [

@@ -10,7 +10,7 @@ on:
       - api/**
       - daemon/**
       - operator/**
-      #- targets/bmv2/**
+      - targets/bmv2/**
   pull_request:
     branches: [ main ]
     paths: *paths
@@ -22,8 +22,8 @@ jobs:
       contents: read
       packages: write
     env:
-      MODULES: '["cni", "daemon", "operator"]'
-      GOVERSION: 1.25.3
+      MODULES: '["cni", "daemon", "operator", "targets-bmv2"]'
+      GOVERSION: 1.26.1
       GITHUB_EVENT_NAME: ${{ github.event_name }}
 
     steps:
