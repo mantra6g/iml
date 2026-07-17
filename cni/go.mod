@@ -1,6 +1,6 @@
 module imlcni
 
-go 1.25.0
+go 1.26.1
 
 require (
 	github.com/containernetworking/cni v1.3.0

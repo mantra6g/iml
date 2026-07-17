@@ -1,4 +1,4 @@
-ARG GOVERSION=1.25.3
+ARG GOVERSION=1.26.1-alpine
 ARG ENVTEST_K8S_VERSION=1.34.1
 ARG UBUNTUVERSION=24.04
 ARG ALPINEVERSION=3.20
@@ -11,7 +11,7 @@ ARG MOD=cni
 FROM golang:${GOVERSION} AS base
 
 WORKDIR /workspace
-COPY go.work ./
+COPY go.work go.work.sum ./
 COPY api/go.mod api/go.sum api/
 COPY cni/go.mod cni/go.sum cni/
 COPY daemon/go.mod daemon/go.sum daemon/

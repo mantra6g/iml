@@ -1,6 +1,6 @@
 module github.com/mantra6g/iml/tools
 
-go 1.25.3
+go 1.26.1
 
 require (
 	github.com/bitfield/gotestdox v0.2.2 // indirect
@@ -31,9 +31,10 @@ require (
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gotest.tools/gotestsum v1.13.0 // indirect
-	k8s.io/apimachinery v0.35.0 // indirect
+	k8s.io/apimachinery v0.35.3 // indirect
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20260125163108-a19ec76a3c5d // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
