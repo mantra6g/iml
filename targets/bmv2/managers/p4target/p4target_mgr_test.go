@@ -21,6 +21,7 @@ import (
 type mockP4Client struct {
 	getFwdPipelineFn func(*p4v1.GetForwardingPipelineConfigRequest) (*p4v1.GetForwardingPipelineConfigResponse, error)
 	readFn           func(*p4v1.ReadRequest) (p4v1.P4Runtime_ReadClient, error)
+	capabilitiesFn   func(*p4v1.CapabilitiesRequest) (*p4v1.CapabilitiesResponse, error)
 }
 
 func (m *mockP4Client) GetForwardingPipelineConfig(_ context.Context, in *p4v1.GetForwardingPipelineConfigRequest, _ ...grpc.CallOption) (*p4v1.GetForwardingPipelineConfigResponse, error) {
@@ -46,7 +47,10 @@ func (m *mockP4Client) SetForwardingPipelineConfig(_ context.Context, _ *p4v1.Se
 func (m *mockP4Client) StreamChannel(_ context.Context, _ ...grpc.CallOption) (p4v1.P4Runtime_StreamChannelClient, error) {
 	return nil, nil
 }
-func (m *mockP4Client) Capabilities(_ context.Context, _ *p4v1.CapabilitiesRequest, _ ...grpc.CallOption) (*p4v1.CapabilitiesResponse, error) {
+func (m *mockP4Client) Capabilities(_ context.Context, in *p4v1.CapabilitiesRequest, _ ...grpc.CallOption) (*p4v1.CapabilitiesResponse, error) {
+	if m.capabilitiesFn != nil {
+		return m.capabilitiesFn(in)
+	}
 	return nil, nil
 }
 
@@ -387,7 +391,7 @@ func TestGetHealthyCondition_Reachable(t *testing.T) {
 
 func TestGetHealthyCondition_Unreachable(t *testing.T) {
 	client := &mockP4Client{
-		getFwdPipelineFn: func(_ *p4v1.GetForwardingPipelineConfigRequest) (*p4v1.GetForwardingPipelineConfigResponse, error) {
+		capabilitiesFn: func(_ *p4v1.CapabilitiesRequest) (*p4v1.CapabilitiesResponse, error) {
 			return nil, errors.New("connection refused")
 		},
 	}
