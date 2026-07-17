@@ -3,8 +3,8 @@ package loomnode
 import (
 	"context"
 	"fmt"
-	"iml-daemon/env"
-	"iml-daemon/pkg/dataplane"
+	"github.com/mantra6g/iml/daemon/env"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane"
 
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 

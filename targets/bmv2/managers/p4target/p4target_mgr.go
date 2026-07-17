@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"bmv2-driver/pkg/ipam"
+	"github.com/mantra6g/iml/targets/bmv2/pkg/ipam"
 )
 
 type Condition struct {

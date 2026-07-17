@@ -7,7 +7,7 @@ import (
 	"net"
 	"net/netip"
 
-	netutils "iml-daemon/pkg/utils/net"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/vishvananda/netlink"
 )

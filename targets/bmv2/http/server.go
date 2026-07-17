@@ -1,7 +1,7 @@
 package http
 
 import (
-	"bmv2-driver/handlers"
+	"github.com/mantra6g/iml/targets/bmv2/handlers"
 	"context"
 	"errors"
 	"net/http"

@@ -1,4 +1,4 @@
-module iml-daemon
+module github.com/mantra6g/iml/daemon
 
 go 1.26.1
 

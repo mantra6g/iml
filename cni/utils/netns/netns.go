@@ -2,7 +2,7 @@ package netns
 
 import (
 	"fmt"
-	"imlcni/logger"
+	"github.com/mantra6g/iml/cni/logger"
 	"os"
 	"runtime"
 

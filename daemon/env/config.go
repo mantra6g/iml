@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	netutils "iml-daemon/pkg/utils/net"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 

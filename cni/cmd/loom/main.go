@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"imlcni/logger"
-	types2 "imlcni/types"
+	"github.com/mantra6g/iml/cni/logger"
+	types2 "github.com/mantra6g/iml/cni/types"
 	"net/http"
 	"os"
 
-	nsutils "imlcni/utils/netns"
+	nsutils "github.com/mantra6g/iml/cni/utils/netns"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"

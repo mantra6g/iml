@@ -1,4 +1,4 @@
-module bmv2-driver
+module github.com/mantra6g/iml/targets/bmv2
 
 go 1.26.1
 

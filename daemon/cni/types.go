@@ -1,7 +1,7 @@
 package cni
 
 import (
-	netutils "iml-daemon/pkg/utils/net"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 )
 
 /**************************************************************

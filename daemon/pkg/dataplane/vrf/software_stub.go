@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net"
 
-	"iml-daemon/pkg/dataplane"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"

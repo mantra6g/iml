@@ -1,12 +1,12 @@
 package p4switch
 
 import (
-	"bmv2-driver/pkg/p4rutils"
+	"github.com/mantra6g/iml/targets/bmv2/pkg/p4rutils"
 	"context"
 	"fmt"
 	"io"
 
-	"bmv2-driver/api"
+	"github.com/mantra6g/iml/targets/bmv2/api"
 
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
 )

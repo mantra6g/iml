@@ -3,10 +3,10 @@ package node
 import (
 	"context"
 	"fmt"
-	"iml-daemon/env"
-	"iml-daemon/pkg/tunnel"
+	"github.com/mantra6g/iml/daemon/env"
+	"github.com/mantra6g/iml/daemon/pkg/tunnel"
 
-	cmputils "iml-daemon/pkg/utils/cmp"
+	cmputils "github.com/mantra6g/iml/daemon/pkg/utils/cmp"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

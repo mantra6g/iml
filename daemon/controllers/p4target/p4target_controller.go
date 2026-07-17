@@ -3,7 +3,7 @@ package p4target
 import (
 	"context"
 	"fmt"
-	"iml-daemon/pkg/dataplane"
+	"github.com/mantra6g/iml/daemon/pkg/dataplane"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
