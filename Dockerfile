@@ -2,6 +2,7 @@ ARG GOVERSION=1.26.1-alpine
 ARG ENVTEST_K8S_VERSION=1.34.1
 ARG UBUNTUVERSION=24.04
 ARG ALPINEVERSION=3.20
+ARG P4CVERSION=1.2.5.15
 #GOOS=${TARGETOS:-linux}
 #GOARCH=${TARGETARCH}
 ARG MOD=cni
@@ -98,7 +99,7 @@ RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
 FROM alpine:${ALPINEVERSION} AS pre-daemon-runtime
 RUN apk add --no-cache iptables iptables-legacy
 
-FROM p4lang/p4c:latest AS pre-bmv2-runtime
+FROM p4lang/p4c:${P4CVERSION} AS pre-bmv2-runtime
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libboost-iostreams-dev \
