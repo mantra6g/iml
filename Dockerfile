@@ -115,5 +115,5 @@ FROM ${MOD}-preruntime AS preruntime
 FROM preruntime AS runtime
 ARG BIN
 WORKDIR /
-COPY --from=builder /workspace/bin/${BIN} .
-ENTRYPOINT ["/${BIN}"]
+COPY --from=builder /workspace/bin/${BIN} /app
+ENTRYPOINT ["/app"]
