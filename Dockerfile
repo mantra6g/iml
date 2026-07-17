@@ -50,13 +50,12 @@ RUN ARCH=$(uname -m | sed 's/x86_64/x86_64-linux-gnu/') && \
     -I/usr/include \
     -c daemon/ebpf/src/recalc_csum.c -o daemon/ebpf/recalc_csum.o
 
-FROM base AS pre-daemon-builder
+FROM base AS daemon-prebuilder
 COPY --from=daemon-ebpf-builder /workspace /workspace
 
 FROM base AS operator-prebuilder
 FROM base AS cni-prebuilder
 FROM base AS targets-bmv2-prebuilder
-FROM pre-daemon-builder AS daemon-prebuilder
 FROM ${MOD}-prebuilder AS prebuilder
 
 # TEST
@@ -96,23 +95,25 @@ RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
 
 # RUNTIME
 
-FROM alpine:${ALPINEVERSION} AS pre-daemon-runtime
+FROM alpine:${ALPINEVERSION} AS daemon-preruntime
 RUN apk add --no-cache iptables iptables-legacy
 
-FROM p4lang/p4c:${P4CVERSION} AS pre-bmv2-runtime
+FROM p4lang/p4c:${P4CVERSION} AS targets-bmv2-preruntime
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libboost-iostreams-dev \
     libboost-graph-dev \
     && rm -rf /var/lib/apt/lists/*
 
-FROM scratch AS operator-preruntime
-FROM scratch AS cni-preruntime
-FROM pre-daemon-runtime AS daemon-preruntime
-FROM pre-bmv2-runtime AS targets-bmv2-preruntime
+FROM gcr.io/distroless/static-debian13:nonroot AS operator-preruntime
+USER 65532:65532
+
+FROM alpine:${ALPINEVERSION} AS cni-preruntime
+
 FROM ${MOD}-preruntime AS preruntime
 
 FROM preruntime AS runtime
 ARG BIN
+WORKDIR /
 COPY --from=builder /workspace/bin/${BIN} .
 ENTRYPOINT ["/${BIN}"]
