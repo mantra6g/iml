@@ -117,6 +117,7 @@ type NetworkFunctionSpec struct {
 	// It can be the actual p4program encoded in base64 or
 	// a s3://, http:// or https:// URL pointing to the P4 file location.
 	// +required
+	// +kubebuilder:validation:MinLength=1
 	P4File string `json:"p4File"`
 }
 
