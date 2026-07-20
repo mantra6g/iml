@@ -1,4 +1,4 @@
-name: 'Test go modules and build container images'
+name: 'Test go modules, build images and publish helm chart'
 
 on:
   push:
@@ -163,3 +163,47 @@ jobs:
       #    path: |
       #      cache-go-mod
       #      cache-go-build
+
+  publish-chart:
+    if: github.ref_type == 'tag'
+    needs: test-build-and-push-images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'tools/go.mod'
+          cache-dependency-path: 'tools/go.sum'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: 4.1.4
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ghcr.io \
+              --username "${{ github.actor }}" \
+              --password-stdin
+
+      - name: Generate manifests and push helm chart
+        run: |
+          export VERSION="${GITHUB_REF_NAME#v}"
+          export REPO="ghcr.io/${{ github.repository }}"
+          export IMG_OPERATOR="${REPO}/operator:${VERSION}"
+          export IMG_DAEMON="${REPO}/daemon:${VERSION}"
+          export IMG_CNI="${REPO}/cni:${VERSION}"
+          export IMG_BMV2_CP="${REPO}/targets-bmv2:${VERSION}"
+
+          make build-installer
+          mkdir -p chart/templates
+          cp install.yaml chart/templates/
+
+          helm package chart --version ${VERSION} --app-version ${VERSION} --destination dist
+          helm push dist/*.tgz oci://ghcr.io/${{ github.repository }}/charts
