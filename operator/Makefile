@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
 IMG ?= operator:local
-IMG_BMV2_CP ?= bmv2-driver:local
+IMG_BMV2_CP ?= targets-bmv2:local
 IMG_BMV2_DP ?= p4lang/behavioral-model:latest
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)

@@ -8,8 +8,8 @@ configMapGenerator:
 - envs:
   - bmv2_config.env
   literals:
-  - bmv2-control-plane-image=targets-bmv2:local
   - bmv2-data-plane-image=p4lang/behavioral-model:latest
+  - bmv2-control-plane-image=targets-bmv2:local
   name: bmv2-config
   options:
     disableNameSuffixHash: true
