@@ -22,8 +22,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	corev1 "k8s.io/api/core/v1"
+	res "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
@@ -97,22 +98,19 @@ var _ = Describe("NetworkFunction Controller", func() {
 			}}
 			Expect(k8sClient.Status().Update(ctx, targetResource)).To(Succeed())
 
-			By("Reconciling the created resource")
-			controllerReconciler := &NetworkFunctionReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+			By("Setting the target's capacity of nf-slots to 1")
+			targetResource.Status.Capacity = corev1.ResourceList{
+				"loom.io/nf-slots": *res.NewQuantity(1, res.DecimalSI),
 			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: nfKey,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Status().Update(ctx, targetResource)).To(Succeed())
 
 			By("Verifying the NetworkFunction is scheduled to the matching target")
-			updatedResource := &schedulingv1alpha1.NetworkFunction{}
-			err = k8sClient.Get(ctx, nfKey, updatedResource)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedResource.Spec.TargetName).To(Equal(target.Name))
+			Eventually(func(g Gomega) {
+				updatedResource := &schedulingv1alpha1.NetworkFunction{}
+				err := k8sClient.Get(ctx, nfKey, updatedResource)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(updatedResource.Spec.TargetName).To(Equal(target.Name))
+			}).Should(Succeed())
 		})
 
 		It("should handle resources with missing required fields gracefully", func() {
@@ -145,21 +143,13 @@ var _ = Describe("NetworkFunction Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
-			By("Reconciling the resource with no matching targets")
-			controllerReconciler := &NetworkFunctionReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: nfKey,
-			})
-			Expect(err).ToNot(HaveOccurred())
-
 			By("Verifying the NetworkFunction is not scheduled")
-			updatedResource := &schedulingv1alpha1.NetworkFunction{}
-			err = k8sClient.Get(ctx, nfKey, updatedResource)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedResource.Spec.TargetName).To(BeEmpty())
+			Consistently(func(g Gomega) {
+				updatedResource := &schedulingv1alpha1.NetworkFunction{}
+				err := k8sClient.Get(ctx, nfKey, updatedResource)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(updatedResource.Spec.TargetName).To(BeEmpty())
+			}).Should(Succeed())
 		})
 
 		It("should not schedule if no matching READY targets exist", func() {
@@ -191,21 +181,13 @@ var _ = Describe("NetworkFunction Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 
-			By("Reconciling the resource with no matching READY targets")
-			controllerReconciler := &NetworkFunctionReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: nfKey,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
 			By("Verifying the NetworkFunction is not scheduled")
-			updatedResource := &schedulingv1alpha1.NetworkFunction{}
-			err = k8sClient.Get(ctx, nfKey, updatedResource)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedResource.Spec.TargetName).To(BeEmpty())
+			Consistently(func(g Gomega) {
+				updatedResource := &schedulingv1alpha1.NetworkFunction{}
+				err := k8sClient.Get(ctx, nfKey, updatedResource)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(updatedResource.Spec.TargetName).To(BeEmpty())
+			}).Should(Succeed())
 		})
 	})
 })
