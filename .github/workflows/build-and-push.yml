@@ -13,6 +13,9 @@ on:
       - daemon/**
       - operator/**
       - targets/bmv2/**
+      - .github/workflows/**
+      - Dockerfile
+      - docker-bake.hcl
   pull_request:
     branches: [ main ]
     paths: *paths
