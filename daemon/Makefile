@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
 IMG ?= daemon:local
-CNI_IMG ?= cni:local
+IMG_CNI ?= cni:local
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -82,7 +82,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${CNI_IMG}
+	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${IMG_CNI}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 .PHONY: ebpf-compile
@@ -102,7 +102,7 @@ endif
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy daemon to the K8s cluster specified in ~/.kube/config.
-	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${CNI_IMG}
+	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${IMG_CNI}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
