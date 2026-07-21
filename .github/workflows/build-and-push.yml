@@ -117,7 +117,8 @@ jobs:
           sudo rm -rf cache-go-mod/
 
       - name: Run tests
-        if: steps.targets.outputs.images != '[]'
+        if: steps.targets.outputs.tests != '""'
+        id: tests
         uses: docker/bake-action@v7
         with:
           push: false
@@ -127,12 +128,14 @@ jobs:
           targets: ${{ steps.targets.outputs.tests }}
 
       - name: Generate unit test summary
+        if: steps.tests.outcome == 'success'
         id: summary
         uses: test-summary/action@v2
         with:
           paths: "artifacts/*.unit-tests.xml"
 
       - name: Generate coverage summary
+        if: steps.tests.outcome == 'success'
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: "./artifacts/*.coverage.xml"
@@ -140,15 +143,17 @@ jobs:
           output: file
 
       - name: Upload coverage as artifact
+        if: steps.tests.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           path: "artifacts/*.coverage.html"
 
       - name: Write coverage to job summary
+        if: steps.tests.outcome == 'success'
         run: cat ./code-coverage-results.md >> $GITHUB_STEP_SUMMARY
 
       - name: Fail if tests failed
-        if: steps.summary.outputs.failed != '0'
+        if: steps.tests.outcome == 'success' && steps.summary.outputs.failed != '0'
         run: exit 1
 
       - name: Build and push images
