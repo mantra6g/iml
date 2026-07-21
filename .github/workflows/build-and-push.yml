@@ -1,4 +1,4 @@
-name: 'Test go modules, build images and publish helm chart'
+name: 'Test, build, publish'
 
 on:
   push:
@@ -114,6 +114,7 @@ jobs:
           sudo rm -rf cache-go-mod/
 
       - name: Run tests
+        if: steps.targets.outputs.images != '[]'
         uses: docker/bake-action@v7
         with:
           push: false
