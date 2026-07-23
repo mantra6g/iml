@@ -301,12 +301,12 @@ func ensureRawIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	err = ipt.DeleteIfExists("raw", "PREROUTING",
 		"-j", DefaultSRv6TableName)
 	if err != nil {
-		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
 	}
 	err = ipt.InsertUnique("raw", "PREROUTING", 1,
 		"-j", DefaultSRv6TableName)
 	if err != nil {
-		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
+		return fmt.Errorf("failed to insert hook rule to PREROUTING chain: %w", err)
 	}
 	return nil
 }
@@ -356,10 +356,10 @@ func ensureRawIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
 	if err != nil {
 		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
 	}
-	err = ipt.DeleteIfExists("raw", "FORWARD",
+	err = ipt.DeleteIfExists("raw", "PREROUTING",
 		"-j", DefaultSRv6TableName)
 	if err != nil {
-		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
 	}
 	err = ipt.DeleteChain("raw", DefaultSRv6TableName)
 	if err != nil {
