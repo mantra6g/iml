@@ -71,22 +71,22 @@ docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator ## 
 
 .PHONY: docker-build-cni
 docker-build-cni: ## Build docker image for the cni.
-	$(CONTAINER_TOOL) build -t ${IMG_CNI} --target cni .
+	$(CONTAINER_TOOL) build -t ${IMG_CNI} --target runtime --build-arg MOD=cni --build-arg MODPATH=cni --build-arg BIN=loom .
 
 .PHONY: docker-build-daemon
 docker-build-daemon: ## Build docker image for the daemon.
-	$(CONTAINER_TOOL) build -t ${IMG_DAEMON} --target daemon .
+	$(CONTAINER_TOOL) build -t ${IMG_DAEMON} --target runtime --build-arg MOD=daemon --build-arg MODPATH=daemon --build-arg BIN=daemon .
 
 .PHONY: docker-build-operator
 docker-build-operator: ## Build docker image for the operator.
-	$(CONTAINER_TOOL) build -t ${IMG_OPERATOR} --target operator .
+	$(CONTAINER_TOOL) build -t ${IMG_OPERATOR} --target runtime --build-arg MOD=operator --build-arg MODPATH=operator --build-arg BIN=manager .
 
 .PHONY: docker-build-targets
 docker-build-targets: docker-build-bmv2 ## Build docker images for the targets.
 
 .PHONY: docker-build-bmv2
 docker-build-bmv2: ## Build docker image for the bmv2 target.
-	$(CONTAINER_TOOL) build -t ${IMG_BMV2_CP} --target bmv2 .
+	$(CONTAINER_TOOL) build -t ${IMG_BMV2_CP} --target runtime --build-arg MOD=targets-bmv2 --build-arg MODPATH=targets/bmv2 --build-arg BIN=driver .
 
 .PHONY: docker-build-examples
 docker-build-examples: ## Build docker images for the examples.
