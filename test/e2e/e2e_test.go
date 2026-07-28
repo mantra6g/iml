@@ -36,6 +36,27 @@ var (
 	}
 )
 
+func getSegments(cluster, tableId, destination string) ([]string, error) {
+	cmd := exec.Command(
+		"sh", "-c",
+		"docker exec "+cluster+"-control-plane ip -6 -j route show table "+tableId+" "+destination+" | jq -r '.[].segs'",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+	  fmt.Fprintf(GinkgoWriter, "err: %v\n", err)
+    return nil, fmt.Errorf("cannot query segments: %s %w", string(out), err)
+  }
+
+	var segments []string
+	err = json.Unmarshal([]byte(out), &segments)
+	if err != nil {
+	  fmt.Fprintf(GinkgoWriter, "err: %v\n", err)
+    return nil, fmt.Errorf("cannot unmarshal json: %w", err)
+  }
+	fmt.Fprintf(GinkgoWriter, "segs: %s\n", segments)
+	return segments, nil
+}
+
 var _ = Describe("IML", Ordered, func() {
 
 	BeforeAll(func() {
@@ -169,6 +190,113 @@ var _ = Describe("IML", Ordered, func() {
 			err = serverCmd.Wait()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(out)).To(Equal("testdownstream\n"))
+		})
+
+		It("Service chain should update segments", func() {
+			localTableId := "1000"
+			upstreamTableId := "1002"
+
+			cmd := exec.Command(
+				"kubectl", "get",
+				"application/" + chainEnd, "-o",
+				"jsonpath={.status.subnets.iml-control-plane[0].inet6}",
+			)
+			out, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			dstIP := strings.TrimSpace(string(out))
+
+			cmd = exec.Command(
+				"kubectl", "get",
+				"networkfunction/"+lbNF, "-o",
+				"jsonpath={.status.assignedIP}",
+			)
+			out, err = cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			nfSID := strings.TrimSpace(string(out))
+
+			cmd = exec.Command(
+				"sh", "-c",
+				"docker exec "+kindCluster+"-control-plane ip -6 -j route show table "+localTableId+" | jq -r '.[] | select(.action==\"End.DT6\") | .dst'",
+			)
+			out, err = cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			endSID := strings.TrimSpace(string(out))
+
+			By("Verifying segments")
+			Eventually(func(g Gomega) {
+				segments, err := getSegments(kindCluster, upstreamTableId, dstIP)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				g.Expect(segments).To(Equal([]string{
+					nfSID,
+					endSID,
+				}))
+			}).Should(Succeed())
+
+			By("Adding an nf to the chain")
+			patch := `{
+				"spec": {
+					"functions": [
+						{"matchLabels": {"nf": "web-lb"}},
+						{"matchLabels": {"nf": "web-lb"}}
+					]
+				}
+			}`
+
+			cmd = exec.Command(
+				"kubectl",
+				"patch",
+				"servicechain/"+upstreamChain,
+				"--type=merge",
+				"-p",
+				patch,
+			)
+			out, err = cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), string(out))
+
+			By("Verifying segments")
+			Eventually(func(g Gomega) {
+				segments, err := getSegments(kindCluster, upstreamTableId, dstIP)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				g.Expect(segments).To(Equal([]string{
+					nfSID,
+					nfSID,
+					endSID,
+				}))
+			}).Should(Succeed())
+
+			By("Adding removing an nf from the chain")
+			patch = `{
+				"spec": {
+					"functions": [
+						{"matchLabels": {"nf": "web-lb"}}
+					]
+				}
+			}`
+
+			cmd = exec.Command(
+				"kubectl",
+				"patch",
+				"servicechain/"+upstreamChain,
+				"--type=merge",
+				"-p",
+				patch,
+			)
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), string(output))
+
+			By("Verifying segments")
+			Eventually(func(g Gomega) {
+				segments, err := getSegments(kindCluster, upstreamTableId, dstIP)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				g.Expect(segments).To(Equal([]string{
+					nfSID,
+					endSID,
+				}))
+			}).Should(Succeed())
+
 		})
 	})
 })
