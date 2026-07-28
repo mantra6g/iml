@@ -1,0 +1,41 @@
+{
+  "name": "Dev container for IML",
+  "image": "debian:13-slim",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "dev",
+      "installZsh": false,
+      "installOhMyZshConfig": false,
+      "upgradePackages": false
+    },
+    "ghcr.io/jsburckhardt/devcontainer-features/mise:1": {}
+  },
+  "mounts": [
+    {
+      "source": "${localWorkspaceFolder}/volumes/mise-data",
+      "target": "/mnt/mise-data",
+      "type": "bind"
+    },
+    {
+      "source": "${localWorkspaceFolder}/volumes/go-mod",
+      "target": "/mnt/go/mod",
+      "type": "bind"
+    },
+    {
+      "source": "${localWorkspaceFolder}/volumes/go-build",
+      "target": "/mnt/go/build",
+      "type": "bind"
+    }
+  ],
+  "containerEnv": {
+    "MISE_DATA_DIR": "/mnt/mise-data",
+    "GOMODCACHE": "/mnt/go/mod",
+    "GOCACHE": "/mnt/go/build"
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/mnt/mise-data/shims"
+  },
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true,
+  "postCreateCommand": "mise install"
+}

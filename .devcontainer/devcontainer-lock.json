@@ -1,0 +1,14 @@
+{
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "version": "2.5.9",
+      "resolved": "ghcr.io/devcontainers/features/common-utils@sha256:cb0c4d3c276f157eed17935747e364178d75fee17f55c4e129966f64633deb3a",
+      "integrity": "sha256:cb0c4d3c276f157eed17935747e364178d75fee17f55c4e129966f64633deb3a"
+    },
+    "ghcr.io/jsburckhardt/devcontainer-features/mise:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/jsburckhardt/devcontainer-features/mise@sha256:cba9d132ead21358de04d24bd3fee7947a732c9ac2bcfb366e9a731d7083fcc1",
+      "integrity": "sha256:cba9d132ead21358de04d24bd3fee7947a732c9ac2bcfb366e9a731d7083fcc1"
+    }
+  }
+}
