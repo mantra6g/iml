@@ -20,6 +20,7 @@ COPY daemon/go.mod daemon/go.sum daemon/
 COPY operator/go.mod operator/go.sum operator/
 COPY tools/go.mod tools/go.sum tools/
 COPY targets/bmv2/go.mod targets/bmv2/go.sum targets/bmv2/
+COPY test/go.mod test/go.sum test/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     go mod download
 

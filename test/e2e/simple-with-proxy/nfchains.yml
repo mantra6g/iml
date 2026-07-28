@@ -1,0 +1,31 @@
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: web-uplink
+  namespace: default
+spec:
+  from:
+    name: local-web-proxy
+    namespace: default
+  to:
+    name: dummy-web-server
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: web-lb
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: web-downlink
+  namespace: default
+spec:
+  from:
+    name: web-server
+    namespace: default
+  to:
+    name: local-web-proxy
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: web-lb

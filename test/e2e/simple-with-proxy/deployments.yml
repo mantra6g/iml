@@ -1,0 +1,198 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "web-server",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: web-server
+          image: leodotcloud/swiss-army-knife:v0.15
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dummy-web-server
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: dummy-web-server
+  template:
+    metadata:
+      labels:
+        app: dummy-web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "dummy-web-server",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      containers:
+        - name: alpine
+          image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          ports:
+            - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-web-proxy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: local-web-proxy
+  template:
+    metadata:
+      labels:
+        app: local-web-proxy
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "local-web-proxy",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      serviceAccountName: lb-controller-sa
+      containers:
+        - name: proxy
+          image: mantra6g/proxy-pl2:latest
+          imagePullPolicy: Never
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          args: [
+            "--namespace", "default",
+            "--label-name", "app",
+            "--label-value", "dummy-web-server",
+            "--port", "3000",
+            "--proto", "both"
+          ]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lb-controller-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lb-controller-role
+  namespace: default
+rules:
+  # Allow access to Pods
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - core.loom.io
+    resources:
+      - networkfunctionconfigs
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - create
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lb-controller-rolebinding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: lb-controller-sa
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lb-controller-role
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-lb-controller
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-lb-controller
+  template:
+    metadata:
+      labels:
+        app: web-lb-controller
+    spec:
+      serviceAccountName: lb-controller-sa
+      affinity:
+        podAntiAffinity:
+          # This changed from 'required' to 'preferred'
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - web-server
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: lb-controller
+          image: mantra6g/lb-controller-pl2:latest
+          imagePullPolicy: Never
+          args: [
+            "--config-name", "web-lb-config",
+            "--config-namespace", "default",
+            "--app-label", "app",
+            "--dummy-app-label-value", "dummy-web-server",
+            "--lb-app-label-value", "web-server"
+          ]

@@ -1,0 +1,21 @@
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: web-lb
+  namespace: default
+  labels:
+    nf: web-lb
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/demo/load-balancer/lb.p4"
+  targetName: bmv2-target-1
+  configRef:
+    name: web-lb-config
+  targetSelector:
+    p4target.loom.io/arch: v1model
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunctionConfig
+metadata:
+  name: web-lb-config
+spec: {}

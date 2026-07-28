@@ -1,10 +1,11 @@
 go 1.26.1
 
 use (
-	api
-	cni
-	daemon
-	operator
-	targets/bmv2
-	tools
+  api
+  cni
+  daemon
+  operator
+  targets/bmv2
+  tools
+  test
 )
