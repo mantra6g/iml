@@ -57,6 +57,7 @@ type Software struct {
 	routingSubnet      *RoutingSubnet
 	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
 	ipt                *iptables.IPTables
+	ip4t               *iptables.IPTables
 
 	appNet6Allocator *dataplane.Subnet6Allocator
 	appNet4Allocator *dataplane.Subnet4Allocator
@@ -185,6 +186,18 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 		return nil, fmt.Errorf("failed to create raw iptables rules: %w", err)
 	}
 
+	var ip4t *iptables.IPTables
+	if cfg.ClusterCIDR.IPv4Net != nil {
+		ip4t, err = iptables.New(iptables.IPFamily(iptables.ProtocolIPv4))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ip4t: %w", err)
+		}
+		err = ensureRawIPTables4RulesArePresent(ip4t, cfg.ClusterCIDR.IPv4Net)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create raw IPv4 iptables rules: %w", err)
+		}
+	}
+
 	return &Software{
 		appNet4Allocator:   net4Allocator,
 		appNet6Allocator:   net6Allocator,
@@ -197,6 +210,7 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 		nodeConfigs:        make(map[client.ObjectKey]*NodeConfig),
 		serviceChainRoutes: make(map[client.ObjectKey][]dataplane.SRv6Route),
 		ipt:                ip6t,
+		ip4t:               ip4t,
 		tunnelManager:      tunnelManager,
 		cfg:                cfg,
 		Client:             k8sClient,
@@ -225,6 +239,12 @@ func (d *Software) Shutdown(ctx context.Context) error {
 	err = ensureFilterIPTablesRulesAreRemoved(d.ipt)
 	if err != nil {
 		d.log.Error(err, "failed to remove filter iptables rules. Ignoring error...")
+	}
+	if d.ip4t != nil {
+		err = ensureRawIPTables4RulesAreRemoved(d.ip4t)
+		if err != nil {
+			d.log.Error(err, "failed to remove raw IPv4 iptables rules. Ignoring error...")
+		}
 	}
 
 	return nil
@@ -281,12 +301,52 @@ func ensureRawIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	err = ipt.DeleteIfExists("raw", "PREROUTING",
 		"-j", DefaultSRv6TableName)
 	if err != nil {
-		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
 	}
 	err = ipt.InsertUnique("raw", "PREROUTING", 1,
 		"-j", DefaultSRv6TableName)
 	if err != nil {
-		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
+		return fmt.Errorf("failed to insert hook rule to PREROUTING chain: %w", err)
+	}
+	return nil
+}
+
+func ensureRawIPTables4RulesArePresent(ipt *iptables.IPTables, appNet *net.IPNet) error {
+	err := ipt.ClearChain("raw", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear iptables chain: %w", err)
+	}
+	err = ipt.Append("raw", DefaultSRv6TableName,
+		"-s", appNet.String(), "-d", appNet.String(), "-j", "NOTRACK")
+	if err != nil {
+		return fmt.Errorf("failed to append NOTRACK rule: %w", err)
+	}
+	err = ipt.DeleteIfExists("raw", "PREROUTING",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
+	}
+	err = ipt.InsertUnique("raw", "PREROUTING", 1,
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to insert hook rule to PREROUTING chain: %w", err)
+	}
+	return nil
+}
+
+func ensureRawIPTables4RulesAreRemoved(ipt *iptables.IPTables) error {
+	err := ipt.ClearChain("raw", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
+	}
+	err = ipt.DeleteIfExists("raw", "PREROUTING",
+		"-j", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
+	}
+	err = ipt.DeleteChain("raw", DefaultSRv6TableName)
+	if err != nil {
+		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
 	}
 	return nil
 }
@@ -296,10 +356,10 @@ func ensureRawIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
 	if err != nil {
 		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
 	}
-	err = ipt.DeleteIfExists("raw", "FORWARD",
+	err = ipt.DeleteIfExists("raw", "PREROUTING",
 		"-j", DefaultSRv6TableName)
 	if err != nil {
-		return fmt.Errorf("failed to delete existing hook rule to FORWARD chain: %w", err)
+		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
 	}
 	err = ipt.DeleteChain("raw", DefaultSRv6TableName)
 	if err != nil {
