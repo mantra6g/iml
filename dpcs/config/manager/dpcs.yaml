@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dpcs
+  labels:
+    app: dpcs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dpcs
+  template:
+    metadata:
+      labels:
+        app: dpcs
+    spec:
+      serviceAccountName: dpcs
+      containers:
+        - name: dpcs
+          image: dpcs
+          args:
+            - "--listen-addr=0.0.0.0:50051"
+            - "--device-map-file=/etc/dpcs/device-map.env"
+            - "--driver-grpc-port=9560"
+          ports:
+            - name: grpc
+              containerPort: 50051
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: device-map
+              mountPath: /etc/dpcs
+              readOnly: true
+      volumes:
+        - name: device-map
+          configMap:
+            name: device-map-config
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dpcs
+spec:
+  type: NodePort
+  selector:
+    app: dpcs
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 50051
+      targetPort: 50051
+      nodePort: 30500

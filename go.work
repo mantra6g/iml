@@ -4,6 +4,7 @@ use (
 	api
 	cni
 	daemon
+	dpcs
 	operator
 	targets/bmv2
 	tools

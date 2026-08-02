@@ -1,21 +1,23 @@
 package main
 
 import (
-	"github.com/mantra6g/iml/targets/bmv2/controllers/lease"
-	"github.com/mantra6g/iml/targets/bmv2/controllers/nf"
-	"github.com/mantra6g/iml/targets/bmv2/controllers/p4target"
-	"github.com/mantra6g/iml/targets/bmv2/handlers"
-	bmv2http "github.com/mantra6g/iml/targets/bmv2/http"
-	nfmgr "github.com/mantra6g/iml/targets/bmv2/managers/nf"
-	nfcfgmgr "github.com/mantra6g/iml/targets/bmv2/managers/nfcfg"
-	p4targetmgr "github.com/mantra6g/iml/targets/bmv2/managers/p4target"
-	p4switch "github.com/mantra6g/iml/targets/bmv2/pkg/p4switch"
 	"context"
 	"flag"
 	"fmt"
 	"net"
 	"os"
 	"time"
+
+	"github.com/mantra6g/iml/targets/bmv2/controllers/lease"
+	"github.com/mantra6g/iml/targets/bmv2/controllers/nf"
+	"github.com/mantra6g/iml/targets/bmv2/controllers/p4target"
+	"github.com/mantra6g/iml/targets/bmv2/grpcserver"
+	"github.com/mantra6g/iml/targets/bmv2/handlers"
+	bmv2http "github.com/mantra6g/iml/targets/bmv2/http"
+	nfmgr "github.com/mantra6g/iml/targets/bmv2/managers/nf"
+	nfcfgmgr "github.com/mantra6g/iml/targets/bmv2/managers/nfcfg"
+	p4targetmgr "github.com/mantra6g/iml/targets/bmv2/managers/p4target"
+	p4switch "github.com/mantra6g/iml/targets/bmv2/pkg/p4switch"
 
 	"github.com/vishvananda/netlink"
 
@@ -35,6 +37,7 @@ import (
 
 const (
 	defaultSwitchAddr                  = "127.0.0.1:9559"
+	defaultGRPCListenAddress           = "0.0.0.0:9560"
 	deviceID                           = 0
 	electionIDHigh                     = 0
 	electionIDLow                      = 1
@@ -60,7 +63,7 @@ func init() {
 func main() {
 	var leaseRenewIntervalSeconds, leaseDurationSeconds, statusUpdateIntervalSeconds uint
 	var maxNFSlots int
-	var p4targetName, switchAddr, driverIP, dataIface, controlIface, nfIface string
+	var p4targetName, switchAddr, grpcListenAddress, driverIP, dataIface, controlIface, nfIface string
 
 	flag.UintVar(&leaseRenewIntervalSeconds, "lease-renew-interval-seconds",
 		DefaultLeaseRenewIntervalSeconds, "Interval at which to renew the Lease for this P4Target")
@@ -72,6 +75,8 @@ func main() {
 		"bmv2-target", "Name of the P4Target custom resource to manage")
 	flag.StringVar(&switchAddr, "switch-addr",
 		defaultSwitchAddr, "Address of the P4Runtime gRPC server on the BMv2 switch")
+	flag.StringVar(&grpcListenAddress, "grpc-listen-addr",
+		defaultGRPCListenAddress, "Listen address for this driver's own P4Runtime gRPC server (DPCS-facing)")
 	flag.StringVar(&driverIP, "driver-ip",
 		"", "IP address of this driver (reported in P4Target status)")
 	flag.IntVar(&maxNFSlots, "max-nf-slots",
@@ -265,6 +270,12 @@ func main() {
 	server := bmv2http.NewServer("0.0.0.0:8080", driver, ctrl.Log.WithName("http-server"))
 	if err = mgr.Add(server); err != nil {
 		setupLog.Error(err, "unable to add http server as dependency of manager")
+		os.Exit(1)
+	}
+
+	p4runtimeServer := grpcserver.NewServer(grpcListenAddress, switchClient, ctrl.Log.WithName("p4runtime-grpc-server"))
+	if err = mgr.Add(p4runtimeServer); err != nil {
+		setupLog.Error(err, "unable to add p4runtime grpc server as dependency of manager")
 		os.Exit(1)
 	}
 

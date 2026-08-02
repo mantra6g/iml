@@ -23,8 +23,6 @@ spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple-with-config/configurable-logger.p4"
   targetSelector:
     p4target.loom.io/arch: v1model
-  configRef:
-    name: pkt-logger-config
 ---
 apiVersion: infra.loom.io/v1alpha1
 kind: BMv2Target
@@ -132,3 +130,12 @@ spec:
         - name: web-client
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: device-map-config
+  namespace: loom-system
+data:
+  device-map.env: |
+    1=bmv2-target

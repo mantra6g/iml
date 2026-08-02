@@ -2,7 +2,8 @@
 IMG_OPERATOR ?= operator:local
 IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
-IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI)
+IMG_DPCS ?= dpcs:local
+IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI) $(IMG_DPCS)
 
 IMG_BMV2_CP ?= targets-bmv2:local
 IMG_BMV2_DP ?= p4lang/behavioral-model:latest
@@ -67,11 +68,15 @@ help: ## Display this help.
 docker-build-all: docker-build-iml docker-build-targets docker-build-examples ## Build docker images for iml, all targets and examples.
 
 .PHONY: docker-build-iml
-docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator ## Build docker images for the cni, daemon and operator.
+docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator docker-build-dpcs ## Build docker images for the cni, daemon, operator and dpcs.
 
 .PHONY: docker-build-cni
 docker-build-cni: ## Build docker image for the cni.
 	$(CONTAINER_TOOL) build -t ${IMG_CNI} --target runtime --build-arg MOD=cni --build-arg MODPATH=cni --build-arg BIN=loom .
+
+.PHONY: docker-build-dpcs
+docker-build-dpcs: ## Build docker image for the DPCS.
+	$(CONTAINER_TOOL) build -t ${IMG_DPCS} --target runtime --build-arg MOD=dpcs --build-arg MODPATH=dpcs --build-arg BIN=dpcs .
 
 .PHONY: docker-build-daemon
 docker-build-daemon: ## Build docker image for the daemon.
