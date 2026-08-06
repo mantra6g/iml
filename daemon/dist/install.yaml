@@ -135,7 +135,8 @@ spec:
         - /bin/sh
         - -c
         - |
-          cp /loom /host/opt/cni/bin/
+          set -euo pipefail # Exit whenever any line fails
+          cp /app /host/opt/cni/bin/loom
           chmod +x /host/opt/cni/bin/loom
         image: cni:local
         name: cni-installer
