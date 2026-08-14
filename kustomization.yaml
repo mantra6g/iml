@@ -1,3 +1,4 @@
 resources:
   - daemon/config/default
   - operator/config/default
+  - dpcs/config/default

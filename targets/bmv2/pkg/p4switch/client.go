@@ -1,10 +1,11 @@
 package p4switch
 
 import (
-	"github.com/mantra6g/iml/targets/bmv2/pkg/p4rutils"
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/mantra6g/iml/targets/bmv2/pkg/p4rutils"
 
 	"github.com/mantra6g/iml/targets/bmv2/api"
 
@@ -196,6 +197,14 @@ func (c *SwitchClient) SetAllTableEntries(ctx context.Context, entries []*p4v1.T
 		}
 	}
 	return nil
+}
+
+func (c *SwitchClient) ApplyUpdates(ctx context.Context, updates []*p4v1.Update) (*p4v1.WriteResponse, error) {
+	return c.P4Client.Write(ctx, &p4v1.WriteRequest{
+		DeviceId:   c.deviceID,
+		ElectionId: &p4v1.Uint128{High: c.electionIDHigh, Low: c.electionIDLow},
+		Updates:    updates,
+	})
 }
 
 // EditTableEntries inserts or deletes table entries on the switch.

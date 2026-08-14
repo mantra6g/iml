@@ -20,8 +20,9 @@ COPY daemon/go.mod daemon/go.sum daemon/
 COPY operator/go.mod operator/go.sum operator/
 COPY tools/go.mod tools/go.sum tools/
 COPY targets/bmv2/go.mod targets/bmv2/go.sum targets/bmv2/
+COPY dpcs/go.mod dpcs/go.sum dpcs/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
-    go mod download
+    go mod download all
 
 FROM base AS test-base
 ARG ENVTEST_K8S_VERSION
@@ -56,6 +57,7 @@ COPY --from=daemon-ebpf-builder /workspace /workspace
 FROM base AS operator-prebuilder
 FROM base AS cni-prebuilder
 FROM base AS targets-bmv2-prebuilder
+FROM base AS dpcs-prebuilder
 FROM ${MOD}-prebuilder AS prebuilder
 
 # TEST
@@ -106,6 +108,9 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 FROM gcr.io/distroless/static-debian13:nonroot AS operator-preruntime
+USER 65532:65532
+
+FROM gcr.io/distroless/static-debian13:nonroot AS dpcs-preruntime
 USER 65532:65532
 
 FROM alpine:${ALPINEVERSION} AS cni-preruntime
