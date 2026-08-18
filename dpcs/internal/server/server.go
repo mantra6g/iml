@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
+	"io"
 	"sync"
+	"time"
 
 	"github.com/mantra6g/iml/dpcs/internal/devicemap"
 	"github.com/mantra6g/iml/dpcs/internal/resolver"
@@ -26,8 +29,16 @@ type Server struct {
 
 	mu                   sync.Mutex
 	deviceIDToTargetName map[uint64]string
-	connections          map[uint64]*grpc.ClientConn // device_id -> cached driver connection
+	connections          map[uint64]driverConnection // device_id -> cached driver connection
+	lastDeviceMapReload  time.Time
 }
+
+type driverConnection struct {
+	address    string
+	connection *grpc.ClientConn
+}
+
+const deviceMapReloadInterval = time.Second
 
 func New(deviceMapFile string, deviceIDToTargetName map[uint64]string, driverAddressResolver *resolver.Resolver, log logr.Logger) *Server {
 	return &Server{
@@ -35,18 +46,23 @@ func New(deviceMapFile string, deviceIDToTargetName map[uint64]string, driverAdd
 		deviceIDToTargetName:  deviceIDToTargetName,
 		driverAddressResolver: driverAddressResolver,
 		log:                   log,
-		connections:           make(map[uint64]*grpc.ClientConn),
+		connections:           make(map[uint64]driverConnection),
 	}
 }
 
-// TODO: throttle the re-read — a flood of unknown device_ids currently triggers a file read per request.
 func (s *Server) getTargetNameByDeviceID(deviceID uint64) (string, bool) {
 	s.mu.Lock()
 	name, ok := s.deviceIDToTargetName[deviceID]
-	s.mu.Unlock()
 	if ok {
+		s.mu.Unlock()
 		return name, true
 	}
+	if time.Since(s.lastDeviceMapReload) < deviceMapReloadInterval {
+		s.mu.Unlock()
+		return "", false
+	}
+	s.lastDeviceMapReload = time.Now()
+	s.mu.Unlock()
 
 	fresh, err := devicemap.ParseIfExists(s.deviceMapFile)
 	if err != nil {
@@ -74,14 +90,59 @@ func (s *Server) Write(ctx context.Context, request *p4v1.WriteRequest) (*p4v1.W
 		s.log.Error(err, "driver Write failed",
 			"deviceId", request.GetDeviceId(), "numUpdates", len(request.GetUpdates()))
 		s.logUnwrappedP4Errors(err, request.GetDeviceId())
-		if code := status.Code(err); code == codes.Unavailable || code == codes.DeadlineExceeded {
-			s.log.Info("dropping cached driver connection", "deviceId", request.GetDeviceId(), "code", code.String())
-			s.evictConnection(request.GetDeviceId())
-		}
+		s.evictConnectionOnTransportError(err, request.GetDeviceId())
 		return nil, err
 	}
 	s.log.V(1).Info("forwarded Write to driver", "deviceId", request.GetDeviceId(), "numUpdates", len(request.GetUpdates()))
 	return response, nil
+}
+
+func (s *Server) GetForwardingPipelineConfig(ctx context.Context, request *p4v1.GetForwardingPipelineConfigRequest) (*p4v1.GetForwardingPipelineConfigResponse, error) {
+	connection, err := s.getDriverConnection(ctx, request.GetDeviceId())
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := p4v1.NewP4RuntimeClient(connection).GetForwardingPipelineConfig(ctx, request)
+	if err != nil {
+		s.log.Error(err, "driver GetForwardingPipelineConfig failed", "deviceId", request.GetDeviceId())
+		s.evictConnectionOnTransportError(err, request.GetDeviceId())
+		return nil, err
+	}
+	s.log.V(1).Info("forwarded GetForwardingPipelineConfig to driver", "deviceId", request.GetDeviceId())
+	return response, nil
+}
+
+func (s *Server) Read(request *p4v1.ReadRequest, stream p4v1.P4Runtime_ReadServer) error {
+	ctx := stream.Context()
+	connection, err := s.getDriverConnection(ctx, request.GetDeviceId())
+	if err != nil {
+		return err
+	}
+
+	driverStream, err := p4v1.NewP4RuntimeClient(connection).Read(ctx, request)
+	if err != nil {
+		s.log.Error(err, "driver Read failed", "deviceId", request.GetDeviceId())
+		s.evictConnectionOnTransportError(err, request.GetDeviceId())
+		return err
+	}
+	numResponses := 0
+	for {
+		response, err := driverStream.Recv()
+		if errors.Is(err, io.EOF) {
+			s.log.V(1).Info("forwarded Read to driver", "deviceId", request.GetDeviceId(), "numResponses", numResponses)
+			return nil
+		}
+		if err != nil {
+			s.log.Error(err, "driver Read stream failed", "deviceId", request.GetDeviceId())
+			s.evictConnectionOnTransportError(err, request.GetDeviceId())
+			return err
+		}
+		if err := stream.Send(response); err != nil {
+			return err
+		}
+		numResponses++
+	}
 }
 
 func (s *Server) StreamChannel(stream p4v1.P4Runtime_StreamChannelServer) error {
@@ -113,13 +174,6 @@ func (s *Server) StreamChannel(stream p4v1.P4Runtime_StreamChannelServer) error 
 }
 
 func (s *Server) getDriverConnection(ctx context.Context, deviceID uint64) (*grpc.ClientConn, error) {
-	s.mu.Lock()
-	connection, ok := s.connections[deviceID]
-	s.mu.Unlock()
-	if ok {
-		return connection, nil
-	}
-
 	p4targetName, ok := s.getTargetNameByDeviceID(deviceID)
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "unknown device_id %d", deviceID)
@@ -131,6 +185,18 @@ func (s *Server) getDriverConnection(ctx context.Context, deviceID uint64) (*grp
 			deviceID, p4targetName, err)
 	}
 
+	s.mu.Lock()
+	cached, ok := s.connections[deviceID]
+	s.mu.Unlock()
+	if ok && cached.address == address {
+		return cached.connection, nil
+	}
+	if ok {
+		s.log.Info("driver address changed, dropping cached connection",
+			"deviceId", deviceID, "oldAddress", cached.address, "newAddress", address)
+		s.evictConnection(deviceID)
+	}
+
 	newConnection, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "failed to dial driver at %s for device_id %d: %v",
@@ -138,12 +204,16 @@ func (s *Server) getDriverConnection(ctx context.Context, deviceID uint64) (*grp
 	}
 
 	s.mu.Lock()
-	if existingConnection, ok := s.connections[deviceID]; ok {
+	existing, ok := s.connections[deviceID]
+	if ok && existing.address == address {
 		s.mu.Unlock()
 		_ = newConnection.Close()
-		return existingConnection, nil
+		return existing.connection, nil
 	}
-	s.connections[deviceID] = newConnection
+	if ok {
+		_ = existing.connection.Close()
+	}
+	s.connections[deviceID] = driverConnection{address: address, connection: newConnection}
 	s.mu.Unlock()
 	return newConnection, nil
 }
@@ -165,11 +235,18 @@ func (s *Server) logUnwrappedP4Errors(err error, deviceID uint64) {
 	}
 }
 
+func (s *Server) evictConnectionOnTransportError(err error, deviceID uint64) {
+	if code := status.Code(err); code == codes.Unavailable || code == codes.DeadlineExceeded {
+		s.log.Info("dropping cached driver connection", "deviceId", deviceID, "code", code.String())
+		s.evictConnection(deviceID)
+	}
+}
+
 func (s *Server) evictConnection(deviceID uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if connection, ok := s.connections[deviceID]; ok {
-		_ = connection.Close()
+	if cached, ok := s.connections[deviceID]; ok {
+		_ = cached.connection.Close()
 		delete(s.connections, deviceID)
 	}
 }

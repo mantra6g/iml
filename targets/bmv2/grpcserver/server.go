@@ -3,6 +3,7 @@ package grpcserver
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 
 	p4switch "github.com/mantra6g/iml/targets/bmv2/pkg/p4switch"
@@ -31,6 +32,36 @@ func (h *p4RuntimeHandler) Write(ctx context.Context, request *p4v1.WriteRequest
 		return nil, err
 	}
 	return response, nil
+}
+
+func (h *p4RuntimeHandler) GetForwardingPipelineConfig(ctx context.Context, request *p4v1.GetForwardingPipelineConfigRequest) (*p4v1.GetForwardingPipelineConfigResponse, error) {
+	response, err := h.switchClient.GetPipelineWithResponseType(ctx, request.GetResponseType())
+	if err != nil {
+		h.log.Error(err, "failed to get pipeline config from switch")
+		return nil, err
+	}
+	return response, nil
+}
+
+func (h *p4RuntimeHandler) Read(request *p4v1.ReadRequest, stream p4v1.P4Runtime_ReadServer) error {
+	switchStream, err := h.switchClient.ReadEntities(stream.Context(), request.GetEntities())
+	if err != nil {
+		h.log.Error(err, "failed to read entities from switch", "numEntities", len(request.GetEntities()))
+		return err
+	}
+	for {
+		response, err := switchStream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			h.log.Error(err, "failed to receive read response from switch")
+			return err
+		}
+		if err := stream.Send(response); err != nil {
+			return err
+		}
+	}
 }
 
 func NewServer(listenAddress string, switchClient *p4switch.SwitchClient, log logr.Logger) *Server {
