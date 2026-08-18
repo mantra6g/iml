@@ -75,6 +75,7 @@ COPY ${MODPATH}/ ${MODPATH}
 
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=go-build,target=/root/.cache/go-build \
+    go mod download all && \
     KUBEBUILDER_ASSETS=$(go tool setup-envtest use -i ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path) \
     GOPROXY=off \
     go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MODPATH}/... || true && \
@@ -93,6 +94,7 @@ COPY api/ api/
 COPY ${MODPATH}/ ${MODPATH}/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=go-build,target=/root/.cache/go-build \
+    go mod download all && \
     GOPROXY=off CGO_ENABLED=0 /usr/local/go/bin/go build -o bin/ ./${MODPATH}/...
 
 # RUNTIME
