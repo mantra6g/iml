@@ -143,6 +143,13 @@ var _ = Describe("NetworkFunction Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
+			By("Waiting for the NetworkFunction to appear in the cache")
+			Eventually(func(g Gomega) {
+				updatedResource := &schedulingv1alpha1.NetworkFunction{}
+				err := k8sClient.Get(ctx, nfKey, updatedResource)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).Should(Succeed())
+
 			By("Verifying the NetworkFunction is not scheduled")
 			Consistently(func(g Gomega) {
 				updatedResource := &schedulingv1alpha1.NetworkFunction{}
@@ -167,6 +174,13 @@ var _ = Describe("NetworkFunction Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			By("Waiting for the NetworkFunction to appear in the cache")
+			Eventually(func(g Gomega) {
+				updatedResource := &schedulingv1alpha1.NetworkFunction{}
+				err := k8sClient.Get(ctx, nfKey, updatedResource)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).Should(Succeed())
 
 			By("Creating a target resource that matches the NetworkFunction's TargetSelector")
 			targetResource := &corev1alpha1.P4Target{
