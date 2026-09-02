@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -18,10 +19,9 @@ import (
 )
 
 // cd hack/dpcs-client
-// kubectl port-forward -n loom-system deploy/bmv2-target 19559:9559
 // GOWORK=off go build -o dpcs-client .
-// ./dpcs-client -p4info-addr 127.0.0.1:19559 -dpcs-addr 172.18.0.2:30500 -insert 10.123.0.19
-// ./dpcs-client -p4info-addr 127.0.0.1:19559 -dpcs-addr 172.18.0.2:30500 -delete 10.123.0.19
+// ./dpcs-client -dpcs-addr 172.18.0.2:30500 -insert 10.123.0.19
+// ./dpcs-client -dpcs-addr 172.18.0.2:30500 -delete 10.123.0.19
 
 type p4Identifiers struct {
 	tableID  uint32
@@ -47,9 +47,9 @@ func ipBytes(ipAddress string) []byte {
 	return parsed
 }
 
-func fetchP4Info(ctx context.Context, infoClient p4v1.P4RuntimeClient) (*p4configv1.P4Info, error) {
+func fetchP4Info(ctx context.Context, infoClient p4v1.P4RuntimeClient, deviceID uint64) (*p4configv1.P4Info, error) {
 	configResponse, err := infoClient.GetForwardingPipelineConfig(ctx, &p4v1.GetForwardingPipelineConfigRequest{
-		DeviceId:     0,
+		DeviceId:     deviceID,
 		ResponseType: p4v1.GetForwardingPipelineConfigRequest_P4INFO_AND_COOKIE,
 	})
 	if err != nil {
@@ -156,6 +156,42 @@ func buildUpdates(identifiers p4Identifiers, updateType p4v1.Update_Type, ipList
 	return updates
 }
 
+func readTableEntries(ctx context.Context, dpcsClient p4v1.P4RuntimeClient, deviceID uint64, tableID uint32) error {
+	stream, err := dpcsClient.Read(ctx, &p4v1.ReadRequest{
+		DeviceId: deviceID,
+		Entities: []*p4v1.Entity{{
+			Entity: &p4v1.Entity_TableEntry{TableEntry: &p4v1.TableEntry{TableId: tableID}},
+		}},
+	})
+	if err != nil {
+		return fmt.Errorf("Read: %w", err)
+	}
+	numEntries := 0
+	for {
+		response, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("Read recv: %w", err)
+		}
+		for _, entity := range response.GetEntities() {
+			tableEntry := entity.GetTableEntry()
+			if tableEntry == nil {
+				continue
+			}
+			numEntries++
+			for _, match := range tableEntry.GetMatch() {
+				fmt.Printf("  entry: field=%d exact=%x action=%d\n",
+					match.GetFieldId(), match.GetExact().GetValue(),
+					tableEntry.GetAction().GetAction().GetActionId())
+			}
+		}
+	}
+	fmt.Printf("Read OK: %d entries in table %d (device_id=%d)\n", numEntries, tableID, deviceID)
+	return nil
+}
+
 func printP4Errors(err error) {
 	grpcStatus, ok := status.FromError(err)
 	if !ok {
@@ -176,8 +212,8 @@ func printP4Errors(err error) {
 func main() {
 	var p4infoAddress, dpcsAddress, tableName, actionName, fieldName, insertList, deleteList string
 	var deviceID uint64
-	var arbitrate bool
-	flag.StringVar(&p4infoAddress, "p4info-addr", "127.0.0.1:9559", "switch P4Runtime addr for GetForwardingPipelineConfig")
+	var arbitrate, readTable bool
+	flag.StringVar(&p4infoAddress, "p4info-addr", "", "P4Info source addr; empty = fetch via -dpcs-addr")
 	flag.StringVar(&dpcsAddress, "dpcs-addr", "", "DPCS P4Runtime addr for Write")
 	flag.StringVar(&tableName, "table", "MyIngress.log_table", "table FQN")
 	flag.StringVar(&actionName, "action", "MyIngress.log", "action FQN")
@@ -186,13 +222,18 @@ func main() {
 	flag.StringVar(&deleteList, "delete", "", "comma separated IPv4 addresses to DELETE")
 	flag.Uint64Var(&deviceID, "device-id", 1, "device_id sent to DPCS")
 	flag.BoolVar(&arbitrate, "arbitrate", false, "do a StreamChannel mastership handshake first")
+	flag.BoolVar(&readTable, "read", false, "read back the table entries via DPCS")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	infoConnection := dial(p4infoAddress)
-	p4Info, err := fetchP4Info(ctx, p4v1.NewP4RuntimeClient(infoConnection))
+	infoAddress, infoDeviceID := p4infoAddress, uint64(0)
+	if infoAddress == "" {
+		infoAddress, infoDeviceID = dpcsAddress, deviceID
+	}
+	infoConnection := dial(infoAddress)
+	p4Info, err := fetchP4Info(ctx, p4v1.NewP4RuntimeClient(infoConnection), infoDeviceID)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -218,20 +259,29 @@ func main() {
 
 	updates := buildUpdates(identifiers, p4v1.Update_DELETE, deleteList)
 	updates = append(updates, buildUpdates(identifiers, p4v1.Update_INSERT, insertList)...)
-	if len(updates) == 0 {
+	if len(updates) == 0 && !readTable {
 		fmt.Println("nothing to write, done")
 		return
 	}
 
-	_, err = dpcsClient.Write(ctx, &p4v1.WriteRequest{
-		DeviceId:   deviceID,
-		ElectionId: &p4v1.Uint128{Low: 1},
-		Updates:    updates,
-	})
-	if err != nil {
-		fmt.Println("Write error:", err)
-		printP4Errors(err)
-		os.Exit(1)
+	if len(updates) > 0 {
+		_, err = dpcsClient.Write(ctx, &p4v1.WriteRequest{
+			DeviceId:   deviceID,
+			ElectionId: &p4v1.Uint128{Low: 1},
+			Updates:    updates,
+		})
+		if err != nil {
+			fmt.Println("Write error:", err)
+			printP4Errors(err)
+			os.Exit(1)
+		}
+		fmt.Printf("Write OK: %d updates forwarded via DPCS (device_id=%d)\n", len(updates), deviceID)
 	}
-	fmt.Printf("Write OK: %d updates forwarded via DPCS (device_id=%d)\n", len(updates), deviceID)
+
+	if readTable {
+		if err := readTableEntries(ctx, dpcsClient, deviceID, identifiers.tableID); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
 }

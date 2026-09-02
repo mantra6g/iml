@@ -10,6 +10,8 @@ import (
 	"github.com/mantra6g/iml/targets/bmv2/api"
 
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // SwitchClient wraps a P4Runtime client with device identity, eliminating the need
@@ -200,10 +202,68 @@ func (c *SwitchClient) SetAllTableEntries(ctx context.Context, entries []*p4v1.T
 }
 
 func (c *SwitchClient) ApplyUpdates(ctx context.Context, updates []*p4v1.Update) (*p4v1.WriteResponse, error) {
+	response, err := c.writeUpdates(ctx, updates)
+	if err == nil {
+		return response, nil
+	}
+	retryUpdates, ok := modifyRetriesForExistingEntries(updates, err)
+	if !ok {
+		return nil, err
+	}
+	return c.writeUpdates(ctx, retryUpdates)
+}
+
+func (c *SwitchClient) writeUpdates(ctx context.Context, updates []*p4v1.Update) (*p4v1.WriteResponse, error) {
 	return c.P4Client.Write(ctx, &p4v1.WriteRequest{
 		DeviceId:   c.deviceID,
 		ElectionId: &p4v1.Uint128{High: c.electionIDHigh, Low: c.electionIDLow},
 		Updates:    updates,
+	})
+}
+
+func modifyRetriesForExistingEntries(updates []*p4v1.Update, writeError error) ([]*p4v1.Update, bool) {
+	grpcStatus, ok := status.FromError(writeError)
+	if !ok {
+		return nil, false
+	}
+	details := grpcStatus.Details()
+	if len(details) != len(updates) {
+		return nil, false
+	}
+	retryUpdates := make([]*p4v1.Update, 0, len(updates))
+	for index, detail := range details {
+		p4Error, ok := detail.(*p4v1.Error)
+		if !ok {
+			return nil, false
+		}
+		switch codes.Code(p4Error.GetCanonicalCode()) {
+		case codes.OK:
+		case codes.AlreadyExists:
+			if updates[index].GetType() != p4v1.Update_INSERT {
+				return nil, false
+			}
+			retryUpdates = append(retryUpdates, &p4v1.Update{
+				Type:   p4v1.Update_MODIFY,
+				Entity: updates[index].GetEntity(),
+			})
+		default:
+			return nil, false
+		}
+	}
+	return retryUpdates, len(retryUpdates) > 0
+}
+
+func (c *SwitchClient) GetPipelineWithResponseType(ctx context.Context, responseType p4v1.GetForwardingPipelineConfigRequest_ResponseType) (*p4v1.GetForwardingPipelineConfigResponse, error) {
+	return c.P4Client.GetForwardingPipelineConfig(ctx, &p4v1.GetForwardingPipelineConfigRequest{
+		DeviceId:     c.deviceID,
+		ResponseType: responseType,
+	})
+}
+
+func (c *SwitchClient) ReadEntities(ctx context.Context, entities []*p4v1.Entity) (p4v1.P4Runtime_ReadClient, error) {
+	return c.P4Client.Read(ctx, &p4v1.ReadRequest{
+		DeviceId: c.deviceID,
+		Entities: entities,
 	})
 }
 

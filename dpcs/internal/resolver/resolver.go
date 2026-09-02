@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"net"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
@@ -19,7 +20,6 @@ func New(reader client.Reader, grpcPort uint16) *Resolver {
 	return &Resolver{reader: reader, grpcPort: grpcPort}
 }
 
-// TODO: only the first driverIP is used; handle multiple IPs.
 func (r *Resolver) Resolve(ctx context.Context, p4targetName string) (string, error) {
 	p4target := &corev1alpha1.P4Target{}
 	if err := r.reader.Get(ctx, types.NamespacedName{Name: p4targetName}, p4target); err != nil {
@@ -28,5 +28,16 @@ func (r *Resolver) Resolve(ctx context.Context, p4targetName string) (string, er
 	if len(p4target.Status.DriverIPs) == 0 {
 		return "", fmt.Errorf("P4Target %q has no driverIPs in status yet", p4targetName)
 	}
-	return fmt.Sprintf("%s:%d", p4target.Status.DriverIPs[0], r.grpcPort), nil
+
+	ipv4Addresses := make([]string, 0, len(p4target.Status.DriverIPs))
+	for _, driverIP := range p4target.Status.DriverIPs {
+		if parsed := net.ParseIP(driverIP); parsed != nil && parsed.To4() != nil {
+			ipv4Addresses = append(ipv4Addresses, driverIP)
+		}
+	}
+	if len(ipv4Addresses) != 1 {
+		return "", fmt.Errorf("P4Target %q must have exactly one IPv4 driverIP, got %v",
+			p4targetName, p4target.Status.DriverIPs)
+	}
+	return fmt.Sprintf("%s:%d", ipv4Addresses[0], r.grpcPort), nil
 }
