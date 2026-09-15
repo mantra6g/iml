@@ -788,10 +788,9 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	if err != nil {
 		return fmt.Errorf("failed to get tun link for node %s: %w", node.Name, err)
 	}
-	err = netlink.LinkSetMaster(tunLink, d.routingSubnet.Bridge)
-	if err != nil {
-		return fmt.Errorf("failed to set master for tunnel interface for node %s: %w", node.Name, err)
-	}
+	// The tunnel interface is enslaved directly to the routing VRF below, by AddRoute. It is no
+	// longer a bridge port: since it's an InnerProtoInherit (L3-only) Geneve device, it carries no
+	// Ethernet header and Linux bridges only accept Ethernet-type slaves.
 	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(node.Spec.NodeCIDRs)
 	if err != nil {
 		return fmt.Errorf("failed to parse CIDRs for node %s: %w", node.Name, err)
@@ -813,6 +812,13 @@ func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
 	err = d.routingSubnet.AddRoute(cidrs, addrs, tunLink.Attrs().Name)
 	if err != nil {
 		return fmt.Errorf("failed to add route for node %s: %w", node.Name, err)
+	}
+	// The tunnel interface is Flow-based and shared by every node, so routing traffic to it is not
+	// enough on its own: tc rules are what actually tell the kernel which remote endpoint to
+	// encapsulate towards for this node's CIDRs.
+	err = d.tunnelManager.AddEgressRoute(node.Name, cidrs)
+	if err != nil {
+		return fmt.Errorf("failed to add tunnel egress route for node %s: %w", node.Name, err)
 	}
 	d.nodeConfigs[client.ObjectKeyFromObject(node)] = &NodeConfig{
 		LastResourceVersion: node.ResourceVersion,
@@ -850,6 +856,10 @@ func (d *Software) RemoveNodeRoutes(node client.ObjectKey) (err error) {
 	dst := netutils.DualStackNetwork{
 		IPv4Net: route.IPv4Route.Destination,
 		IPv6Net: route.IPv6Route.Destination,
+	}
+	err = d.tunnelManager.RemoveEgressRoute(node.Name, dst)
+	if err != nil {
+		return fmt.Errorf("failed to remove tunnel egress route for node %s: %w", node.Name, err)
 	}
 	err = d.routingSubnet.RemoveRoute(dst)
 	if err != nil {

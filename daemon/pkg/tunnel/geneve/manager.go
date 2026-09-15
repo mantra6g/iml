@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/mantra6g/iml/daemon/pkg/tunnel"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
@@ -27,11 +28,12 @@ const (
 type NodeName = string
 
 type TunnelManager struct {
-	tunnelInterface string
-	tunnels         map[NodeName]*Tunnel
-	ip4t            *iptables.IPTables
-	ip6t            *iptables.IPTables
-	log             logr.Logger
+	tunnelInterface    string
+	tunnels            map[NodeName]*Tunnel
+	ip4t               *iptables.IPTables
+	ip6t               *iptables.IPTables
+	log                logr.Logger
+	nextFilterPriority uint16
 }
 
 func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
@@ -130,7 +132,7 @@ func ensureTunnel(name string, port uint16) error {
 	if !ok {
 		return fmt.Errorf("a tunnel with the name %s already exists but is not a Geneve tunnel", name)
 	}
-	if tun.Dport != port || tun.FlowBased != true {
+	if tun.Dport != port || tun.FlowBased != true || tun.InnerProtoInherit != true {
 		err = netlink.LinkDel(tunLink)
 		if err != nil {
 			return fmt.Errorf("failed to delete tunnel: %v", err)
@@ -141,6 +143,38 @@ func ensureTunnel(name string, port uint16) error {
 	if err = netlink.LinkSetUp(tun); err != nil {
 		return fmt.Errorf("failed to set up Geneve tunnel: %v", err)
 	}
+	if err = ensureClsactQdisc(tun); err != nil {
+		return fmt.Errorf("failed to ensure clsact qdisc on tunnel: %v", err)
+	}
+	return nil
+}
+
+// ensureClsactQdisc makes sure a clsact qdisc is attached to link. tc filters that attach tunnel
+// metadata to outgoing packets (see Tunnel.AddEgressRoute) are installed on the egress hook of
+// this qdisc, since the Geneve tunnel interface is Flow-based and therefore has no static remote
+// endpoint: without those filters the kernel has nowhere to encapsulate outgoing packets to and
+// silently drops them.
+func ensureClsactQdisc(link netlink.Link) error {
+	qdiscs, err := netlink.QdiscList(link)
+	if err != nil {
+		return fmt.Errorf("failed to list qdiscs on %s: %v", link.Attrs().Name, err)
+	}
+	for _, q := range qdiscs {
+		if q.Type() == "clsact" {
+			return nil
+		}
+	}
+	qdisc := &netlink.GenericQdisc{
+		QdiscAttrs: netlink.QdiscAttrs{
+			LinkIndex: link.Attrs().Index,
+			Handle:    netlink.MakeHandle(0xffff, 0),
+			Parent:    netlink.HANDLE_CLSACT,
+		},
+		QdiscType: "clsact",
+	}
+	if err = netlink.QdiscAdd(qdisc); err != nil {
+		return fmt.Errorf("failed to add clsact qdisc to %s: %v", link.Attrs().Name, err)
+	}
 	return nil
 }
 
@@ -149,8 +183,18 @@ func createTunnel(name string, port uint16) (netlink.Link, error) {
 		LinkAttrs: netlink.LinkAttrs{
 			Name: name,
 		},
-		Dport:     port,
+		Dport: port,
+		// FlowBased makes this a single "external"/metadata-driven device shared by every remote
+		// node, instead of one device per fixed remote endpoint: the actual per-packet destination
+		// and VNI are attached by the tc rules in Tunnel.AddEgressRoute.
 		FlowBased: true,
+		// InnerProtoInherit makes this an L3-only tunnel (no inner Ethernet header, the Geneve
+		// protocol-type field is taken from the inner packet itself). Without it, the device would
+		// carry full inner Ethernet frames and every route towards a remote node's CIDR would need a
+		// resolvable neighbor (ARP/NDP) entry for its gateway address, which nothing in this overlay
+		// ever provides — packets would stall in the neighbor-resolution queue and never reach the
+		// tc egress filters at all.
+		InnerProtoInherit: true,
 	}
 	if err := netlink.LinkAdd(tun); err != nil {
 		return nil, fmt.Errorf("failed to add Geneve tunnel: %v", err)
@@ -226,11 +270,34 @@ func (mgr *TunnelManager) UpdateNodeTunnels(node *corev1.Node) error {
 		}
 		return nil
 	}
-	tun, err := NewTunnel(node, mgr.ip4t, mgr.ip6t)
+	mgr.nextFilterPriority++
+	tun, err := NewTunnel(node, mgr.ip4t, mgr.ip6t, mgr.tunnelInterface, mgr.nextFilterPriority)
 	if err != nil {
 		return fmt.Errorf("failed to create Geneve tunnel for node %s: %v", node.Name, err)
 	}
 	mgr.tunnels[node.Name] = tun
+	return nil
+}
+
+func (mgr *TunnelManager) AddEgressRoute(nodeName string, dst netutils.DualStackNetwork) error {
+	tun, exists := mgr.tunnels[nodeName]
+	if !exists {
+		return fmt.Errorf("no Geneve tunnel exists yet for node %s", nodeName)
+	}
+	if err := tun.AddEgressRoute(dst); err != nil {
+		return fmt.Errorf("failed to add egress route for node %s: %v", nodeName, err)
+	}
+	return nil
+}
+
+func (mgr *TunnelManager) RemoveEgressRoute(nodeName string, dst netutils.DualStackNetwork) error {
+	tun, exists := mgr.tunnels[nodeName]
+	if !exists {
+		return nil // Tunnel already doesn't exist, nothing to remove
+	}
+	if err := tun.RemoveEgressRoute(dst); err != nil {
+		return fmt.Errorf("failed to remove egress route for node %s: %v", nodeName, err)
+	}
 	return nil
 }
 

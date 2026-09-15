@@ -111,9 +111,7 @@ spec:
         app.kubernetes.io/name: loom-daemon
     spec:
       containers:
-      - command:
-        - /daemon
-        image: daemon:local
+      - image: daemon:local
         name: daemon
         resources:
           limits:
