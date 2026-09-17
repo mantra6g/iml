@@ -39,6 +39,24 @@ spec:
           spec:
             description: spec defines the desired state of LoomNode
             properties:
+              addresses:
+                description: |-
+                  Addresses is a list of addresses associated with the node.
+                  It is updated by the network daemon running on each node, and is used
+                  by every other node to determine how to reach this node.
+                items:
+                  properties:
+                    ip:
+                      description: IP address of the node
+                      type: string
+                    type:
+                      description: Type of the address (e.g., InternalIP, ExternalIP)
+                      type: string
+                  required:
+                  - ip
+                  - type
+                  type: object
+                type: array
               nodeCIDRs:
                 description: |-
                   NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
@@ -49,6 +67,8 @@ spec:
                   type: string
                 type: array
               tunnelCIDRs:
+                description: TunnelCIDRs specifies an internal list of CIDR blocks
+                  used for interal interface IPs on this node.
                 items:
                   type: string
                 type: array
