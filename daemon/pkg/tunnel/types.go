@@ -3,13 +3,12 @@ package tunnel
 import (
 	"context"
 
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 type Manager interface {
-	UpdateNodeTunnels(node *corev1.Node) error
+	UpdateNodeTunnels(loomNode *infrav1alpha1.LoomNode) error
 	DeleteNodeTunnels(nodeName string) error
 	GetTunnelInterface(nodeName string) (string, error)
 	// AddEgressRoute ensures that traffic destined to dst is encapsulated and sent towards the

@@ -9,6 +9,7 @@ import (
 
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/vishvananda/netlink"
 )
 
@@ -223,4 +224,35 @@ func GetDualStackAddressFromLink(link netlink.Link) (netutils.DualStackAddress, 
 		}
 	}
 	return result, nil
+}
+
+// Copied from Cilium repo. All rights to Cilium authors.
+func GetNodeIP(addrs []infrav1alpha1.Address, ipv6 bool) net.IP {
+	var backupIP net.IP
+	for _, addr := range addrs {
+		parsed := net.ParseIP(addr.IP)
+		if parsed == nil {
+			continue
+		}
+		if (ipv6 && parsed.To4() != nil) ||
+			(!ipv6 && parsed.To4() == nil) {
+			continue
+		}
+		switch addr.Type {
+		// Always prefer a cluster internal IP
+		case infrav1alpha1.NodeInternalIP:
+			return parsed
+		case infrav1alpha1.NodeExternalIP:
+			// Fall back to external Node IP
+			// if no internal IP could be found
+			backupIP = parsed
+		default:
+			// As a last resort, if no internal or external
+			// IP was found, use any node address available
+			if backupIP == nil {
+				backupIP = parsed
+			}
+		}
+	}
+	return backupIP
 }

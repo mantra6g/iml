@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strconv"
 
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/daemon/pkg/tunnel"
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
-	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -28,15 +28,15 @@ const (
 type NodeName = string
 
 type TunnelManager struct {
-	tunnelInterface    string
-	tunnels            map[NodeName]*Tunnel
-	ip4t               *iptables.IPTables
-	ip6t               *iptables.IPTables
-	log                logr.Logger
-	nextFilterPriority uint16
+	tunnelInterface string
+	tunnels         map[NodeName]*Tunnel
+	ip4t            *iptables.IPTables
+	ip6t            *iptables.IPTables
+	log             logr.Logger
+	vrfName         string
 }
 
-func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
+func NewTunnelManager(logger logr.Logger, vrfName string) (tunnel.Manager, error) {
 	ip4t, err := iptables.New()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init iptables for IPv4 address family: %v", err)
@@ -49,7 +49,11 @@ func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to ensure iptables: %v", err)
 	}
-	err = ensureTunnel(TunnelName, TunnelPort)
+	vrf, err := netlink.LinkByName(vrfName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VRF link %s: %v", vrfName, err)
+	}
+	err = ensureTunnel(TunnelName, TunnelPort, vrf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ensure tunnel: %v", err)
 	}
@@ -59,6 +63,7 @@ func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
 		ip4t:            ip4t,
 		ip6t:            ip6t,
 		log:             logger,
+		vrfName:         vrfName,
 	}, nil
 }
 
@@ -120,10 +125,10 @@ func ensureIptables(ip4t, ip6t *iptables.IPTables) error {
 	return nil
 }
 
-func ensureTunnel(name string, port uint16) error {
+func ensureTunnel(name string, port uint16, vrf netlink.Link) error {
 	tunLink, err := netlink.LinkByName(name)
 	if err != nil {
-		tunLink, err = createTunnel(name, port)
+		tunLink, err = createTunnel(name, port, vrf)
 		if err != nil {
 			return fmt.Errorf("failed to create tunnel: %v", err)
 		}
@@ -137,48 +142,16 @@ func ensureTunnel(name string, port uint16) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete tunnel: %v", err)
 		}
-		tunLink, err = createTunnel(name, port)
+		tunLink, err = createTunnel(name, port, vrf)
 		tun, _ = tunLink.(*netlink.Geneve)
 	}
 	if err = netlink.LinkSetUp(tun); err != nil {
 		return fmt.Errorf("failed to set up Geneve tunnel: %v", err)
 	}
-	if err = ensureClsactQdisc(tun); err != nil {
-		return fmt.Errorf("failed to ensure clsact qdisc on tunnel: %v", err)
-	}
 	return nil
 }
 
-// ensureClsactQdisc makes sure a clsact qdisc is attached to link. tc filters that attach tunnel
-// metadata to outgoing packets (see Tunnel.AddEgressRoute) are installed on the egress hook of
-// this qdisc, since the Geneve tunnel interface is Flow-based and therefore has no static remote
-// endpoint: without those filters the kernel has nowhere to encapsulate outgoing packets to and
-// silently drops them.
-func ensureClsactQdisc(link netlink.Link) error {
-	qdiscs, err := netlink.QdiscList(link)
-	if err != nil {
-		return fmt.Errorf("failed to list qdiscs on %s: %v", link.Attrs().Name, err)
-	}
-	for _, q := range qdiscs {
-		if q.Type() == "clsact" {
-			return nil
-		}
-	}
-	qdisc := &netlink.GenericQdisc{
-		QdiscAttrs: netlink.QdiscAttrs{
-			LinkIndex: link.Attrs().Index,
-			Handle:    netlink.MakeHandle(0xffff, 0),
-			Parent:    netlink.HANDLE_CLSACT,
-		},
-		QdiscType: "clsact",
-	}
-	if err = netlink.QdiscAdd(qdisc); err != nil {
-		return fmt.Errorf("failed to add clsact qdisc to %s: %v", link.Attrs().Name, err)
-	}
-	return nil
-}
-
-func createTunnel(name string, port uint16) (netlink.Link, error) {
+func createTunnel(name string, port uint16, vrf netlink.Link) (netlink.Link, error) {
 	tun := &netlink.Geneve{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: name,
@@ -198,6 +171,9 @@ func createTunnel(name string, port uint16) (netlink.Link, error) {
 	}
 	if err := netlink.LinkAdd(tun); err != nil {
 		return nil, fmt.Errorf("failed to add Geneve tunnel: %v", err)
+	}
+	if err := netlink.LinkSetMaster(tun, vrf); err != nil {
+		return nil, fmt.Errorf("failed to set Geneve tunnel master: %v", err)
 	}
 	return tun, nil
 }
@@ -262,20 +238,19 @@ func (mgr *TunnelManager) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (mgr *TunnelManager) UpdateNodeTunnels(node *corev1.Node) error {
-	tun, exists := mgr.tunnels[node.Name]
+func (mgr *TunnelManager) UpdateNodeTunnels(loomNode *infrav1alpha1.LoomNode) error {
+	tun, exists := mgr.tunnels[loomNode.Name]
 	if exists {
-		if err := tun.UpdateDestinationNode(node); err != nil {
-			return fmt.Errorf("failed to update destination node %s: %v", node.Name, err)
+		if err := tun.UpdateDestinationNode(loomNode); err != nil {
+			return fmt.Errorf("failed to update destination node %s: %v", loomNode.Name, err)
 		}
 		return nil
 	}
-	mgr.nextFilterPriority++
-	tun, err := NewTunnel(node, mgr.ip4t, mgr.ip6t, mgr.tunnelInterface, mgr.nextFilterPriority)
+	tun, err := NewTunnel(loomNode, mgr.ip4t, mgr.ip6t, mgr.tunnelInterface, mgr.vrfName)
 	if err != nil {
-		return fmt.Errorf("failed to create Geneve tunnel for node %s: %v", node.Name, err)
+		return fmt.Errorf("failed to create Geneve tunnel for node %s: %v", loomNode.Name, err)
 	}
-	mgr.tunnels[node.Name] = tun
+	mgr.tunnels[loomNode.Name] = tun
 	return nil
 }
 

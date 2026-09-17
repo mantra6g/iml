@@ -22,12 +22,6 @@ rules:
   - list
   - watch
 - apiGroups:
-  - ""
-  resources:
-  - nodes/status
-  verbs:
-  - get
-- apiGroups:
   - core.loom.io
   resources:
   - applications
@@ -133,7 +127,6 @@ spec:
         - /bin/sh
         - -c
         - |
-          set -euo pipefail # Exit whenever any line fails
           cp /app /host/opt/cni/bin/loom
           chmod +x /host/opt/cni/bin/loom
         image: cni:local

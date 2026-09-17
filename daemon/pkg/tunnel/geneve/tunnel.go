@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"net"
 
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	vrfutils "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/sys/unix"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/vishvananda/netlink/nl"
 )
 
 type Tunnel struct {
@@ -19,19 +19,19 @@ type Tunnel struct {
 	ip4t        *iptables.IPTables
 	ip6t        *iptables.IPTables
 	tunnelIface string
-	// priority uniquely identifies this tunnel's tc filters on the shared tunnel interface, so
-	// that different node tunnels never clobber each other's egress classification rules.
-	priority uint16
+	// vrfName is the VRF that egress routes are installed into, so that packets routed towards
+	// this tunnel's destination node are looked up in the right routing table.
+	vrfName string
 	// endpoint is the remote node's real (underlay) address, used as the Geneve tunnel
-	// destination for packets classified towards this node.
-	endpoint netutils.DualStackAddress
-	// egress holds the destination network(s) currently routed towards this tunnel via tc, if any.
+	// destination for packets routed towards this node.
+	endpoint net.IP
+	// egress holds the destination network(s) currently routed towards this tunnel, if any.
 	egress netutils.DualStackNetwork
 }
 
 func NewTunnel(
-	node *corev1.Node, ip4tables *iptables.IPTables, ip6tables *iptables.IPTables,
-	tunnelIface string, priority uint16,
+	loomNode *infrav1alpha1.LoomNode, ip4tables *iptables.IPTables, ip6tables *iptables.IPTables,
+	tunnelIface string, vrfName string,
 ) (*Tunnel, error) {
 	chainName, err := vrfutils.GenerateRandomName(IPTablesSubchainPrefix, IPTablesSubchainRandChars)
 	if err != nil {
@@ -66,184 +66,247 @@ func NewTunnel(
 		ip4t:        ip4tables,
 		ip6t:        ip6tables,
 		tunnelIface: tunnelIface,
-		priority:    priority,
+		vrfName:     vrfName,
 	}
-	if err = nodeTunnel.UpdateDestinationNode(node); err != nil {
+	if err = nodeTunnel.UpdateDestinationNode(loomNode); err != nil {
 		return nil, fmt.Errorf("failed to update destination node: %v", err)
 	}
 	return nodeTunnel, nil
 }
 
-func (t *Tunnel) UpdateDestinationNode(node *corev1.Node) (err error) {
-	possibleAddrs := listAllInternalAndExternalIPAddresses(node)
-	addr, err := netutils.ParseDualStackAddressListFromStrings(possibleAddrs)
-	if err != nil {
-		return fmt.Errorf("failed to parse node addresses: %v", err)
+func (t *Tunnel) UpdateDestinationNode(loomNode *infrav1alpha1.LoomNode) (err error) {
+	addr := netutils.DualStackAddress{
+		IPv4: vrfutils.GetNodeIP(loomNode.Spec.Addresses, false),
 	}
 	if addr.IsEmpty() {
 		return nil // Node is not yet ready
 	}
-	if len(addr.IPv4Addresses) != 0 {
+	if addr.IPv4 != nil {
 		err = t.ip4t.ClearChain("filter", t.chainName)
 		if err != nil {
 			return fmt.Errorf("failed to clear IP4 iptables chain: %v", err)
 		}
-		for _, ip := range addr.IPv4Addresses {
-			err = t.ip4t.Insert("filter", t.chainName, 1,
-				"-s", ip.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark))
-			if err != nil {
-				return fmt.Errorf("failed to insert mark rule: %v", err)
-			}
+		err = t.ip4t.Insert("filter", t.chainName, 1,
+			"-s", addr.IPv4.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark))
+		if err != nil {
+			return fmt.Errorf("failed to insert mark rule: %v", err)
 		}
 		err = t.ip4t.Append("filter", t.chainName, "-j", "RETURN")
 		if err != nil {
 			return fmt.Errorf("failed to append rule to IP4 iptables chain: %v", err)
 		}
-		t.endpoint.IPv4 = addr.IPv4Addresses[0]
-	}
-	if len(addr.IPv6Addresses) != 0 {
+		t.endpoint = addr.IPv4
+	} else if addr.IPv6 != nil {
 		err = t.ip6t.ClearChain("filter", t.chainName)
 		if err != nil {
 			return fmt.Errorf("failed to clear IP6 iptables chain: %v", err)
 		}
-		for _, ip := range addr.IPv6Addresses {
-			err = t.ip6t.Insert("filter", t.chainName, 1,
-				"-s", ip.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark))
-			if err != nil {
-				return fmt.Errorf("failed to insert mark rule: %v", err)
-			}
+		err = t.ip6t.Insert("filter", t.chainName, 1,
+			"-s", addr.IPv6.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PacketAcceptedMark, PacketAcceptedMark))
+		if err != nil {
+			return fmt.Errorf("failed to insert mark rule: %v", err)
 		}
 		err = t.ip6t.Append("filter", t.chainName, "-j", "RETURN")
 		if err != nil {
 			return fmt.Errorf("failed to append rule to IP6 iptables chain: %v", err)
 		}
-		t.endpoint.IPv6 = addr.IPv6Addresses[0]
+		t.endpoint = addr.IPv6
 	}
-	// If egress tc routes were already installed, refresh them so they encapsulate towards the
+	// If egress routes were already installed, refresh them so they encapsulate towards the
 	// (possibly new) endpoint address(es) we just resolved.
 	if !t.egress.IsEmpty() {
 		if err = t.AddEgressRoute(t.egress); err != nil {
-			return fmt.Errorf("failed to refresh egress tc routes: %v", err)
+			return fmt.Errorf("failed to refresh egress routes: %v", err)
 		}
 	}
 	return nil
 }
 
-// AddEgressRoute installs (or updates) the tc rules that classify traffic destined to dst as
-// belonging to this tunnel, and attach Geneve tunnel metadata (destination address and port) to
-// it so the kernel knows how to encapsulate it. This is required because the shared tunnel
-// interface is Flow-based: it carries no static remote endpoint of its own, so without this
-// metadata attached by tc, outgoing packets are silently dropped by the Geneve driver instead of
-// being encapsulated and sent out.
+// AddEgressRoute installs (or updates) the routes that send traffic destined to dst towards this
+// tunnel's destination node, with Geneve tunnel metadata (destination address and port) attached
+// directly to the route via the kernel's lightweight tunnel (lwtunnel) encap. This is required
+// because the shared tunnel interface is Flow-based: it carries no static remote endpoint of its
+// own, so without this metadata attached to the route, outgoing packets are silently dropped by
+// the Geneve driver instead of being encapsulated and sent out.
 func (t *Tunnel) AddEgressRoute(dst netutils.DualStackNetwork) error {
 	link, err := netlink.LinkByName(t.tunnelIface)
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel link %s: %v", t.tunnelIface, err)
 	}
+	table, err := t.vrfTable()
+	if err != nil {
+		return fmt.Errorf("failed to resolve VRF %s: %v", t.vrfName, err)
+	}
+	if t.endpoint == nil {
+		return fmt.Errorf("tunnel endpoint is not set, cannot add egress route")
+	}
+	var encap netlink.Encap
+	if t.endpoint.To4() == nil {
+		encap = &netlink.IP6tnlEncap{Dst: t.endpoint, Src: net.IPv6zero}
+	} else {
+		encap = &ipTunnelEncap{dst: t.endpoint}
+	}
+	if dst.IsEmpty() {
+		return nil // Nothing to route, so nothing to do.
+	}
 	if dst.IPv4Net != nil {
-		if t.endpoint.IPv4 == nil {
-			return fmt.Errorf("no IPv4 endpoint address known yet for this tunnel's destination node")
-		}
-		if err = t.replaceEgressFilter(link, unix.ETH_P_IP, dst.IPv4Net, t.endpoint.IPv4); err != nil {
-			return fmt.Errorf("failed to install IPv4 egress tc filter: %v", err)
+		if err = t.replaceEgressRoute(link, table, dst.IPv4Net, encap); err != nil {
+			return fmt.Errorf("failed to install IPv4 egress route: %v", err)
 		}
 		t.egress.IPv4Net = dst.IPv4Net
 	}
 	if dst.IPv6Net != nil {
-		if t.endpoint.IPv6 == nil {
-			return fmt.Errorf("no IPv6 endpoint address known yet for this tunnel's destination node")
-		}
-		if err = t.replaceEgressFilter(link, unix.ETH_P_IPV6, dst.IPv6Net, t.endpoint.IPv6); err != nil {
-			return fmt.Errorf("failed to install IPv6 egress tc filter: %v", err)
+		if err = t.replaceEgressRoute(link, table, dst.IPv6Net, encap); err != nil {
+			return fmt.Errorf("failed to install IPv6 egress route: %v", err)
 		}
 		t.egress.IPv6Net = dst.IPv6Net
 	}
 	return nil
 }
 
-// RemoveEgressRoute removes tc rules previously installed by AddEgressRoute for dst.
+// RemoveEgressRoute removes routes previously installed by AddEgressRoute for dst.
 func (t *Tunnel) RemoveEgressRoute(dst netutils.DualStackNetwork) error {
-	link, err := netlink.LinkByName(t.tunnelIface)
-	if err != nil {
+	if _, err := netlink.LinkByName(t.tunnelIface); err != nil {
 		if errors.Is(err, netlink.LinkNotFoundError{}) {
+			// The shared tunnel interface is gone, which takes every route bound to it down with
+			// it, so there's nothing left to remove.
 			t.egress = netutils.DualStackNetwork{}
 			return nil
 		}
 		return fmt.Errorf("failed to get tunnel link %s: %v", t.tunnelIface, err)
 	}
+	table, err := t.vrfTable()
+	if err != nil {
+		return fmt.Errorf("failed to resolve VRF %s: %v", t.vrfName, err)
+	}
 	if dst.IPv4Net != nil && t.egress.IPv4Net != nil {
-		if err = t.deleteEgressFilter(link, unix.ETH_P_IP); err != nil {
-			return fmt.Errorf("failed to remove IPv4 egress tc filter: %v", err)
+		if err = netlink.RouteDel(&netlink.Route{Dst: dst.IPv4Net, Table: table}); err != nil {
+			return fmt.Errorf("failed to remove IPv4 egress route: %v", err)
 		}
 		t.egress.IPv4Net = nil
 	}
 	if dst.IPv6Net != nil && t.egress.IPv6Net != nil {
-		if err = t.deleteEgressFilter(link, unix.ETH_P_IPV6); err != nil {
-			return fmt.Errorf("failed to remove IPv6 egress tc filter: %v", err)
+		if err = netlink.RouteDel(&netlink.Route{Dst: dst.IPv6Net, Table: table}); err != nil {
+			return fmt.Errorf("failed to remove IPv6 egress route: %v", err)
 		}
 		t.egress.IPv6Net = nil
 	}
 	return nil
 }
 
-func (t *Tunnel) egressFilterAttrs(link netlink.Link, ethType uint16) netlink.FilterAttrs {
-	return netlink.FilterAttrs{
+// vrfTable resolves the routing table ID backing this tunnel's VRF.
+func (t *Tunnel) vrfTable() (int, error) {
+	link, err := netlink.LinkByName(t.vrfName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get VRF link %s: %v", t.vrfName, err)
+	}
+	vrf, ok := link.(*netlink.Vrf)
+	if !ok {
+		return 0, fmt.Errorf("interface %s is not a VRF", t.vrfName)
+	}
+	return int(vrf.Table), nil
+}
+
+func (t *Tunnel) replaceEgressRoute(link netlink.Link, table int, dst *net.IPNet, encap netlink.Encap) error {
+	route := &netlink.Route{
+		Dst:       dst,
+		Table:     table,
 		LinkIndex: link.Attrs().Index,
-		Parent:    netlink.HANDLE_MIN_EGRESS,
-		Priority:  t.priority,
-		Protocol:  ethType,
-		Handle:    1,
+		Encap:     encap,
 	}
-}
-
-func (t *Tunnel) replaceEgressFilter(link netlink.Link, ethType uint16, dst *net.IPNet, remote net.IP) error {
-	// Let the kernel pick the source address it would normally use to reach remote, exactly like
-	// it would for any other route, instead of hardcoding one of this node's own addresses.
-	routes, err := netlink.RouteGet(remote)
-	if err != nil || len(routes) == 0 || routes[0].Src == nil {
-		return fmt.Errorf("failed to determine local source address to reach %s: %v", remote, err)
-	}
-	action := netlink.NewTunnelKeyAction()
-	action.Action = netlink.TCA_TUNNEL_KEY_SET
-	action.SrcAddr = routes[0].Src
-	action.DstAddr = remote
-	action.DestPort = TunnelPort
-	filter := &netlink.Flower{
-		FilterAttrs: t.egressFilterAttrs(link, ethType),
-		EthType:     ethType,
-		DestIP:      dst.IP,
-		DestIPMask:  dst.Mask,
-		Actions:     []netlink.Action{action},
-	}
-	if err = netlink.FilterReplace(filter); err != nil {
-		return fmt.Errorf("failed to replace tc filter: %v", err)
+	if err := netlink.RouteReplace(route); err != nil {
+		return fmt.Errorf("failed to replace route: %v", err)
 	}
 	return nil
 }
 
-func (t *Tunnel) deleteEgressFilter(link netlink.Link, ethType uint16) error {
-	filter := &netlink.Flower{
-		FilterAttrs: t.egressFilterAttrs(link, ethType),
-	}
-	if err := netlink.FilterDel(filter); err != nil {
-		return fmt.Errorf("failed to delete tc filter: %v", err)
-	}
-	return nil
+const (
+	LWTUNNEL_IP6_UNSPEC = iota
+	LWTUNNEL_IP6_ID
+	LWTUNNEL_IP6_DST
+	LWTUNNEL_IP6_SRC
+	LWTUNNEL_IP6_HOPLIMIT
+	LWTUNNEL_IP6_TC
+	LWTUNNEL_IP6_FLAGS
+	LWTUNNEL_IP6_PAD // not implemented
+	LWTUNNEL_IP6_OPTS // not implemented
+	__LWTUNNEL_IP6_MAX
+)
+
+const (
+	LWTUNNEL_IP_UNSPEC = iota
+	LWTUNNEL_IP_ID
+	LWTUNNEL_IP_DST
+	LWTUNNEL_IP_SRC
+	LWTUNNEL_IP_TTL
+	LWTUNNEL_IP_TOS
+	LWTUNNEL_IP_FLAGS
+	LWTUNNEL_IP_PAD
+	LWTUNNEL_IP_OPTS
+	__LWTUNNEL_IP_MAX
+)
+
+// The kernel's lwtunnel_ip_t (encap ip) and lwtunnel_ip6_t (encap ip6) netlink attribute enums
+// assign the same ordinal values to their ID and DST attributes (only the address length in the
+// DST payload differs between the two). vishvananda/netlink only exports these as the
+// nl.LWTUNNEL_IP6_* constants (in nl/ip6tnl_linux.go) with no nl.LWTUNNEL_IP_* counterpart, so
+// ipTunnelEncap below aliases them under IPv4-appropriate names rather than referencing the IP6
+// constants directly.
+const (
+	lwtunnelIPID  = nl.LWTUNNEL_IP6_ID
+	lwtunnelIPDst = nl.LWTUNNEL_IP6_DST
+)
+
+// ipTunnelEncap implements netlink.Encap for the kernel's IPv4 lightweight tunnel
+// (LWTUNNEL_ENCAP_IP, i.e. `ip route ... encap ip id 0 dst <addr>`). vishvananda/netlink only
+// ships the IPv6 variant (netlink.IP6tnlEncap).
+type ipTunnelEncap struct {
+	dst net.IP
 }
 
-func listAllInternalAndExternalIPAddresses(node *corev1.Node) []string {
-	addrs := make([]string, 0)
-	for _, ip := range node.Status.Addresses {
-		if ip.Type == corev1.NodeInternalIP || ip.Type == corev1.NodeExternalIP {
-			addrs = append(addrs, ip.Address)
-		}
+func (e *ipTunnelEncap) Type() int {
+	return nl.LWTUNNEL_ENCAP_IP
+}
+
+func (e *ipTunnelEncap) Decode([]byte) error {
+	return fmt.Errorf("decoding ipTunnelEncap is not supported")
+}
+
+func (e *ipTunnelEncap) Encode() ([]byte, error) {
+	dst := e.dst.To4()
+	if dst == nil {
+		return nil, fmt.Errorf("ipTunnelEncap destination %s is not a valid IPv4 address", e.dst)
 	}
-	return addrs
+	native := nl.NativeEndian()
+
+	id := make([]byte, 12)
+	native.PutUint16(id, 12)
+	native.PutUint16(id[2:], uint16(lwtunnelIPID))
+	native.PutUint64(id[4:], 0)
+
+	dstAttr := make([]byte, 4, 8)
+	native.PutUint16(dstAttr, 8)
+	native.PutUint16(dstAttr[2:], uint16(lwtunnelIPDst))
+	dstAttr = append(dstAttr, dst...)
+
+	return append(id, dstAttr...), nil
+}
+
+func (e *ipTunnelEncap) String() string {
+	return fmt.Sprintf("id 0 dst %s", e.dst)
+}
+
+func (e *ipTunnelEncap) Equal(x netlink.Encap) bool {
+	o, ok := x.(*ipTunnelEncap)
+	if !ok {
+		return false
+	}
+	return e.dst.Equal(o.dst)
 }
 
 func (t *Tunnel) Teardown() error {
 	if err := t.RemoveEgressRoute(t.egress); err != nil {
-		return fmt.Errorf("failed to remove egress tc filters: %v", err)
+		return fmt.Errorf("failed to remove egress routes: %v", err)
 	}
 	if err := t.ip4t.ClearChain("filter", t.chainName); err != nil {
 		return fmt.Errorf("failed to clear IP4 iptables chain: %v", err)

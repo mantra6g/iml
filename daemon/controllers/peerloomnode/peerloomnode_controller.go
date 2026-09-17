@@ -1,10 +1,11 @@
-package loomnode
+package peerloomnode
 
 import (
 	"context"
 	"fmt"
 	"github.com/mantra6g/iml/daemon/env"
-	"github.com/mantra6g/iml/daemon/pkg/dataplane"
+	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
+	"github.com/mantra6g/iml/daemon/pkg/tunnel"
 
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 
@@ -21,9 +22,9 @@ import (
 // Reconciler reconciles a LoomNode object
 type Reconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Dataplane dataplane.Dataplane
-	Config    *env.GlobalConfig
+	Scheme        *runtime.Scheme
+	TunnelManager tunnel.Manager
+	Config        *env.GlobalConfig
 }
 
 // +kubebuilder:rbac:groups=infra.loom.io,resources=loomnodes,verbs=get;list;watch
@@ -37,10 +38,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	loomNode := &infrav1alpha1.LoomNode{}
 	err := r.Get(ctx, req.NamespacedName, loomNode)
 	if apierrors.IsNotFound(err) {
-		logger.Info("LoomNode resource not found. Deleting node routes", "node", req.NamespacedName)
-		err = r.Dataplane.RemoveNodeRoutes(req.NamespacedName)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to remove node routes: %w", err)
+		logger.Info("LoomNode resource not found. Deleting node tunnels and routes", "node", req.NamespacedName)
+		if err = r.TunnelManager.DeleteNodeTunnels(req.Name); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete node tunnels: %w", err)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -48,9 +48,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to fetch loom node: %w", err)
 	}
 
-	err = r.Dataplane.UpdateNodeRoutes(loomNode)
+	if err = r.TunnelManager.UpdateNodeTunnels(loomNode); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update node tunnels: %w", err)
+	}
+
+	if len(loomNode.Spec.NodeCIDRs) == 0 {
+		// Node hasn't been allocated pod CIDRs yet.
+		return ctrl.Result{}, nil
+	}
+	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(loomNode.Spec.NodeCIDRs)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update loom node routes: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to parse node CIDRs for %s: %w", loomNode.Name, err)
+	}
+	if err = r.TunnelManager.AddEgressRoute(loomNode.Name, cidrs); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to add tunnel egress route for %s: %w", loomNode.Name, err)
 	}
 
 	return ctrl.Result{}, nil
@@ -75,6 +86,6 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 				DeleteFunc: func(e event.TypedDeleteEvent[client.Object]) bool { return e.Object.GetName() != r.Config.NodeName },
 			})).
-		Named("loomnode-daemon").
+		Named("peer-loomnode-daemon").
 		Complete(r)
 }
