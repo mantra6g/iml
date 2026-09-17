@@ -96,7 +96,7 @@ func ParseDualStackAddressFromStrings(ipStrings []string) (netutils.DualStackAdd
 		return result, fmt.Errorf("too many IP addresses provided: expected at most 2 but got %d", len(ipStrings))
 	}
 	for _, targetIP := range ipStrings {
-		ip, err := netip.ParseAddr(ipStrings[0])
+		ip, err := netip.ParseAddr(targetIP)
 		if err != nil {
 			return result, fmt.Errorf("invalid IP address: %s", targetIP)
 		}
@@ -127,7 +127,7 @@ func ParseDualStackNetworkFromStrings(networkStrings []string) (netutils.DualSta
 			"too many network addresses provided: expected at most 2 but got %d", len(networkStrings))
 	}
 	for _, networkString := range networkStrings {
-		prefix, err := netip.ParsePrefix(networkStrings[0])
+		prefix, err := netip.ParsePrefix(networkString)
 		if err != nil {
 			return result, fmt.Errorf("invalid IP address: %s", networkString)
 		}
