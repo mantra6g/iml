@@ -10,13 +10,11 @@ import (
 	"github.com/mantra6g/iml/daemon/env"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane"
 	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
-	"github.com/mantra6g/iml/daemon/pkg/tunnel"
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,9 +49,6 @@ type Software struct {
 	appMu              sync.Mutex
 	p4Targets          map[client.ObjectKey]*P4TargetInstance
 	p4Mu               sync.Mutex
-	nodeConfigs        map[client.ObjectKey]*NodeConfig
-	nodeMu             sync.Mutex
-	tunnelManager      tunnel.Manager
 	routingSubnet      *RoutingSubnet
 	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
 	ipt                *iptables.IPTables
@@ -92,12 +87,7 @@ type P4TargetInstance struct {
 	ifaceName string
 }
 
-type NodeConfig struct {
-	LastResourceVersion string
-	Route               netutils.DualStackRoute
-}
-
-func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel.Manager, k8sClient client.Client) (dataplane.Dataplane, error) {
+func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Client) (dataplane.Dataplane, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("global config is nil")
 	}
@@ -207,11 +197,9 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, tunnelManager tunnel
 		routingSubnet:      rtrSubnet,
 		appSubnets:         make(map[client.ObjectKey][]AppSubnet),
 		p4Targets:          make(map[client.ObjectKey]*P4TargetInstance),
-		nodeConfigs:        make(map[client.ObjectKey]*NodeConfig),
 		serviceChainRoutes: make(map[client.ObjectKey][]dataplane.SRv6Route),
 		ipt:                ip6t,
 		ip4t:               ip4t,
-		tunnelManager:      tunnelManager,
 		cfg:                cfg,
 		Client:             k8sClient,
 		log:                logger,
@@ -763,98 +751,6 @@ func (d *Software) ConfigureP4TargetInstance(targetName string, _ string) (*data
 
 func (d *Software) DeleteP4TargetInstance(_ string) error {
 	// Nothing to do here by now
-	return nil
-}
-
-func (d *Software) UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error {
-	d.nodeMu.Lock()
-	defer d.nodeMu.Unlock()
-	nodeConfig, exists := d.nodeConfigs[client.ObjectKeyFromObject(node)]
-	if !exists {
-		return nil
-	}
-	if nodeConfig.LastResourceVersion >= node.ResourceVersion {
-		return nil
-	}
-	if len(node.Spec.NodeCIDRs) == 0 {
-		// Node hasn't got a CIDR yet
-		return nil
-	}
-	tunName, err := d.tunnelManager.GetTunnelInterface(node.Name)
-	if err != nil {
-		return fmt.Errorf("failed to get tunnel interface for node %s: %w", node.Name, err)
-	}
-	tunLink, err := netlink.LinkByName(tunName)
-	if err != nil {
-		return fmt.Errorf("failed to get tun link for node %s: %w", node.Name, err)
-	}
-	err = netlink.LinkSetMaster(tunLink, d.routingSubnet.Bridge)
-	if err != nil {
-		return fmt.Errorf("failed to set master for tunnel interface for node %s: %w", node.Name, err)
-	}
-	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(node.Spec.NodeCIDRs)
-	if err != nil {
-		return fmt.Errorf("failed to parse CIDRs for node %s: %w", node.Name, err)
-	}
-	addrs, err := vrfutil.GetDualStackAddressFromLink(tunLink)
-	if err != nil {
-		return fmt.Errorf("failed to get addresses from tunnel interface for node %s: %w", node.Name, err)
-	}
-	if addrs.IPv6 == nil {
-		tunAddr, err := d.routingSubnet.IP6Allocator.Allocate()
-		if err != nil {
-			return fmt.Errorf("failed to allocate IPv6 for node %s: %w", node.Name, err)
-		}
-		err = netlink.AddrAdd(tunLink, &netlink.Addr{IPNet: tunAddr})
-		if err != nil {
-			return fmt.Errorf("failed to add IPv6 address to tunnel interface for node %s: %w", node.Name, err)
-		}
-	}
-	err = d.routingSubnet.AddRoute(cidrs, addrs, tunLink.Attrs().Name)
-	if err != nil {
-		return fmt.Errorf("failed to add route for node %s: %w", node.Name, err)
-	}
-	d.nodeConfigs[client.ObjectKeyFromObject(node)] = &NodeConfig{
-		LastResourceVersion: node.ResourceVersion,
-		Route: netutils.DualStackRoute{
-			IPv4Route: netutils.Route{
-				Destination: cidrs.IPv4Net,
-				Gateway:     addrs.IPv4,
-			},
-			IPv6Route: netutils.Route{
-				Destination: cidrs.IPv6Net,
-				Gateway:     addrs.IPv6,
-			},
-		},
-	}
-	return nil
-}
-
-func (d *Software) RemoveNodeRoutes(node client.ObjectKey) (err error) {
-	d.nodeMu.Lock()
-	defer d.nodeMu.Unlock()
-
-	nodeConfig, exists := d.nodeConfigs[node]
-	if !exists {
-		return nil
-	}
-	defer func() {
-		if err != nil {
-			delete(d.nodeConfigs, node)
-		}
-	}()
-	route := &nodeConfig.Route
-	if route.IsEmpty() {
-		return nil
-	}
-	dst := netutils.DualStackNetwork{
-		IPv4Net: route.IPv4Route.Destination,
-		IPv6Net: route.IPv6Route.Destination,
-	}
-	err = d.routingSubnet.RemoveRoute(dst)
-	if err != nil {
-		return fmt.Errorf("failed to remove route for node %s: %w", node.Name, err)
-	}
 	return nil
 }
 

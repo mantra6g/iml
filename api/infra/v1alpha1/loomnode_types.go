@@ -23,6 +23,26 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type AddressType string
+
+const (
+	NodeHostName         AddressType = "Hostname"
+	NodeExternalIP       AddressType = "ExternalIP"
+	NodeInternalIP       AddressType = "InternalIP"
+	NodeExternalDNS      AddressType = "ExternalDNS"
+	NodeInternalDNS      AddressType = "InternalDNS"
+)
+
+type Address struct {
+	// IP address of the node
+	// +required
+	IP string `json:"ip"`
+
+	// Type of the address (e.g., InternalIP, ExternalIP)
+	// +required
+	Type AddressType `json:"type"`
+}
+
 // LoomNodeSpec defines the desired state of LoomNode
 type LoomNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -30,14 +50,22 @@ type LoomNodeSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
+	// Addresses is a list of addresses associated with the node.
+	// It is updated by the network daemon running on each node, and is used 
+	// by every other node to determine how to reach this node.
+	// +optional
+	Addresses []Address `json:"addresses"`
+
 	// NodeCIDRs specifies the CIDR blocks used for pod IPs on this node.
 	// This is used by the CNI plugin to determine which IPs to assign to pods scheduled on this node.
 	// When left empty, the controller will automatically allocate a CIDR block for this node
 	// from the cluster's CIDR range set with the --cluster-cidr argument when starting the controller.
 	// +optional
-	NodeCIDRs []string `json:"nodeCIDRs,omitempty"`
+	NodeCIDRs []string `json:"nodeCIDRs"`
 
-	TunnelCIDRs []string `json:"tunnelCIDRs,omitempty"`
+	// TunnelCIDRs specifies an internal list of CIDR blocks used for interal interface IPs on this node.
+	// +optional
+	TunnelCIDRs []string `json:"tunnelCIDRs"`
 }
 
 // LoomNodeStatus defines the observed state of LoomNode.

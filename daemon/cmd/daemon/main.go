@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/mantra6g/iml/daemon/cni"
-	loomnodecontroller "github.com/mantra6g/iml/daemon/controllers/loomnode"
-	nodecontroller "github.com/mantra6g/iml/daemon/controllers/node"
+	localloomnodectrl "github.com/mantra6g/iml/daemon/controllers/localloomnode"
 	p4tcontroller "github.com/mantra6g/iml/daemon/controllers/p4target"
+	peerloomnodectrl "github.com/mantra6g/iml/daemon/controllers/peerloomnode"
 	sccontroller "github.com/mantra6g/iml/daemon/controllers/servicechain"
 	"github.com/mantra6g/iml/daemon/env"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane/vrf"
@@ -90,7 +90,15 @@ func main() {
 		}
 	}()
 
-	tunnelMgr, err := geneve.NewTunnelManager(ctrl.Log.WithName("gnv-tunnel-manager"))
+	dataPlane, err := vrf.NewSoftware(ctrl.Log.WithName("vrf-dataplane"), config, mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "unable to initialize VRF dataplane")
+		_ = jan.Cleanup()
+		os.Exit(1)
+	}
+	jan.Add(dataPlane.Shutdown)
+
+	tunnelMgr, err := geneve.NewTunnelManager(ctrl.Log.WithName("gnv-tunnel-manager"), vrf.RoutingVRFName)
 	if err != nil {
 		setupLog.Error(err, "unable to create tunnel manager")
 		_ = jan.Cleanup()
@@ -98,13 +106,6 @@ func main() {
 	}
 	jan.Add(tunnelMgr.Shutdown)
 
-	dataPlane, err := vrf.NewSoftware(ctrl.Log.WithName("vrf-dataplane"), config, tunnelMgr, mgr.GetClient())
-	if err != nil {
-		setupLog.Error(err, "unable to initialize VRF dataplane")
-		_ = jan.Cleanup()
-		os.Exit(1)
-	}
-	jan.Add(dataPlane.Shutdown)
 
 	cniServer, err := cni.NewServer(ctrl.Log.WithName("cni-server"), mgr.GetClient(), dataPlane)
 	if err != nil {
@@ -115,17 +116,6 @@ func main() {
 	jan.Add(cniServer.Shutdown)
 
 	// Set up informers
-	err = (&nodecontroller.Reconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		Config:        config,
-		TunnelManager: tunnelMgr,
-	}).SetupWithManager(mgr)
-	if err != nil {
-		setupLog.Error(err, "unable to set up node controller")
-		_ = jan.Cleanup()
-		os.Exit(1)
-	}
 	err = (&sccontroller.Reconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
@@ -147,14 +137,24 @@ func main() {
 		_ = jan.Cleanup()
 		os.Exit(1)
 	}
-	err = (&loomnodecontroller.Reconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Config:    config,
-		Dataplane: dataPlane,
+	err = (&peerloomnodectrl.Reconciler{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		Config:        config,
+		TunnelManager: tunnelMgr,
 	}).SetupWithManager(mgr)
 	if err != nil {
-		setupLog.Error(err, "unable to set up loom node controller")
+		setupLog.Error(err, "unable to set up peer loom node controller")
+		_ = jan.Cleanup()
+		os.Exit(1)
+	}
+	err = (&localloomnodectrl.Reconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: config,
+	}).SetupWithManager(mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to set up local loom node controller")
 		_ = jan.Cleanup()
 		os.Exit(1)
 	}

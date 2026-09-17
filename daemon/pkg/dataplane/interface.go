@@ -7,7 +7,6 @@ import (
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -51,9 +50,6 @@ type Dataplane interface {
 
 	UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error
 	RemoveP4TargetRoutes(target client.ObjectKey) error
-
-	UpdateNodeRoutes(node *infrav1alpha1.LoomNode) error
-	RemoveNodeRoutes(node client.ObjectKey) error
 
 	AddServiceChainRoutes(service *corev1alpha1.ServiceChain, routes []SRv6Route) error
 	ListServiceChainRoutes(service *corev1alpha1.ServiceChain) ([]SRv6Route, error)

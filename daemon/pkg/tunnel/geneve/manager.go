@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"strconv"
 
+	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/daemon/pkg/tunnel"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
-	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -32,9 +33,10 @@ type TunnelManager struct {
 	ip4t            *iptables.IPTables
 	ip6t            *iptables.IPTables
 	log             logr.Logger
+	vrfName         string
 }
 
-func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
+func NewTunnelManager(logger logr.Logger, vrfName string) (tunnel.Manager, error) {
 	ip4t, err := iptables.New()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init iptables for IPv4 address family: %v", err)
@@ -47,7 +49,11 @@ func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to ensure iptables: %v", err)
 	}
-	err = ensureTunnel(TunnelName, TunnelPort)
+	vrf, err := netlink.LinkByName(vrfName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VRF link %s: %v", vrfName, err)
+	}
+	err = ensureTunnel(TunnelName, TunnelPort, vrf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ensure tunnel: %v", err)
 	}
@@ -57,6 +63,7 @@ func NewTunnelManager(logger logr.Logger) (tunnel.Manager, error) {
 		ip4t:            ip4t,
 		ip6t:            ip6t,
 		log:             logger,
+		vrfName:         vrfName,
 	}, nil
 }
 
@@ -118,10 +125,10 @@ func ensureIptables(ip4t, ip6t *iptables.IPTables) error {
 	return nil
 }
 
-func ensureTunnel(name string, port uint16) error {
+func ensureTunnel(name string, port uint16, vrf netlink.Link) error {
 	tunLink, err := netlink.LinkByName(name)
 	if err != nil {
-		tunLink, err = createTunnel(name, port)
+		tunLink, err = createTunnel(name, port, vrf)
 		if err != nil {
 			return fmt.Errorf("failed to create tunnel: %v", err)
 		}
@@ -130,12 +137,12 @@ func ensureTunnel(name string, port uint16) error {
 	if !ok {
 		return fmt.Errorf("a tunnel with the name %s already exists but is not a Geneve tunnel", name)
 	}
-	if tun.Dport != port || tun.FlowBased != true {
+	if tun.Dport != port || tun.FlowBased != true || tun.InnerProtoInherit != true {
 		err = netlink.LinkDel(tunLink)
 		if err != nil {
 			return fmt.Errorf("failed to delete tunnel: %v", err)
 		}
-		tunLink, err = createTunnel(name, port)
+		tunLink, err = createTunnel(name, port, vrf)
 		tun, _ = tunLink.(*netlink.Geneve)
 	}
 	if err = netlink.LinkSetUp(tun); err != nil {
@@ -144,16 +151,29 @@ func ensureTunnel(name string, port uint16) error {
 	return nil
 }
 
-func createTunnel(name string, port uint16) (netlink.Link, error) {
+func createTunnel(name string, port uint16, vrf netlink.Link) (netlink.Link, error) {
 	tun := &netlink.Geneve{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: name,
 		},
-		Dport:     port,
+		Dport: port,
+		// FlowBased makes this a single "external"/metadata-driven device shared by every remote
+		// node, instead of one device per fixed remote endpoint: the actual per-packet destination
+		// and VNI are attached by the tc rules in Tunnel.AddEgressRoute.
 		FlowBased: true,
+		// InnerProtoInherit makes this an L3-only tunnel (no inner Ethernet header, the Geneve
+		// protocol-type field is taken from the inner packet itself). Without it, the device would
+		// carry full inner Ethernet frames and every route towards a remote node's CIDR would need a
+		// resolvable neighbor (ARP/NDP) entry for its gateway address, which nothing in this overlay
+		// ever provides — packets would stall in the neighbor-resolution queue and never reach the
+		// tc egress filters at all.
+		InnerProtoInherit: true,
 	}
 	if err := netlink.LinkAdd(tun); err != nil {
 		return nil, fmt.Errorf("failed to add Geneve tunnel: %v", err)
+	}
+	if err := netlink.LinkSetMaster(tun, vrf); err != nil {
+		return nil, fmt.Errorf("failed to set Geneve tunnel master: %v", err)
 	}
 	return tun, nil
 }
@@ -218,19 +238,41 @@ func (mgr *TunnelManager) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (mgr *TunnelManager) UpdateNodeTunnels(node *corev1.Node) error {
-	tun, exists := mgr.tunnels[node.Name]
+func (mgr *TunnelManager) UpdateNodeTunnels(loomNode *infrav1alpha1.LoomNode) error {
+	tun, exists := mgr.tunnels[loomNode.Name]
 	if exists {
-		if err := tun.UpdateDestinationNode(node); err != nil {
-			return fmt.Errorf("failed to update destination node %s: %v", node.Name, err)
+		if err := tun.UpdateDestinationNode(loomNode); err != nil {
+			return fmt.Errorf("failed to update destination node %s: %v", loomNode.Name, err)
 		}
 		return nil
 	}
-	tun, err := NewTunnel(node, mgr.ip4t, mgr.ip6t)
+	tun, err := NewTunnel(loomNode, mgr.ip4t, mgr.ip6t, mgr.tunnelInterface, mgr.vrfName)
 	if err != nil {
-		return fmt.Errorf("failed to create Geneve tunnel for node %s: %v", node.Name, err)
+		return fmt.Errorf("failed to create Geneve tunnel for node %s: %v", loomNode.Name, err)
 	}
-	mgr.tunnels[node.Name] = tun
+	mgr.tunnels[loomNode.Name] = tun
+	return nil
+}
+
+func (mgr *TunnelManager) AddEgressRoute(nodeName string, dst netutils.DualStackNetwork) error {
+	tun, exists := mgr.tunnels[nodeName]
+	if !exists {
+		return fmt.Errorf("no Geneve tunnel exists yet for node %s", nodeName)
+	}
+	if err := tun.AddEgressRoute(dst); err != nil {
+		return fmt.Errorf("failed to add egress route for node %s: %v", nodeName, err)
+	}
+	return nil
+}
+
+func (mgr *TunnelManager) RemoveEgressRoute(nodeName string, dst netutils.DualStackNetwork) error {
+	tun, exists := mgr.tunnels[nodeName]
+	if !exists {
+		return nil // Tunnel already doesn't exist, nothing to remove
+	}
+	if err := tun.RemoveEgressRoute(dst); err != nil {
+		return fmt.Errorf("failed to remove egress route for node %s: %v", nodeName, err)
+	}
 	return nil
 }
 
