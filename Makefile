@@ -107,10 +107,15 @@ docker-push-all: ## Push all docker images.
 
 .PHONY: kind-create-multi
 kind-create-multi: ## Create and configure a local kind cluster with a control-plane and a worker node.
-	$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CLUSTER_CONFIG_SINGLE_NODE)
-	$(KUBECTL) taint nodes $(KIND_CLUSTER)-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
+	$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CLUSTER_CONFIG_MULTI_NODE)
 	sleep 3
+	$(MAKE) kind-configure
+
+.PHONY: kind-configure
+kind-configure: ## Configure the local kind cluster with multus and cert-manager.
 	$(KUBECTL) wait --for=condition=Ready pod -n kube-system --all --timeout=120s
+	$(KUBECTL) taint nodes $(KIND_CLUSTER)-control-plane node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
+	sleep 3
 	$(KUBECTL) apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
 	sleep 3
 	$(KUBECTL) wait --for=condition=Ready pod -l app=multus -n kube-system --timeout=120s
@@ -122,13 +127,7 @@ kind-create-multi: ## Create and configure a local kind cluster with a control-p
 kind-create: ## Create and configure a local kind cluster with a single control-plane node.
 	$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CLUSTER_CONFIG_SINGLE_NODE)
 	sleep 3
-	$(KUBECTL) wait --for=condition=Ready pod -n kube-system --all --timeout=120s
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml
-	sleep 3
-	$(KUBECTL) wait --for=condition=Ready pod -l app=multus -n kube-system --timeout=120s
-	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.0/cert-manager.yaml
-	sleep 3
-	$(KUBECTL) wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+	$(MAKE) kind-configure
 
 .PHONY: kind-delete
 kind-delete: ## Delete the local kind cluster.

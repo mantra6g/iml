@@ -20,7 +20,7 @@ site/
 chart/charts/*.tgz
 Chart.lock
 
-# Locally generated installed
+# Locally generated installer
 install.yaml
 
 # Binaries for programs and plugins
