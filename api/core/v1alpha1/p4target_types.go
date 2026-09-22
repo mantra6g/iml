@@ -53,6 +53,18 @@ type Taint struct {
 	TimeAdded metav1.Time `json:"timeAdded,omitempty"`
 }
 
+type TunnelType string
+
+const (
+	SRv6Tunnel TunnelType = "SRv6"
+)
+
+type TunnelSpec struct {
+	// Type specifies the type of tunnel used for the Programmable target, such as SRv6.
+	// +required
+	Type   TunnelType `json:"type,omitempty"`
+}
+
 // P4TargetSpec defines the desired state of P4Target
 type P4TargetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -72,6 +84,10 @@ type P4TargetSpec struct {
 	// NfCIDR is the range assigned to the network functions running on this target.
 	// +optional
 	NfCIDR string `json:"nfCIDR,omitempty"`
+
+	// External specifies whether the target resides in the cluster or is external to it. This is used to install the correct routes to reach the target.
+	// +optional
+	External bool `json:"external,omitempty"`
 }
 
 // Taints that can be applied to P4Targets to indicate their state or

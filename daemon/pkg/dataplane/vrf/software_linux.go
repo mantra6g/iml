@@ -27,6 +27,12 @@ const (
 	// RoutingVRFName is the name of the VRF that will be used to interconnect the different Application subnets
 	RoutingVRFName = "router-vrf"
 
+	// DefaultGatewayInterfaceName is the name of the interface that will be used as the default gateway for the routing VRF
+	DefaultGatewayInterfaceName = "imlgw0"
+
+	// DefaultGatewayPeerName is the name of the peer interface that will be used as the default gateway for the routing VRF
+	DefaultGatewayPeerName = "imlgw0-peer"
+
 	// DefaultMTU sets the standard Maximum Transfer Unit for interfaces in the dataplane.
 	//
 	// This value comes from calculating the maximum packet size that can be sent with SRv6 encapsulation (8B)
@@ -163,6 +169,11 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
 	}
 
+	err = createDefaultGatewayInterface(tunnel6Allocator, rtrSubnet, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	ip6t, err := iptables.New(iptables.IPFamily(iptables.ProtocolIPv6))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ip6t: %w", err)
@@ -206,7 +217,87 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 	}, nil
 }
 
+func createDefaultGatewayInterface(tunnel6Allocator *dataplane.Subnet6Allocator, rtrSubnet *RoutingSubnet, cfg *env.GlobalConfig) error {
+	gwTunNet, err := tunnel6Allocator.Allocate()
+	if err != nil {
+		return fmt.Errorf("failed to allocate IPv6 address for default gateway interface: %w", err)
+	}
+	gwTunAllocator, err := dataplane.NewIPv6Allocator(gwTunNet)
+	if err != nil {
+		return fmt.Errorf("failed to create IPv6 allocator for default gateway interface: %w", err)
+	}
+	gwTunAddr, err := gwTunAllocator.Allocate()
+	if err != nil {
+		return fmt.Errorf("failed to allocate IPv6 address for default gateway interface: %w", err)
+	}
+	gwTunPeerAddr, err := gwTunAllocator.Allocate()
+	if err != nil {
+		return fmt.Errorf("failed to allocate IPv6 address for default gateway interface peer: %w", err)
+	}
+	defaultGatewayInterface := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: DefaultGatewayInterfaceName,
+		},
+		PeerName: DefaultGatewayPeerName,
+	}
+	if err = netlink.LinkAdd(defaultGatewayInterface); err != nil {
+		return fmt.Errorf("failed to add default gateway interface: %w", err)
+	}
+	if err = netlink.LinkSetMaster(defaultGatewayInterface, rtrSubnet.Vrf); err != nil {
+		return fmt.Errorf("failed to set master for default gateway interface: %w", err)
+	}
+	if err = netlink.AddrAdd(defaultGatewayInterface, &netlink.Addr{IPNet: gwTunAddr}); err != nil {
+		return fmt.Errorf("failed to add address to default gateway interface: %w", err)
+	}
+	if err = netlink.LinkSetUp(defaultGatewayInterface); err != nil {
+		return fmt.Errorf("failed to set up default gateway interface: %w", err)
+	}
+	gwTunPeer, err := netlink.LinkByName(DefaultGatewayPeerName)
+	if err != nil {
+		return fmt.Errorf("failed to get default gateway peer interface: %w", err)
+	}
+	if err = netlink.AddrAdd(gwTunPeer, &netlink.Addr{IPNet: gwTunPeerAddr}); err != nil {
+		return fmt.Errorf("failed to add address to default gateway peer interface: %w", err)
+	}
+	if err = netlink.LinkSetUp(gwTunPeer); err != nil {
+		return fmt.Errorf("failed to set up default gateway peer interface: %w", err)
+	}
+	if err = rtrSubnet.AddDefaultRoute(netutils.DualStackAddress{IPv6: gwTunPeerAddr.IP}, DefaultGatewayInterfaceName); err != nil {
+		return fmt.Errorf("failed to add default route to routing subnet: %w", err)
+	}
+	if netlink.RouteAdd(&netlink.Route{
+		LinkIndex: defaultGatewayInterface.Attrs().Index,
+		Dst:       cfg.PodCIDR.IPv6Net,
+	}); err != nil {
+		return fmt.Errorf("failed to add default route: %w", err)
+	}
+	return nil
+}
+
+// teardownDefaultGatewayInterface removes the default gateway veth pair created by
+// createDefaultGatewayInterface. Deleting the interface also removes its peer and any
+// routes bound to it, so no further cleanup is required.
+func teardownDefaultGatewayInterface() error {
+	link, err := netlink.LinkByName(DefaultGatewayInterfaceName)
+	if err != nil {
+		if _, ok := err.(netlink.LinkNotFoundError); ok {
+			// Nothing to tear down.
+			return nil
+		}
+		return fmt.Errorf("failed to get default gateway interface: %w", err)
+	}
+	if err = netlink.LinkDel(link); err != nil {
+		return fmt.Errorf("failed to delete default gateway interface: %w", err)
+	}
+	return nil
+}
+
 func (d *Software) Shutdown(ctx context.Context) error {
+	// Delete the default gateway interface
+	if err := teardownDefaultGatewayInterface(); err != nil {
+		d.log.Error(err, "failed to tear down default gateway interface. Ignoring error...")
+	}
+
 	// Delete the router subnet
 	d.routingSubnet.Teardown()
 
@@ -766,6 +857,14 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
+	if target.Spec.External {
+		return nil
+	}
+
+	return d.UpdateInternalRoutes(target)
+}
+
+func (d *Software) UpdateInternalRoutes(target *corev1alpha1.P4Target) error {
 	if len(target.Status.TargetIPs) == 0 || len(target.Status.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
 		// We don't have enough information about the object yet to update its routes.
 		return nil
