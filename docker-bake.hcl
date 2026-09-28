@@ -2,9 +2,13 @@ variable "CI" {
   default = false
 }
 
-#variable "GITHUB_EVENT_NAME" {
-#  default = ""
-#}
+# ignore-error: a gha cache upload failure (e.g. rate limiting) must not fail the build.
+# PR runs export too, so later pushes to the same PR start warm; PR-scoped entries
+# are deleted when the PR closes (.github/workflows/cache-cleanup.yml).
+function "cache_to" {
+  params = [scope]
+  result = ["type=gha,scope=${scope},mode=max,ignore-error=true"]
+}
 
 variable "GOVERSION" { }
 
@@ -38,14 +42,6 @@ target "_common" {
     BIN = mod.bin
     MODPATH = replace(mod.name, "-", "/")
   }
-  #cache-from = ["type=gha,scope=${mod.name}"]
-  #cache-to = [
-  #  GITHUB_EVENT_NAME == "pull_request"
-  #    ? ""
-  #    : "type=gha,scope=${mod.name},mode=max"
-  #]
-  cache-from = ["type=gha,scope=${mod.name}"]
-  cache-to   = ["type=gha,scope=${mod.name},mode=max"]
 }
 
 target "image-all" {
@@ -56,6 +52,10 @@ target "image-all" {
   target = "runtime"
   name = "image-${mod.name}"
   tags = [for tag in target.docker-metadata-action.tags : replace(tag, "__target__", "${mod.name}")]
+  # Tests and images use separate scopes: a gha cache export replaces the
+  # scope's index, so sharing one scope made each build erase the other's cache.
+  cache-from = ["type=gha,scope=image-${mod.name}"]
+  cache-to   = cache_to("image-${mod.name}")
 }
 
 target "test-all" {
@@ -68,4 +68,6 @@ target "test-all" {
   output = [
     "type=local,dest=artifacts"
   ]
+  cache-from = ["type=gha,scope=test-${mod.name}"]
+  cache-to   = cache_to("test-${mod.name}")
 }

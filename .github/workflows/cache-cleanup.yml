@@ -1,0 +1,26 @@
+name: 'Clean up PR caches'
+
+# PR runs save go and buildkit caches scoped to the PR ref, which no other ref can
+# restore. Delete them once the PR is closed so they don't evict main's caches.
+on:
+  pull_request:
+    types: [ closed ]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      REF: refs/pull/${{ github.event.pull_request.number }}/merge
+    steps:
+      - name: Delete caches for this PR
+        run: |
+          # buildkit stores one entry per layer blob, so page until nothing is left.
+          while ids=$(gh cache list --ref "$REF" --limit 100 --json id --jq '.[].id') && [ -n "$ids" ]; do
+            for id in $ids; do
+              gh cache delete "$id" || true
+            done
+          done

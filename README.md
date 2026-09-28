@@ -180,7 +180,7 @@ IML is currently limited to contributors we know. If you're interested in contri
 
 ## License
 
-See LICENSE file for details.
+See LICENSE file for details
 
 ## Support
 
