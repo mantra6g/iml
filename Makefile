@@ -59,6 +59,24 @@ all: help
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+##@ Test
+
+# COVERAGE_MODULES are the components whose test coverage is merged into a single profile.
+COVERAGE_MODULES ?= cni daemon dpcs operator
+COVERAGE_DIR ?= artifacts
+GO_MODULE_PREFIX ?= github.com/mantra6g/iml/
+
+.PHONY: test-coverage
+test-coverage: ## Run the cni, daemon, dpcs and operator tests in docker and merge their coverage into artifacts/coverage.out.
+	$(CONTAINER_TOOL) buildx bake --set '*.cache-from=' --set '*.cache-to=' $(addprefix test-,$(COVERAGE_MODULES))
+	$(MAKE) coverage-merge
+
+.PHONY: coverage-merge
+coverage-merge: ## Merge the per-component coverage profiles in artifacts/ into artifacts/coverage.out and coverage.lcov.
+	go tool gocovmerge $(addprefix $(COVERAGE_DIR)/,$(addsuffix .coverage.out,$(COVERAGE_MODULES))) \
+		| sed 's#^$(GO_MODULE_PREFIX)##' > $(COVERAGE_DIR)/coverage.out
+	hack/go-cover-to-lcov.sh < $(COVERAGE_DIR)/coverage.out > $(COVERAGE_DIR)/coverage.lcov
+
 ##@ Build
 
 # If you wish to build the driver image targeting other platforms you can use the --platform flag.

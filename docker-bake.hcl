@@ -17,6 +17,7 @@ variable "MODS" {
       {name = "cni", bin = "loom"},
       {name = "operator", bin = "manager"},
       {name = "daemon", bin = "daemon"},
+      {name = "dpcs", bin = "dpcs"},
       {name = "targets-bmv2", bin = "driver"}
     ]
 }

@@ -78,7 +78,8 @@ RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     go mod download all && \
     KUBEBUILDER_ASSETS=$(go tool setup-envtest use -i ${ENVTEST_K8S_VERSION} --bin-dir /assets -p path) \
     GOPROXY=off \
-    go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MODPATH}/... || true && \
+    go tool gotestsum --no-color --junitfile ./artifacts/${MOD}.unit-tests.xml -- -coverprofile=coverage.out ./${MODPATH}/... && \
+    cp ./coverage.out ./artifacts/${MOD}.coverage.out && \
     go tool cover -html=./coverage.out -o ./artifacts/${MOD}.coverage.html && \
     go tool gocover-cobertura < ./coverage.out > ./artifacts/${MOD}.coverage.xml
 
