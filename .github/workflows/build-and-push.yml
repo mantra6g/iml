@@ -151,8 +151,8 @@ jobs:
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/coverage.out
-          format: golang
+          file: artifacts/coverage.lcov
+          format: lcov
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
 

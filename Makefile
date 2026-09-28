@@ -72,9 +72,10 @@ test-coverage: ## Run the cni, daemon, dpcs and operator tests in docker and mer
 	$(MAKE) coverage-merge
 
 .PHONY: coverage-merge
-coverage-merge: ## Merge the per-component coverage profiles in artifacts/ into artifacts/coverage.out.
+coverage-merge: ## Merge the per-component coverage profiles in artifacts/ into artifacts/coverage.out and coverage.lcov.
 	go tool gocovmerge $(addprefix $(COVERAGE_DIR)/,$(addsuffix .coverage.out,$(COVERAGE_MODULES))) \
 		| sed 's#^$(GO_MODULE_PREFIX)##' > $(COVERAGE_DIR)/coverage.out
+	hack/go-cover-to-lcov.sh < $(COVERAGE_DIR)/coverage.out > $(COVERAGE_DIR)/coverage.lcov
 
 ##@ Build
 
