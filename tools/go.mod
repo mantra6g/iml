@@ -21,6 +21,7 @@ require (
 	github.com/spf13/afero v1.12.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
@@ -41,6 +42,7 @@ require (
 
 tool (
 	github.com/boumenot/gocover-cobertura
+	github.com/wadey/gocovmerge
 	gotest.tools/gotestsum
 	sigs.k8s.io/controller-runtime/tools/setup-envtest
 )

@@ -1,5 +1,7 @@
 # IML - Infrastructure Management Layer
 
+[![Test, build, publish](https://github.com/mantra6g/iml/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/mantra6g/iml/actions/workflows/build-and-push.yml)
+
 A local Network Function Virtualization (NFV) orchestrator for Kubernetes that enables service chaining and intelligent traffic management through network functions.
 
 ## What is IML?
