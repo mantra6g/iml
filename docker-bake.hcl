@@ -2,15 +2,12 @@ variable "CI" {
   default = false
 }
 
-variable "GITHUB_EVENT_NAME" {
-  default = ""
-}
-
-# Only main/tag builds export to the gha cache: PR caches are scoped to the PR
-# ref (unusable by other branches) and would evict main's entries from the quota.
+# ignore-error: a gha cache upload failure (e.g. rate limiting) must not fail the build.
+# PR runs export too, so later pushes to the same PR start warm; PR-scoped entries
+# are deleted when the PR closes (.github/workflows/cache-cleanup.yml).
 function "cache_to" {
   params = [scope]
-  result = GITHUB_EVENT_NAME == "pull_request" ? [] : ["type=gha,scope=${scope},mode=max,ignore-error=true"]
+  result = ["type=gha,scope=${scope},mode=max,ignore-error=true"]
 }
 
 variable "GOVERSION" { }

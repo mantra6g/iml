@@ -36,7 +36,6 @@ jobs:
       # Every module is tested on every run so the merged coverage report is complete.
       TEST_MODULES: '["cni", "daemon", "dpcs", "operator", "targets-bmv2"]'
       GOVERSION: 1.26.1
-      GITHUB_EVENT_NAME: ${{ github.event_name }}
 
     steps:
       - name: Generate bake targets
@@ -73,6 +72,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+        with:
+          # The runner is discarded after the job; removing the builder only costs time.
+          cleanup: false
 
       - name: Checkout for hashfiles
         uses: actions/checkout@v7
@@ -81,51 +83,43 @@ jobs:
       #  - go-mod only changes with go.sum, so it is keyed on the workspace go.sum files.
       #  - go-build changes with every source change, so it uses a rolling per-commit
       #    key; with a go.sum key it would only be saved on dependency bumps and go stale.
-      # PRs only restore (PR-scoped caches can't be reused by other branches and would
-      # evict main's entries). On other events actions/cache saves in its post step,
-      # which runs after the cache-dance post step has extracted the mounts.
-      - name: Restore go module cache (PR)
-        if: github.event_name == 'pull_request'
-        uses: actions/cache/restore@v6
-        id: go-mod-cache-pr
-        with: &go-mod-cache
+      # actions/cache saves in its post step, which runs after the cache-dance post
+      # steps have extracted the mounts. PR caches are deleted on close (cache-cleanup.yml).
+      - name: Restore go module cache
+        uses: actions/cache@v6
+        id: go-mod-cache
+        with:
           key: ${{ runner.os }}-gomod-${{ hashFiles('go.work.sum', 'api/go.sum', 'cni/go.sum', 'daemon/go.sum', 'dpcs/go.sum', 'operator/go.sum', 'tools/go.sum', 'targets/bmv2/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-gomod-
           path: cache-go-mod
 
-      - name: Restore and save go module cache
-        if: github.event_name != 'pull_request'
+      - name: Restore go build cache
         uses: actions/cache@v6
-        id: go-mod-cache
-        with: *go-mod-cache
-
-      - name: Restore go build cache (PR)
-        if: github.event_name == 'pull_request'
-        uses: actions/cache/restore@v6
-        id: go-build-cache-pr
-        with: &go-build-cache
+        id: go-build-cache
+        with:
           key: ${{ runner.os }}-gobuild-${{ env.GOVERSION }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-gobuild-${{ env.GOVERSION }}-
           path: cache-go-build
 
-      - name: Restore and save go build cache
-        if: github.event_name != 'pull_request'
-        uses: actions/cache@v6
-        id: go-build-cache
-        with: *go-build-cache
-
-      - name: Restore cache mounts
+      # One cache-dance per cache so each is only extracted when it will be saved:
+      # the (large) module cache is skipped whenever go.sum is unchanged.
+      - name: Inject go module cache
         uses: reproducible-containers/buildkit-cache-dance@v3.4.0
         with:
-          # Extraction is only needed when a cache will be saved afterwards.
-          skip-extraction: ${{ github.event_name == 'pull_request' || (steps.go-mod-cache.outputs.cache-hit == 'true' && steps.go-build-cache.outputs.cache-hit == 'true') }}
+          scratch-dir: scratch-go-mod
+          skip-extraction: ${{ steps.go-mod-cache.outputs.cache-hit }}
           cache-map: |
-            {
-              "cache-go-mod": {"target": "/go/pkg/mod", "id": "go-mod"},
-              "cache-go-build": {"target": "/root/.cache/go-build", "id": "go-build"}
-            }
+            {"cache-go-mod": {"target": "/go/pkg/mod", "id": "go-mod"}}
+
+      - name: Inject go build cache
+        uses: reproducible-containers/buildkit-cache-dance@v3.4.0
+        with:
+          scratch-dir: scratch-go-build
+          skip-extraction: ${{ steps.go-build-cache.outputs.cache-hit }}
+          cache-map: |
+            {"cache-go-build": {"target": "/root/.cache/go-build", "id": "go-build"}}
 
       - name: Run tests
         id: tests
@@ -144,45 +138,6 @@ jobs:
         with:
           paths: "artifacts/*.unit-tests.xml"
 
-      - name: Generate coverage summary
-        if: steps.tests.outcome == 'success'
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: "./artifacts/*.coverage.xml"
-          format: markdown
-          output: file
-
-      - name: Upload coverage as artifact
-        if: steps.tests.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          path: "artifacts/*.coverage.html"
-
-      - name: Write coverage to job summary
-        if: steps.tests.outcome == 'success'
-        run: cat ./code-coverage-results.md >> $GITHUB_STEP_SUMMARY
-
-      - name: Set up Go for coverage merge
-        if: steps.tests.outcome == 'success'
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: 'tools/go.mod'
-          cache-dependency-path: 'tools/go.sum'
-
-      - name: Merge coverage profiles
-        if: steps.tests.outcome == 'success'
-        run: make coverage-merge
-
-      - name: Upload coverage to Coveralls
-        if: steps.tests.outcome == 'success'
-        uses: coverallsapp/github-action@v2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/coverage.lcov
-          format: lcov
-        env:
-          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-
       - name: Fail if tests failed
         if: steps.tests.outcome == 'success' && steps.summary.outputs.failed != '0'
         run: exit 1
@@ -195,6 +150,48 @@ jobs:
             ./docker-bake.hcl
             cwd://${{ steps.metadata.outputs.bake-file }}
           targets: ${{ steps.targets.outputs.images }}
+
+      # Coverage reporting runs after the images so it neither delays nor blocks them.
+      - name: Generate coverage summary
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: "./artifacts/*.coverage.xml"
+          format: markdown
+          output: file
+
+      - name: Upload coverage as artifact
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: "artifacts/*.coverage.html"
+
+      - name: Write coverage to job summary
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        run: cat ./code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Go for coverage merge
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'tools/go.mod'
+          cache-dependency-path: 'tools/go.sum'
+
+      - name: Merge coverage profiles
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        run: make coverage-merge
+
+      - name: Upload coverage to Coveralls
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: artifacts/coverage.lcov
+          format: lcov
+          # A reporting outage must not fail the run after images were pushed.
+          fail-on-error: false
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
 
   publish-chart:
     if: github.ref_type == 'tag'
