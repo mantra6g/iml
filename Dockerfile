@@ -13,6 +13,8 @@ ARG MODPATH=cni
 FROM golang:${GOVERSION} AS base
 
 WORKDIR /workspace
+# Keep the module cache writable so CI can extract and overwrite it (cache-dance).
+ENV GOFLAGS=-modcacherw
 COPY go.work go.work.sum ./
 COPY api/go.mod api/go.sum api/
 COPY cni/go.mod cni/go.sum cni/

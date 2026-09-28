@@ -21,6 +21,10 @@ on:
     branches: [ main ]
     paths: *paths
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test-build-and-push-images:
     runs-on: ubuntu-latest
@@ -73,32 +77,55 @@ jobs:
       - name: Checkout for hashfiles
         uses: actions/checkout@v7
 
-      - name: Restore cache for go modules and build
-        #uses: actions/cache/restore@v6
-        uses: actions/cache@v6
-        id: go-cache
-        with:
-          key: ${{ runner.os }}-go-${{ env.GOVERSION }}-${{ hashFiles('**/go.sum') }}
+      # Two go caches with different lifetimes:
+      #  - go-mod only changes with go.sum, so it is keyed on the workspace go.sum files.
+      #  - go-build changes with every source change, so it uses a rolling per-commit
+      #    key; with a go.sum key it would only be saved on dependency bumps and go stale.
+      # PRs only restore (PR-scoped caches can't be reused by other branches and would
+      # evict main's entries). On other events actions/cache saves in its post step,
+      # which runs after the cache-dance post step has extracted the mounts.
+      - name: Restore go module cache (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v6
+        id: go-mod-cache-pr
+        with: &go-mod-cache
+          key: ${{ runner.os }}-gomod-${{ hashFiles('go.work.sum', 'api/go.sum', 'cni/go.sum', 'daemon/go.sum', 'dpcs/go.sum', 'operator/go.sum', 'tools/go.sum', 'targets/bmv2/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ env.GOVERSION }}-
-            ${{ runner.os }}-go-
-          path: |
-            cache-go-mod
-            cache-go-build
+            ${{ runner.os }}-gomod-
+          path: cache-go-mod
+
+      - name: Restore and save go module cache
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v6
+        id: go-mod-cache
+        with: *go-mod-cache
+
+      - name: Restore go build cache (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v6
+        id: go-build-cache-pr
+        with: &go-build-cache
+          key: ${{ runner.os }}-gobuild-${{ env.GOVERSION }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-${{ env.GOVERSION }}-
+          path: cache-go-build
+
+      - name: Restore and save go build cache
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v6
+        id: go-build-cache
+        with: *go-build-cache
 
       - name: Restore cache mounts
         uses: reproducible-containers/buildkit-cache-dance@v3.4.0
         with:
-          skip-extraction: ${{ steps.go-cache.outputs.cache-hit }}
+          # Extraction is only needed when a cache will be saved afterwards.
+          skip-extraction: ${{ github.event_name == 'pull_request' || (steps.go-mod-cache.outputs.cache-hit == 'true' && steps.go-build-cache.outputs.cache-hit == 'true') }}
           cache-map: |
             {
               "cache-go-mod": {"target": "/go/pkg/mod", "id": "go-mod"},
               "cache-go-build": {"target": "/root/.cache/go-build", "id": "go-build"}
             }
-
-      - name: Clear cache source dir workaround
-        run: |
-          sudo rm -rf cache-go-mod/
 
       - name: Run tests
         id: tests
@@ -168,14 +195,6 @@ jobs:
             ./docker-bake.hcl
             cwd://${{ steps.metadata.outputs.bake-file }}
           targets: ${{ steps.targets.outputs.images }}
-
-      #- uses: actions/cache/save@v6
-      #  if: github.event_name != 'pull_request'
-      #  with:
-      #    key: ${{ steps.go-cache.outputs.cache-primary-key }}
-      #    path: |
-      #      cache-go-mod
-      #      cache-go-build
 
   publish-chart:
     if: github.ref_type == 'tag'
