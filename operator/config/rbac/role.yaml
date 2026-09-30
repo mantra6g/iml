@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - namespaces
+  - services
   verbs:
   - create
   - delete
@@ -15,6 +16,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - apps
@@ -41,6 +50,7 @@ rules:
   resources:
   - networkfunctions
   - p4targets
+  - services
   verbs:
   - create
   - delete
@@ -54,6 +64,7 @@ rules:
   resources:
   - networkfunctions/finalizers
   - p4targets/finalizers
+  - services/finalizers
   verbs:
   - update
 - apiGroups:
@@ -61,10 +72,23 @@ rules:
   resources:
   - networkfunctions/status
   - p4targets/status
+  - services/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - infra.loom.io
   resources:
