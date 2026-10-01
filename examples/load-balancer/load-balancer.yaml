@@ -164,6 +164,13 @@ spec:
             "--dummy-app-label-value", "dummy-web-server",
             "--lb-app-label-value", "web-server"
           ]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -210,6 +217,13 @@ spec:
         - name: web-client
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -252,6 +266,13 @@ spec:
                   fieldPath: metadata.name
           ports:
             - containerPort: 80
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -298,6 +319,13 @@ spec:
         - name: alpine
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunctionConfig
