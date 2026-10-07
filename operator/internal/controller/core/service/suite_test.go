@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,6 +40,7 @@ import (
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	schedulingv1alpha1 "github.com/mantra6g/iml/api/scheduling/v1alpha1"
+	"github.com/mantra6g/iml/operator/pkg/ipam"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -51,6 +53,8 @@ var (
 	testEnv   *envtest.Environment
 	cfg       *rest.Config
 	k8sClient client.Client
+	// serviceCIDR is the pool Service IPs are allocated from.
+	serviceCIDR = netip.MustParsePrefix("10.112.0.0/16")
 )
 
 func TestControllers(t *testing.T) {
@@ -96,9 +100,12 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
+	serviceIPs, err := ipam.NewAddrPool(serviceCIDR)
+	Expect(err).NotTo(HaveOccurred())
 	err = (&Reconciler{
-		Client: k8sManager.GetClient(),
-		Scheme: k8sManager.GetScheme(),
+		Client:     k8sManager.GetClient(),
+		Scheme:     k8sManager.GetScheme(),
+		ServiceIPs: serviceIPs,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

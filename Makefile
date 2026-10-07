@@ -3,7 +3,8 @@ IMG_OPERATOR ?= operator:local
 IMG_DAEMON ?= daemon:local
 IMG_CNI ?= cni:local
 IMG_DPCS ?= dpcs:local
-IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI) $(IMG_DPCS)
+IMG_DNS ?= dns:local
+IML_IMAGES = $(IMG_OPERATOR) $(IMG_DAEMON) $(IMG_CNI) $(IMG_DPCS) $(IMG_DNS)
 
 IMG_BMV2_CP ?= targets-bmv2:local
 IMG_BMV2_DP ?= p4lang/behavioral-model:latest
@@ -62,7 +63,7 @@ help: ## Display this help.
 ##@ Test
 
 # COVERAGE_MODULES are the components whose test coverage is merged into a single profile.
-COVERAGE_MODULES ?= cni daemon dpcs operator
+COVERAGE_MODULES ?= cni daemon dpcs dns operator
 COVERAGE_DIR ?= artifacts
 GO_MODULE_PREFIX ?= github.com/mantra6g/iml/
 
@@ -86,7 +87,7 @@ coverage-merge: ## Merge the per-component coverage profiles in artifacts/ into 
 docker-build-all: docker-build-iml docker-build-targets docker-build-examples ## Build docker images for iml, all targets and examples.
 
 .PHONY: docker-build-iml
-docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator docker-build-dpcs ## Build docker images for the cni, daemon, operator and dpcs.
+docker-build-iml: docker-build-cni docker-build-daemon docker-build-operator docker-build-dpcs docker-build-dns ## Build docker images for the cni, daemon, operator and dpcs.
 
 .PHONY: docker-build-cni
 docker-build-cni: ## Build docker image for the cni.
@@ -95,6 +96,10 @@ docker-build-cni: ## Build docker image for the cni.
 .PHONY: docker-build-dpcs
 docker-build-dpcs: ## Build docker image for the DPCS.
 	$(CONTAINER_TOOL) build -t ${IMG_DPCS} --target runtime --build-arg MOD=dpcs --build-arg MODPATH=dpcs --build-arg BIN=dpcs .
+
+.PHONY: docker-build-dns
+docker-build-dns: ## Build docker image for the DNS.
+	$(CONTAINER_TOOL) build -t ${IMG_DNS} --target runtime --build-arg MOD=dns --build-arg MODPATH=dns --build-arg BIN=dns .
 
 .PHONY: docker-build-daemon
 docker-build-daemon: ## Build docker image for the daemon.

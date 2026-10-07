@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -55,6 +56,18 @@ func deleteService(ctx context.Context, service *corev1alpha1.Service) {
 		return apierrors.IsNotFound(k8sClient.Get(ctx, ctrlclient.ObjectKeyFromObject(service),
 			&corev1alpha1.Service{}))
 	}, timeout, interval).Should(BeTrue())
+}
+
+// serviceIP waits for the Service to be given an IP and returns it.
+func serviceIP(ctx context.Context, service *corev1alpha1.Service) string {
+	var ip string
+	Eventually(func(g Gomega) {
+		current := &corev1alpha1.Service{}
+		g.Expect(k8sClient.Get(ctx, ctrlclient.ObjectKeyFromObject(service), current)).To(Succeed())
+		g.Expect(current.Status.ClusterIPs).To(HaveLen(1))
+		ip = current.Status.ClusterIPs[0]
+	}, timeout, interval).Should(Succeed())
+	return ip
 }
 
 func readyCondition(ctx context.Context, service *corev1alpha1.Service) func() *metav1.Condition {
@@ -111,11 +124,29 @@ var _ = Describe("Service Controller", func() {
 				g.Expect(current.Finalizers).To(ContainElement(corev1alpha1.ServiceFinalizer))
 				g.Expect(current.Status.ServiceName).To(Equal("web--default"))
 				g.Expect(current.Status.Hostname).To(Equal("web--default.loom-system.svc.cluster.local"))
-				g.Expect(current.Status.ClusterIPs).To(Equal(kubeService.Spec.ClusterIPs))
+				g.Expect(current.Status.ClusterIPs).To(HaveLen(1))
+				ip, err := netip.ParseAddr(current.Status.ClusterIPs[0])
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(serviceCIDR.Contains(ip)).To(BeTrue(), "Service IP should come from the service CIDR")
 				cond := meta.FindStatusCondition(current.Status.Conditions, corev1alpha1.ServiceConditionReady)
 				g.Expect(cond).NotTo(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 			}, timeout, interval).Should(Succeed())
+
+			By("verifying the Service IP is an external IP of the Kubernetes Service")
+			Expect(k8sClient.Get(ctx, kubeServiceKey(service), kubeService)).To(Succeed())
+			Expect(kubeService.Spec.ExternalIPs).To(Equal([]string{serviceIP(ctx, service)}))
+			Expect(kubeService.Spec.ClusterIPs).NotTo(ContainElement(serviceIP(ctx, service)),
+				"the ClusterIP should still be allocated by the API server")
+		})
+
+		It("should give every Service a different IP", func() {
+			Expect(k8sClient.Create(ctx, service)).To(Succeed())
+			other := newService("api", namespace)
+			Expect(k8sClient.Create(ctx, other)).To(Succeed())
+			defer deleteService(ctx, other)
+
+			Expect(serviceIP(ctx, service)).NotTo(Equal(serviceIP(ctx, other)))
 		})
 
 		It("should keep the Kubernetes Service in sync", func() {
@@ -140,6 +171,22 @@ var _ = Describe("Service Controller", func() {
 				g.Expect(kubeService.Spec.Ports).To(HaveLen(2))
 			}, timeout, interval).Should(Succeed())
 
+			By("tampering with the external IPs")
+			ip := serviceIP(ctx, service)
+			Eventually(func() error {
+				kubeService := &corev1.Service{}
+				if err := k8sClient.Get(ctx, kubeServiceKey(service), kubeService); err != nil {
+					return err
+				}
+				kubeService.Spec.ExternalIPs = []string{"10.112.255.1"}
+				return k8sClient.Update(ctx, kubeService)
+			}, timeout, interval).Should(Succeed())
+			Eventually(func(g Gomega) {
+				kubeService := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, kubeServiceKey(service), kubeService)).To(Succeed())
+				g.Expect(kubeService.Spec.ExternalIPs).To(Equal([]string{ip}))
+			}, timeout, interval).Should(Succeed())
+
 			By("deleting the Kubernetes Service behind the controller's back")
 			kubeService := &corev1.Service{}
 			Expect(k8sClient.Get(ctx, kubeServiceKey(service), kubeService)).To(Succeed())
@@ -149,6 +196,7 @@ var _ = Describe("Service Controller", func() {
 				recreated := &corev1.Service{}
 				g.Expect(k8sClient.Get(ctx, kubeServiceKey(service), recreated)).To(Succeed())
 				g.Expect(recreated.UID).NotTo(Equal(oldUID))
+				g.Expect(recreated.Spec.ExternalIPs).To(Equal([]string{ip}), "the Service IP should not change")
 			}, timeout, interval).Should(Succeed())
 		})
 

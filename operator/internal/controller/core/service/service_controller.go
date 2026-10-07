@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -22,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	"github.com/mantra6g/iml/operator/pkg/ipam"
 	"github.com/mantra6g/iml/operator/pkg/util/loomservice"
 )
 
@@ -38,6 +41,11 @@ var errNameConflict = errors.New("kubernetes Service name is already in use")
 type Reconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// ServiceIPs is the pool the virtual IPs of loom Services are allocated from.
+	ServiceIPs *ipam.AddrPool
+
+	poolMu     sync.Mutex
+	poolSynced bool
 }
 
 // +kubebuilder:rbac:groups=core.loom.io,resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -49,6 +57,10 @@ type Reconciler struct {
 // every loom Service. The Kubernetes Service is named "<name>--<namespace>", so the loom Service
 // is reachable at <name>--<namespace>.loom-system.svc.cluster.local. Its EndpointSlices are
 // maintained by the endpointslice controller.
+//
+// Each loom Service is also given a virtual IP from the loom service CIDR. It is published in the
+// loom Service status and set as an external IP of the Kubernetes Service, so kube-proxy forwards
+// traffic sent to it to the Service endpoints.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
@@ -65,6 +77,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	if err := r.ensurePoolSynced(ctx); err != nil {
+		logger.Error(err, "Failed to rebuild the Service IP pool")
+		return ctrl.Result{}, err
+	}
+
 	kubeServiceName := loomservice.KubeServiceName(service.Namespace, service.Name)
 
 	if !service.DeletionTimestamp.IsZero() {
@@ -75,6 +92,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			logger.Error(err, "Failed to delete Kubernetes Service", "service", kubeServiceName)
 			return ctrl.Result{}, err
 		}
+		r.ServiceIPs.Release(req.NamespacedName)
 		controllerutil.RemoveFinalizer(service, corev1alpha1.ServiceFinalizer)
 		return ctrl.Result{}, r.Update(ctx, service)
 	}
@@ -87,24 +105,85 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if reason, message := validateService(service); reason != "" {
 		logger.Info("Service is invalid", "reason", reason, "message", message)
-		return ctrl.Result{}, r.updateStatus(ctx, service, nil, metav1.ConditionFalse, reason, message)
+		r.ServiceIPs.Release(req.NamespacedName)
+		return ctrl.Result{}, r.updateStatus(ctx, service, nil, netip.Addr{}, metav1.ConditionFalse, reason, message)
 	}
 
-	kubeService, err := r.ensureKubeService(ctx, service, kubeServiceName)
+	serviceIP, err := r.ServiceIPs.Allocate(req.NamespacedName)
+	if err != nil {
+		logger.Error(err, "Failed to allocate a Service IP", "cidr", r.ServiceIPs.Prefix())
+		_ = r.updateStatus(ctx, service, nil, netip.Addr{}, metav1.ConditionFalse, "IPAllocationFailed",
+			err.Error()) // best effort
+		return ctrl.Result{}, err
+	}
+
+	kubeService, err := r.ensureKubeService(ctx, service, kubeServiceName, serviceIP)
 	if errors.Is(err, errNameConflict) {
 		logger.Info("Kubernetes Service name is taken by another Service", "service", kubeServiceName)
-		return ctrl.Result{}, r.updateStatus(ctx, service, nil, metav1.ConditionFalse, "NameConflict",
+		r.ServiceIPs.Release(req.NamespacedName)
+		return ctrl.Result{}, r.updateStatus(ctx, service, nil, netip.Addr{}, metav1.ConditionFalse, "NameConflict",
 			fmt.Sprintf("Service %s/%s already exists and belongs to another loom Service",
 				corev1alpha1.ServiceTargetNamespace, kubeServiceName))
 	}
 	if err != nil {
 		logger.Error(err, "Failed to ensure Kubernetes Service", "service", kubeServiceName)
-		_ = r.updateStatus(ctx, service, nil, metav1.ConditionFalse, "ServiceError", err.Error()) // best effort
+		_ = r.updateStatus(ctx, service, nil, netip.Addr{}, metav1.ConditionFalse, "ServiceError",
+			err.Error()) // best effort
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, service, kubeService, metav1.ConditionTrue, "ServiceCreated",
-		fmt.Sprintf("Service is reachable at %s", loomservice.Hostname(kubeServiceName)))
+	return ctrl.Result{}, r.updateStatus(ctx, service, kubeService, serviceIP, metav1.ConditionTrue,
+		"ServiceCreated", fmt.Sprintf("Service is reachable at %s", loomservice.Hostname(kubeServiceName)))
+}
+
+// ensurePoolSynced reserves, once, the Service IPs already recorded in the cluster, so that
+// they are not handed out again after a restart.
+func (r *Reconciler) ensurePoolSynced(ctx context.Context) error {
+	r.poolMu.Lock()
+	defer r.poolMu.Unlock()
+	if r.poolSynced {
+		return nil
+	}
+
+	services := &corev1alpha1.ServiceList{}
+	if err := r.List(ctx, services); err != nil {
+		return err
+	}
+	for i := range services.Items {
+		service := &services.Items[i]
+		r.reserveServiceIPs(ctx, client.ObjectKeyFromObject(service), service.Status.ClusterIPs)
+	}
+
+	// The external IPs of the Kubernetes Services are reserved last: they are written before
+	// the loom Service status, so they win if both disagree.
+	kubeServices := &corev1.ServiceList{}
+	if err := r.List(ctx, kubeServices, client.InNamespace(corev1alpha1.ServiceTargetNamespace),
+		client.HasLabels{corev1alpha1.ServiceNameLabel, corev1alpha1.ServiceNamespaceLabel}); err != nil {
+		return err
+	}
+	for i := range kubeServices.Items {
+		kubeService := &kubeServices.Items[i]
+		if owner, ok := loomservice.OwnerKeyFromLabels(kubeService.Labels); ok {
+			r.reserveServiceIPs(ctx, owner, kubeService.Spec.ExternalIPs)
+		}
+	}
+
+	r.poolSynced = true
+	return nil
+}
+
+// reserveServiceIPs reserves for owner the addresses that belong to the Service IP pool.
+// Addresses outside of it, such as ClusterIPs recorded by earlier versions, are ignored.
+func (r *Reconciler) reserveServiceIPs(ctx context.Context, owner client.ObjectKey, ips []string) {
+	for _, ip := range ips {
+		addr, err := netip.ParseAddr(ip)
+		if err != nil || !r.ServiceIPs.Contains(addr) {
+			continue
+		}
+		if err := r.ServiceIPs.Reserve(addr, owner); err != nil {
+			logf.FromContext(ctx).Info("Ignoring Service IP", "service", owner, "ip", ip, "reason", err.Error())
+		}
+	}
 }
 
 // validateService returns a reason and message if the Service can't be translated into
@@ -121,7 +200,7 @@ func validateService(service *corev1alpha1.Service) (string, string) {
 
 // ensureKubeService creates or updates the Kubernetes Service backing the loom Service.
 func (r *Reconciler) ensureKubeService(ctx context.Context, service *corev1alpha1.Service,
-	kubeServiceName string) (*corev1.Service, error) {
+	kubeServiceName string, serviceIP netip.Addr) (*corev1.Service, error) {
 	kubeService := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kubeServiceName,
@@ -146,6 +225,8 @@ func (r *Reconciler) ensureKubeService(ctx context.Context, service *corev1alpha
 		kubeService.Spec.IPFamilyPolicy = &ipFamilyPolicy
 		kubeService.Spec.Selector = nil
 		kubeService.Spec.Ports = kubeServicePorts(service)
+		// kube-proxy forwards traffic sent to external IPs just like traffic sent to the ClusterIP.
+		kubeService.Spec.ExternalIPs = []string{serviceIP.String()}
 		return nil
 	})
 	if err != nil {
@@ -187,16 +268,17 @@ func (r *Reconciler) deleteKubeService(ctx context.Context, service *corev1alpha
 		client.Preconditions{UID: &kubeService.UID}))
 }
 
-// updateStatus records the generated Service (if any) and the Ready condition in the loom Service status.
+// updateStatus records the generated Service and Service IP (if any) and the Ready condition in the
+// loom Service status.
 func (r *Reconciler) updateStatus(ctx context.Context, service *corev1alpha1.Service, kubeService *corev1.Service,
-	status metav1.ConditionStatus, reason, message string) error {
+	serviceIP netip.Addr, status metav1.ConditionStatus, reason, message string) error {
 	original := service.DeepCopy()
 
 	service.Status.ObservedGeneration = service.Generation
 	if kubeService != nil {
 		service.Status.ServiceName = kubeService.Name
 		service.Status.Hostname = loomservice.Hostname(kubeService.Name)
-		service.Status.ClusterIPs = kubeService.Spec.ClusterIPs
+		service.Status.ClusterIPs = []string{serviceIP.String()}
 	} else {
 		service.Status.ServiceName = ""
 		service.Status.Hostname = ""

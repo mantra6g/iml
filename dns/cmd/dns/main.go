@@ -6,48 +6,66 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/mantra6g/iml/dns/internal/coredns"
 	"github.com/mantra6g/iml/dns/internal/server"
+	envutils "github.com/mantra6g/iml/dns/pkg/utils/env"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	"github.com/miekg/dns"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 const (
 	defaultListenAddress      = ":53"
 	defaultHealthProbeAddress = ":80"
-	defaultZone               = "loom.local."
 	defaultTTL                = 5
 	shutdownTimeout           = 5 * time.Second
 	defaultDebugFlag          = false
+	defaultCoreDNSConfigMap   = "kube-system/coredns"
+	defaultServiceName        = "loom-dns"
+	defaultCoreDNSSyncPeriod  = time.Minute
+	// podNamespaceEnv holds the namespace of the DNS server's own Service.
+	podNamespaceEnv = "POD_NAMESPACE"
 )
 
 var scheme = runtime.NewScheme()
 
 func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
 }
 
 func main() {
-	var listenAddress, healthProbeAddress, zone string
+	var listenAddress, healthProbeAddress, coreDNSConfigMap, serviceName string
 	var ttl uint
-	var debug bool
+	var debug, configureCoreDNS bool
+	var coreDNSSyncPeriod time.Duration
 
 	flag.StringVar(&listenAddress, "listen-addr",
 		defaultListenAddress, "Listen address (UDP and TCP) for the DNS server")
 	flag.StringVar(&healthProbeAddress, "health-probe-addr",
 		defaultHealthProbeAddress, "Listen address for the /healthz and /readyz endpoints")
-	flag.StringVar(&zone, "zone",
-		defaultZone, "Zone the server is authoritative for; Services are served as <name>.<namespace>.svc.<zone>")
 	flag.UintVar(&ttl, "ttl", defaultTTL, "TTL in seconds of the returned records")
 	flag.BoolVar(&debug, "debug", defaultDebugFlag, "Enable debug logging")
+	flag.BoolVar(&configureCoreDNS, "configure-coredns", true,
+		"Keep a server block in the CoreDNS Corefile that forwards the zone to this server's Service")
+	flag.StringVar(&coreDNSConfigMap, "coredns-configmap",
+		defaultCoreDNSConfigMap, "<namespace>/<name> of the CoreDNS ConfigMap")
+	flag.StringVar(&serviceName, "service-name",
+		defaultServiceName, "Name of the Kubernetes Service in front of this server, in the pod's namespace")
+	flag.DurationVar(&coreDNSSyncPeriod, "coredns-sync-period",
+		defaultCoreDNSSyncPeriod, "How often to check and repair the CoreDNS configuration")
 
 	opts := zap.Options{Development: debug}
 	opts.BindFlags(flag.CommandLine)
@@ -56,13 +74,47 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	if _, ok := dns.IsDomainName(zone); !ok {
-		setupLog.Error(nil, "invalid zone", "zone", zone)
+	cfg, err := envutils.GetGlobalLoomConfig()
+	if err != nil {
+		setupLog.Error(err, "unable to get global loom config")
+		os.Exit(1)
+	}
+
+	if _, ok := dns.IsDomainName(cfg.DNSZone); !ok {
+		setupLog.Error(nil, "invalid zone", "zone", cfg.DNSZone)
 		os.Exit(1)
 	}
 	if ttl > 1<<31-1 {
 		setupLog.Error(nil, "ttl out of range", "ttl", ttl)
 		os.Exit(1)
+	}
+
+	var configurer *coredns.Configurer
+	if configureCoreDNS {
+		configMapNamespace, configMapName, ok := strings.Cut(coreDNSConfigMap, "/")
+		if !ok || configMapNamespace == "" || configMapName == "" {
+			setupLog.Error(nil, "invalid CoreDNS ConfigMap, expected <namespace>/<name>", "configMap", coreDNSConfigMap)
+			os.Exit(1)
+		}
+		serviceNamespace := os.Getenv(podNamespaceEnv)
+		if serviceNamespace == "" {
+			setupLog.Error(nil, "environment variable must be set to configure CoreDNS", "variable", podNamespaceEnv)
+			os.Exit(1)
+		}
+		// A direct client: RBAC only grants access to the named objects, which rules out watches.
+		directClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
+		if err != nil {
+			setupLog.Error(err, "unable to create Kubernetes client")
+			os.Exit(1)
+		}
+		configurer = &coredns.Configurer{
+			Client:    directClient,
+			ConfigMap: types.NamespacedName{Namespace: configMapNamespace, Name: configMapName},
+			Service:   types.NamespacedName{Namespace: serviceNamespace, Name: serviceName},
+			Zone:      cfg.DNSZone,
+			TTL:       uint32(ttl),
+			Log:       ctrl.Log.WithName("coredns"),
+		}
 	}
 
 	ctx := ctrl.SetupSignalHandler()
@@ -97,7 +149,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := server.New(serviceCache, zone, uint32(ttl), ctrl.Log.WithName("dns-server"))
+	if configurer != nil {
+		go configurer.Run(ctx, coreDNSSyncPeriod)
+	}
+
+	handler := server.New(serviceCache, cfg.DNSZone, uint32(ttl), ctrl.Log.WithName("dns-server"))
 
 	var started atomic.Int32
 	notifyStarted := func() {
@@ -112,7 +168,7 @@ func main() {
 	errs := make(chan error, len(servers))
 	for _, srv := range servers {
 		go func() {
-			setupLog.Info("Starting DNS server", "listenAddress", srv.Addr, "net", srv.Net, "zone", zone)
+			setupLog.Info("Starting DNS server", "listenAddress", srv.Addr, "net", srv.Net, "zone", cfg.DNSZone)
 			errs <- srv.ListenAndServe()
 		}()
 	}

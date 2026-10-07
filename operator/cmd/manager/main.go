@@ -252,6 +252,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	serviceCIDR, err := envutils.ParseServiceCIDR()
+	if err != nil {
+		setupLog.Error(err, "Failed to parse service CIDR configuration")
+		os.Exit(1)
+	}
+	serviceIPPool, err := ipam.NewAddrPool(serviceCIDR)
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize service IP pool")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -316,8 +327,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&service.Reconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		ServiceIPs: serviceIPPool,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Service")
 		os.Exit(1)

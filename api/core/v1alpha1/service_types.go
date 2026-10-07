@@ -102,7 +102,7 @@ type ServiceStatus struct {
 	// +optional
 	Hostname string `json:"hostname,omitempty"`
 
-	// ClusterIPs are the virtual IPs allocated to the Service.
+	// ClusterIPs are the virtual IPs allocated to the Service from the loom service CIDR.
 	// +listType=atomic
 	// +optional
 	ClusterIPs []string `json:"clusterIPs,omitempty"`

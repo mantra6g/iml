@@ -131,3 +131,12 @@ func ParseTunnelCIDRConfig() (*TunnelCIDRConfig, error) {
 		TunnelPoolIPv6MaskSize: tunnelPoolIPv6MaskSize,
 	}, nil
 }
+
+// ParseServiceCIDR returns the prefix loom Service virtual IPs are allocated from.
+func ParseServiceCIDR() (netip.Prefix, error) {
+	data, err := os.ReadFile(filepath.Join(DefaultIMLConfigMapPath, "service-cidr"))
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	return netip.ParsePrefix(strings.TrimSpace(string(data)))
+}

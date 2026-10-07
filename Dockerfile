@@ -23,6 +23,7 @@ COPY operator/go.mod operator/go.sum operator/
 COPY tools/go.mod tools/go.sum tools/
 COPY targets/bmv2/go.mod targets/bmv2/go.sum targets/bmv2/
 COPY dpcs/go.mod dpcs/go.sum dpcs/
+COPY dns/go.mod dns/go.sum dns/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     go mod download all
 
@@ -60,6 +61,7 @@ FROM base AS operator-prebuilder
 FROM base AS cni-prebuilder
 FROM base AS targets-bmv2-prebuilder
 FROM base AS dpcs-prebuilder
+FROM base AS dns-prebuilder
 FROM ${MOD}-prebuilder AS prebuilder
 
 # TEST
@@ -119,6 +121,9 @@ FROM gcr.io/distroless/static-debian13:nonroot AS dpcs-preruntime
 USER 65532:65532
 
 FROM alpine:${ALPINEVERSION} AS cni-preruntime
+
+FROM alpine:${ALPINEVERSION} AS dns-preruntime
+USER 65532:65532
 
 FROM ${MOD}-preruntime AS preruntime
 
