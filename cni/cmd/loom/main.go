@@ -194,6 +194,30 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 				return fmt.Errorf("failed to add route: %w", err)
 			}
 		}
+
+		// Route the loom Service CIDR through the iml0 interface
+		if ipv4Enabled && netConfig.ServiceCIDRs.IPv4Net != nil {
+			routeLink := &netlink.Route{
+				LinkIndex: imlInterface.Attrs().Index,
+				Dst:       netConfig.ServiceCIDRs.IPv4Net,
+				Gw:        netConfig.Gateways.IPv4,
+				Scope:     netlink.SCOPE_UNIVERSE,
+			}
+			if err = netlink.RouteAdd(routeLink); err != nil {
+				return fmt.Errorf("failed to add service route: %w", err)
+			}
+		}
+		if ipv6Enabled && netConfig.ServiceCIDRs.IPv6Net != nil {
+			routeLink := &netlink.Route{
+				LinkIndex: imlInterface.Attrs().Index,
+				Dst:       netConfig.ServiceCIDRs.IPv6Net,
+				Gw:        netConfig.Gateways.IPv6,
+				Scope:     netlink.SCOPE_UNIVERSE,
+			}
+			if err = netlink.RouteAdd(routeLink); err != nil {
+				return fmt.Errorf("failed to add service route: %w", err)
+			}
+		}
 		return nil
 	})
 	_ = hostNs.Close()

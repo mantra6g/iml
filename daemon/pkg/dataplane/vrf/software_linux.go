@@ -695,10 +695,11 @@ func (d *Software) ConfigureAppInstance(
 			IPv4Net: d.cfg.ClusterCIDR.IPv4Net,
 			IPv6Net: d.cfg.ClusterCIDR.IPv6Net,
 		},
-		Gateways:  subnet.GatewayIPs,
-		Bridge:    subnet.Bridge.Name,
-		MTU:       DefaultMTU,
-		IfaceName: ifaceName,
+		ServiceCIDRs: d.cfg.ServiceCIDR,
+		Gateways:     subnet.GatewayIPs,
+		Bridge:       subnet.Bridge.Name,
+		MTU:          DefaultMTU,
+		IfaceName:    ifaceName,
 	}, nil
 }
 

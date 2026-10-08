@@ -34,6 +34,7 @@ const (
 
 type IMLConfigMap struct {
 	ClusterCIDR netutils.DualStackNetwork
+	ServiceCIDR netutils.DualStackNetwork
 }
 
 type GlobalConfig struct {
@@ -127,11 +128,27 @@ func readIMLConfigMap() (*IMLConfigMap, error) {
 		return nil, err
 	}
 
+	serviceCidrStr, err := get("service-cidr")
+	if err != nil {
+		return nil, err
+	}
+	_, serviceCidr, err := net.ParseCIDR(serviceCidrStr)
+	if err != nil {
+		return nil, err
+	}
+	var serviceCIDR netutils.DualStackNetwork
+	if serviceCidr.IP.To4() != nil {
+		serviceCIDR.IPv4Net = serviceCidr
+	} else {
+		serviceCIDR.IPv6Net = serviceCidr
+	}
+
 	return &IMLConfigMap{
 		ClusterCIDR: netutils.DualStackNetwork{
 			IPv4Net: ipv4Cidr,
 			IPv6Net: ipv6Cidr,
 		},
+		ServiceCIDR: serviceCIDR,
 	}, nil
 }
 
