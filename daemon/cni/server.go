@@ -123,6 +123,7 @@ func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter,
 	configResponse := &NetworkConfig{
 		IPNets:       instanceConfig.IPs,
 		ClusterCIDRs: instanceConfig.ClusterCIDRs,
+		ServiceCIDRs: instanceConfig.ServiceCIDRs,
 		Gateways:     instanceConfig.Gateways,
 		BridgeName:   instanceConfig.Bridge,
 		IfaceName:    instanceConfig.IfaceName,

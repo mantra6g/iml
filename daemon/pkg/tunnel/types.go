@@ -12,8 +12,8 @@ type Manager interface {
 	DeleteNodeTunnels(nodeName string) error
 	GetTunnelInterface(nodeName string) (string, error)
 	// AddEgressRoute ensures that traffic destined to dst is encapsulated and sent towards the
-	// tunnel endpoint of the node identified by nodeName. It is idempotent and may be called
-	// again to update the destination network(s) routed towards that node's tunnel.
+	// tunnel endpoint of the node identified by nodeName. It is idempotent, and several distinct
+	// destinations may be routed towards the same node's tunnel.
 	AddEgressRoute(nodeName string, dst netutils.DualStackNetwork) error
 	// RemoveEgressRoute undoes a previous AddEgressRoute call for the given node and destination.
 	RemoveEgressRoute(nodeName string, dst netutils.DualStackNetwork) error

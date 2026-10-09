@@ -22,6 +22,7 @@ variable "MODS" {
       {name = "operator", bin = "manager"},
       {name = "daemon", bin = "daemon"},
       {name = "dpcs", bin = "dpcs"},
+      {name = "dns", bin = "dns"},
       {name = "targets-bmv2", bin = "driver"}
     ]
 }

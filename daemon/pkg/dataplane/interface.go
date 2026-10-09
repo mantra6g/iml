@@ -21,6 +21,7 @@ type SRv6Route struct {
 type AppConfig struct {
 	IPs          netutils.DualStackNetwork
 	ClusterCIDRs netutils.DualStackNetwork
+	ServiceCIDRs netutils.DualStackNetwork
 	Gateways     netutils.DualStackAddress
 	Bridge       string
 	IfaceName    string

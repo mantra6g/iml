@@ -1,0 +1,7 @@
+namespace: loom-system
+
+namePrefix: loom-
+
+resources:
+- ../manager
+- ../rbac

@@ -11,6 +11,7 @@ import (
 type NetworkConfig struct {
 	IPNets       netutils.DualStackNetwork `json:"ip_nets"`
 	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
+	ServiceCIDRs netutils.DualStackNetwork `json:"service_cidrs"`
 	Gateways     netutils.DualStackAddress `json:"gateways"`
 	IfaceName    string                    `json:"iface_name"`
 	BridgeName   string                    `json:"bridge_name"`

@@ -44,8 +44,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/mantra6g/iml/operator/internal/controller/core/endpointslice"
 	"github.com/mantra6g/iml/operator/internal/controller/core/networkfunction"
 	"github.com/mantra6g/iml/operator/internal/controller/core/p4target"
+	"github.com/mantra6g/iml/operator/internal/controller/core/service"
 	"github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target"
 	"github.com/mantra6g/iml/operator/internal/controller/infra/loomnode"
 	"github.com/mantra6g/iml/operator/internal/controller/scheduling/networkfunctiondeployment"
@@ -250,6 +252,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	serviceCIDR, err := envutils.ParseServiceCIDR()
+	if err != nil {
+		setupLog.Error(err, "Failed to parse service CIDR configuration")
+		os.Exit(1)
+	}
+	serviceIPPool, err := ipam.NewAddrPool(serviceCIDR)
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize service IP pool")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -311,6 +324,21 @@ func main() {
 		Config: bmv2Cfg,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BMv2Target")
+		os.Exit(1)
+	}
+	if err := (&service.Reconciler{
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		ServiceIPs: serviceIPPool,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Service")
+		os.Exit(1)
+	}
+	if err := (&endpointslice.Reconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "EndpointSlice")
 		os.Exit(1)
 	}
 	// nolint:goconst

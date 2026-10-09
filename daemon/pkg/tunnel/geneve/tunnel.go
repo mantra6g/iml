@@ -25,8 +25,8 @@ type Tunnel struct {
 	// endpoint is the remote node's real (underlay) address, used as the Geneve tunnel
 	// destination for packets routed towards this node.
 	endpoint net.IP
-	// egress holds the destination network(s) currently routed towards this tunnel, if any.
-	egress netutils.DualStackNetwork
+	// egress holds the destination networks currently routed towards this tunnel, keyed by CIDR.
+	egress map[string]*net.IPNet
 }
 
 func NewTunnel(
@@ -67,6 +67,7 @@ func NewTunnel(
 		ip6t:        ip6tables,
 		tunnelIface: tunnelIface,
 		vrfName:     vrfName,
+		egress:      make(map[string]*net.IPNet),
 	}
 	if err = nodeTunnel.UpdateDestinationNode(loomNode); err != nil {
 		return nil, fmt.Errorf("failed to update destination node: %v", err)
@@ -114,8 +115,8 @@ func (t *Tunnel) UpdateDestinationNode(loomNode *infrav1alpha1.LoomNode) (err er
 	}
 	// If egress routes were already installed, refresh them so they encapsulate towards the
 	// (possibly new) endpoint address(es) we just resolved.
-	if !t.egress.IsEmpty() {
-		if err = t.AddEgressRoute(t.egress); err != nil {
+	if len(t.egress) > 0 {
+		if err = t.installEgressRoutes(t.egressRoutes()...); err != nil {
 			return fmt.Errorf("failed to refresh egress routes: %v", err)
 		}
 	}
@@ -129,6 +130,19 @@ func (t *Tunnel) UpdateDestinationNode(loomNode *infrav1alpha1.LoomNode) (err er
 // own, so without this metadata attached to the route, outgoing packets are silently dropped by
 // the Geneve driver instead of being encapsulated and sent out.
 func (t *Tunnel) AddEgressRoute(dst netutils.DualStackNetwork) error {
+	dsts := make([]*net.IPNet, 0, 2)
+	if dst.IPv4Net != nil {
+		dsts = append(dsts, dst.IPv4Net)
+	}
+	if dst.IPv6Net != nil {
+		dsts = append(dsts, dst.IPv6Net)
+	}
+	return t.installEgressRoutes(dsts...)
+}
+
+// installEgressRoutes replaces the egress route for each of dsts and records them as routed
+// towards this tunnel.
+func (t *Tunnel) installEgressRoutes(dsts ...*net.IPNet) error {
 	link, err := netlink.LinkByName(t.tunnelIface)
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel link %s: %v", t.tunnelIface, err)
@@ -146,31 +160,34 @@ func (t *Tunnel) AddEgressRoute(dst netutils.DualStackNetwork) error {
 	} else {
 		encap = &ipTunnelEncap{dst: t.endpoint}
 	}
-	if dst.IsEmpty() {
-		return nil // Nothing to route, so nothing to do.
-	}
-	if dst.IPv4Net != nil {
-		if err = t.replaceEgressRoute(link, table, dst.IPv4Net, encap); err != nil {
-			return fmt.Errorf("failed to install IPv4 egress route: %v", err)
+	for _, dst := range dsts {
+		if err = t.replaceEgressRoute(link, table, dst, encap); err != nil {
+			return fmt.Errorf("failed to install egress route to %s: %v", dst, err)
 		}
-		t.egress.IPv4Net = dst.IPv4Net
-	}
-	if dst.IPv6Net != nil {
-		if err = t.replaceEgressRoute(link, table, dst.IPv6Net, encap); err != nil {
-			return fmt.Errorf("failed to install IPv6 egress route: %v", err)
-		}
-		t.egress.IPv6Net = dst.IPv6Net
+		t.egress[dst.String()] = dst
 	}
 	return nil
 }
 
 // RemoveEgressRoute removes routes previously installed by AddEgressRoute for dst.
 func (t *Tunnel) RemoveEgressRoute(dst netutils.DualStackNetwork) error {
+	dsts := make([]*net.IPNet, 0, 2)
+	if dst.IPv4Net != nil {
+		dsts = append(dsts, dst.IPv4Net)
+	}
+	if dst.IPv6Net != nil {
+		dsts = append(dsts, dst.IPv6Net)
+	}
+	return t.removeEgressRoutes(dsts...)
+}
+
+// removeEgressRoutes removes the egress route for each of dsts that is routed towards this tunnel.
+func (t *Tunnel) removeEgressRoutes(dsts ...*net.IPNet) error {
 	if _, err := netlink.LinkByName(t.tunnelIface); err != nil {
 		if errors.Is(err, netlink.LinkNotFoundError{}) {
 			// The shared tunnel interface is gone, which takes every route bound to it down with
 			// it, so there's nothing left to remove.
-			t.egress = netutils.DualStackNetwork{}
+			t.egress = make(map[string]*net.IPNet)
 			return nil
 		}
 		return fmt.Errorf("failed to get tunnel link %s: %v", t.tunnelIface, err)
@@ -179,19 +196,25 @@ func (t *Tunnel) RemoveEgressRoute(dst netutils.DualStackNetwork) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve VRF %s: %v", t.vrfName, err)
 	}
-	if dst.IPv4Net != nil && t.egress.IPv4Net != nil {
-		if err = netlink.RouteDel(&netlink.Route{Dst: dst.IPv4Net, Table: table}); err != nil {
-			return fmt.Errorf("failed to remove IPv4 egress route: %v", err)
+	for _, dstNet := range dsts {
+		if _, routed := t.egress[dstNet.String()]; !routed {
+			continue
 		}
-		t.egress.IPv4Net = nil
-	}
-	if dst.IPv6Net != nil && t.egress.IPv6Net != nil {
-		if err = netlink.RouteDel(&netlink.Route{Dst: dst.IPv6Net, Table: table}); err != nil {
-			return fmt.Errorf("failed to remove IPv6 egress route: %v", err)
+		if err = netlink.RouteDel(&netlink.Route{Dst: dstNet, Table: table}); err != nil {
+			return fmt.Errorf("failed to remove egress route to %s: %v", dstNet, err)
 		}
-		t.egress.IPv6Net = nil
+		delete(t.egress, dstNet.String())
 	}
 	return nil
+}
+
+// egressRoutes returns the destination networks currently routed towards this tunnel.
+func (t *Tunnel) egressRoutes() []*net.IPNet {
+	dsts := make([]*net.IPNet, 0, len(t.egress))
+	for _, dst := range t.egress {
+		dsts = append(dsts, dst)
+	}
+	return dsts
 }
 
 // vrfTable resolves the routing table ID backing this tunnel's VRF.
@@ -305,7 +328,7 @@ func (e *ipTunnelEncap) Equal(x netlink.Encap) bool {
 }
 
 func (t *Tunnel) Teardown() error {
-	if err := t.RemoveEgressRoute(t.egress); err != nil {
+	if err := t.removeEgressRoutes(t.egressRoutes()...); err != nil {
 		return fmt.Errorf("failed to remove egress routes: %v", err)
 	}
 	if err := t.ip4t.ClearChain("filter", t.chainName); err != nil {

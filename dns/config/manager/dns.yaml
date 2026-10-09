@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns
+  labels:
+    app: dns
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dns
+  template:
+    metadata:
+      labels:
+        app: dns
+    spec:
+      serviceAccountName: dns
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dns
+          image: dns
+          args:
+            - "--listen-addr=:1053"
+            - "--ttl=5"
+            - "--health-probe-addr=:8081"
+            - "--service-name=loom-dns"
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: dns
+              containerPort: 1053
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 1053
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/iml/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: loom-iml-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns
+  labels:
+    app: dns
+spec:
+  type: ClusterIP
+  selector:
+    app: dns
+  ports:
+    - name: dns
+      protocol: UDP
+      port: 53
+      targetPort: dns
+    - name: dns-tcp
+      protocol: TCP
+      port: 53
+      targetPort: dns-tcp

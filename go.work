@@ -5,6 +5,7 @@ use (
 	cni
 	daemon
 	dpcs
+	dns
 	operator
 	targets/bmv2
 	tools

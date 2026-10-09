@@ -110,7 +110,7 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 		return nil, fmt.Errorf("failed to attach program to bridge %s: %w", bridgeName, err)
 	}
 
-	decapPeerName := fmt.Sprintf("%spipe", DecapInterfaceName)
+	decapPeerName := DecapPeerInterfaceName
 	decapIface := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: DecapInterfaceName,
@@ -472,6 +472,10 @@ func (r *RoutingSubnet) GetStack() StackType {
 
 func (r *RoutingSubnet) GetVRFName() string {
 	return r.Vrf.Name
+}
+
+func (r *RoutingSubnet) GetVRFTable() uint32 {
+	return r.Vrf.Table
 }
 
 func (r *RoutingSubnet) SetTunnel(_ string) {}

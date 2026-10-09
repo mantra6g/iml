@@ -468,6 +468,10 @@ func (s *AppSubnet) GetVRFName() string {
 	return s.Vrf.Name
 }
 
+func (s *AppSubnet) GetVRFTable() uint32 {
+	return s.Vrf.Table
+}
+
 func reversed[T any](slice []T) []T {
 	result := make([]T, len(slice))
 	for i := range slice {

@@ -44,6 +44,13 @@ spec:
           image: nginx:latest
           ports:
             - containerPort: 80
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -89,3 +96,10 @@ spec:
         - name: web-client
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"

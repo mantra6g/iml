@@ -12,3 +12,6 @@ data:
   tunnel-pool-ipv4-mask-size: "24"
   tunnel-pool-ipv6-cidr: "fd01::/16"
   tunnel-pool-ipv6-mask-size: "64"
+  service-cidr: "10.112.0.0/16"
+  dns-zone: "loom.local"
+

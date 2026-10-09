@@ -82,9 +82,16 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:latest
+          image: nginx:1.31.6-alpine
           ports:
             - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -130,3 +137,22 @@ spec:
         - name: web-client
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Service
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  selector:
+    app: web-server
+  ports:
+    - protocol: TCP
+      port: 80

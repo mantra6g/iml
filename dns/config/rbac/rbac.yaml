@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dns
+  namespace: system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dns-service-viewer-role
+rules:
+  - apiGroups:
+      - core.loom.io
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dns-service-viewer-binding
+subjects:
+  - kind: ServiceAccount
+    name: dns
+    namespace: system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dns-service-viewer-role
+---
+# A ClusterRole because the namespace transformer would move a Role out of kube-system.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dns-coredns-editor-role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - coredns
+    verbs:
+      - get
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dns-coredns-editor-binding
+subjects:
+  - kind: ServiceAccount
+    name: dns
+    namespace: system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dns-coredns-editor-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dns-service-reader-role
+  namespace: system
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    resourceNames:
+      - loom-dns
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dns-service-reader-binding
+  namespace: system
+subjects:
+  - kind: ServiceAccount
+    name: dns
+    namespace: system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dns-service-reader-role

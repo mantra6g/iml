@@ -56,6 +56,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// Node hasn't been allocated pod CIDRs yet.
 		return ctrl.Result{}, nil
 	}
+	if len(loomNode.Spec.Addresses) == 0 {
+		// Node hasn't published its addresses yet, so its tunnel has no endpoint to route towards.
+		return ctrl.Result{}, nil
+	}
 	cidrs, err := vrfutil.ParseDualStackNetworkFromStrings(loomNode.Spec.NodeCIDRs)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to parse node CIDRs for %s: %w", loomNode.Name, err)

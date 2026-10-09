@@ -32,6 +32,13 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: 80
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,6 +73,13 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: 80
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -100,6 +114,13 @@ spec:
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
           ports:
             - containerPort: 80
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -134,6 +155,13 @@ spec:
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
           ports:
             - containerPort: 80
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -177,6 +205,13 @@ spec:
             "--port", "3000",
             "--proto", "both"
           ]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -220,6 +255,13 @@ spec:
             "--port", "3000",
             "--proto", "both"
           ]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -307,6 +349,13 @@ spec:
             "--dummy-app-label-value", "dummy-web-server",
             "--lb-app-label-value", "web-server"
           ]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -347,4 +396,11 @@ spec:
             "--dummy-app-label-value", "dummy-streaming-server",
             "--lb-app-label-value", "streaming-server"
           ]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
 ---
