@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	"github.com/mantra6g/iml/daemon/pkg/tunnel"
@@ -28,6 +29,7 @@ const (
 type NodeName = string
 
 type TunnelManager struct {
+	mu              sync.Mutex
 	tunnelInterface string
 	tunnels         map[NodeName]*Tunnel
 	ip4t            *iptables.IPTables
@@ -213,6 +215,9 @@ func deleteChains(ip4t, ip6t *iptables.IPTables) error {
 }
 
 func (mgr *TunnelManager) Shutdown(ctx context.Context) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	mgr.log.V(1).Info("Closing tunnel manager")
 	err := deleteChains(mgr.ip4t, mgr.ip6t)
 	if err != nil {
@@ -239,6 +244,9 @@ func (mgr *TunnelManager) Shutdown(ctx context.Context) error {
 }
 
 func (mgr *TunnelManager) UpdateNodeTunnels(loomNode *infrav1alpha1.LoomNode) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	tun, exists := mgr.tunnels[loomNode.Name]
 	if exists {
 		if err := tun.UpdateDestinationNode(loomNode); err != nil {
@@ -255,6 +263,9 @@ func (mgr *TunnelManager) UpdateNodeTunnels(loomNode *infrav1alpha1.LoomNode) er
 }
 
 func (mgr *TunnelManager) AddEgressRoute(nodeName string, dst netutils.DualStackNetwork) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	tun, exists := mgr.tunnels[nodeName]
 	if !exists {
 		return fmt.Errorf("no Geneve tunnel exists yet for node %s", nodeName)
@@ -266,6 +277,9 @@ func (mgr *TunnelManager) AddEgressRoute(nodeName string, dst netutils.DualStack
 }
 
 func (mgr *TunnelManager) RemoveEgressRoute(nodeName string, dst netutils.DualStackNetwork) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	tun, exists := mgr.tunnels[nodeName]
 	if !exists {
 		return nil // Tunnel already doesn't exist, nothing to remove
@@ -277,6 +291,9 @@ func (mgr *TunnelManager) RemoveEgressRoute(nodeName string, dst netutils.DualSt
 }
 
 func (mgr *TunnelManager) DeleteNodeTunnels(nodeName string) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	tun, exists := mgr.tunnels[nodeName]
 	if !exists {
 		return nil // Tunnel already doesn't exist, skip

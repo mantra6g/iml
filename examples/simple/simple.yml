@@ -82,7 +82,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:latest
+          image: nginx:1.31.6-alpine
           ports:
             - containerPort: 80
           resources:
@@ -144,3 +144,15 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "500m"
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Service
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  selector:
+    app: web-server
+  ports:
+    - protocol: TCP
+      port: 80

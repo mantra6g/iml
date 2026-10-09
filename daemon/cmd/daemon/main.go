@@ -128,9 +128,11 @@ func main() {
 		os.Exit(1)
 	}
 	err = (&p4tcontroller.Reconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Dataplane: dataPlane,
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		Dataplane:     dataPlane,
+		TunnelManager: tunnelMgr,
+		Config:        config,
 	}).SetupWithManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to set up p4target controller")

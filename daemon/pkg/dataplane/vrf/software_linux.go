@@ -820,10 +820,15 @@ func (d *Software) RemoveAppRoutes(app client.ObjectKey) error {
 	return nil
 }
 
+// UpdateP4TargetRoutes routes the target's NF CIDR to the target through the routing bridge. It
+// only applies on the node hosting the target, since the target's IPs are on-link there alone.
 func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
+	if target.Status.NodeName != d.cfg.NodeName {
+		return nil
+	}
 	if len(target.Status.TargetIPs) == 0 || len(target.Status.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
 		// We don't have enough information about the object yet to update its routes.
 		return nil
