@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 
 	"github.com/mantra6g/iml/daemon/env"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane"
 	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
+	"github.com/mantra6g/iml/daemon/pkg/tunnel/geneve"
 	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -37,11 +39,20 @@ const (
 	// DecapInterfaceName sets the name for the SRv6 decapsulation interface in the router VRF.
 	DecapInterfaceName = "decap0"
 
+	// DecapPeerInterfaceName sets the name for the peer of the SRv6 decapsulation interface in the router VRF.
+	DecapPeerInterfaceName = DecapInterfaceName + "pipe"
+
 	// DefaultSRv6TableName set the name for the iptable table used for allowing SRv6 traffic in the cluster.
 	DefaultSRv6TableName = "IML-SRV6"
 
+	// CTZoneChainName is the raw-table chain that assigns the router VRF's conntrack zone to traffic entering the router VRF.
+	CTZoneChainName = "IML-CT-ZONES"
+
 	// SRv6PacketMark
 	SRv6PacketMark = "0x10000000"
+
+	// NoSNATRuleComment is the comment attached to the nat rule that prevents SNAT of intra-cluster traffic.
+	NoSNATRuleComment = "iml-srv6: no SNAT inside fabric"
 )
 
 type Software struct {
@@ -158,6 +169,10 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 	if err = os.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte("0"), 0644); err != nil {
 		return nil, fmt.Errorf("failed to disable rp_filter: %w", err)
 	}
+	// Enable LWTunnel hooks.
+	if err = os.WriteFile("/proc/sys/net/netfilter/nf_hooks_lwtunnel", []byte("1"), 0644); err != nil {
+		return nil, fmt.Errorf("failed to enable LWTunnel hooks: %w", err)
+	}
 	rtrSubnet, err := NewRoutingSubnet(logger.WithName("routing-subnet"), routingIPNet, routingSIDNet, rtrVrfTable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
@@ -182,13 +197,17 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ip4t: %w", err)
 		}
-		err = ensureRawIPTables4RulesArePresent(ip4t, cfg.ClusterCIDR.IPv4Net)
+		err = ensureNatIPTables4RulesArePresent(ip4t, cfg.ClusterCIDR.IPv4Net)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create nat IPv4 iptables rules: %w", err)
+		}
+		err = ensureRawIPTablesRulesArePresent(ip4t)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create raw IPv4 iptables rules: %w", err)
 		}
 	}
 
-	return &Software{
+	d := &Software{
 		appNet4Allocator:   net4Allocator,
 		appNet6Allocator:   net6Allocator,
 		tunNet4Allocator:   tunnel4Allocator,
@@ -203,7 +222,12 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 		cfg:                cfg,
 		Client:             k8sClient,
 		log:                logger,
-	}, nil
+	}
+	err = d.addRouterVRFCTZoneRules()
+	if err != nil {
+		return nil, fmt.Errorf("failed to add router VRF CT zone rules: %w", err)
+	}
+	return d, nil
 }
 
 func (d *Software) Shutdown(ctx context.Context) error {
@@ -220,16 +244,20 @@ func (d *Software) Shutdown(ctx context.Context) error {
 	}
 
 	// Delete iptables rules
-	err := ensureRawIPTablesRulesAreRemoved(d.ipt)
-	if err != nil {
-		d.log.Error(err, "failed to remove iptables rules. Ignoring error...")
-	}
-	err = ensureFilterIPTablesRulesAreRemoved(d.ipt)
+	err := ensureFilterIPTablesRulesAreRemoved(d.ipt)
 	if err != nil {
 		d.log.Error(err, "failed to remove filter iptables rules. Ignoring error...")
 	}
+	err = ensureRawIPTablesRulesAreRemoved(d.ipt)
+	if err != nil {
+		d.log.Error(err, "failed to remove raw iptables rules. Ignoring error...")
+	}
 	if d.ip4t != nil {
-		err = ensureRawIPTables4RulesAreRemoved(d.ip4t)
+		err = ensureNatIPTables4RulesAreRemoved(d.ip4t, d.cfg.ClusterCIDR.IPv4Net)
+		if err != nil {
+			d.log.Error(err, "failed to remove nat IPv4 iptables rules. Ignoring error...")
+		}
+		err = ensureRawIPTablesRulesAreRemoved(d.ip4t)
 		if err != nil {
 			d.log.Error(err, "failed to remove raw IPv4 iptables rules. Ignoring error...")
 		}
@@ -270,88 +298,104 @@ func ensureFilterIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	return nil
 }
 
+// ensureRawIPTablesRulesArePresent creates (or flushes) the chain holding the per-tunnel conntrack zone
+// rules and hooks it at the top of the raw PREROUTING chain.
 func ensureRawIPTablesRulesArePresent(ipt *iptables.IPTables) error {
-	err := ipt.ClearChain("raw", DefaultSRv6TableName)
+	err := ipt.ClearChain("raw", CTZoneChainName)
 	if err != nil {
-		return fmt.Errorf("failed to clear iptables chain: %w", err)
-	}
-	err = ipt.Append("raw", DefaultSRv6TableName,
-		"-m", "rt", "--rt-type", "4",
-		"-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", SRv6PacketMark, SRv6PacketMark))
-	if err != nil {
-		return fmt.Errorf("failed to append SRv6 accept rule: %w", err)
-	}
-	err = ipt.Append("raw", DefaultSRv6TableName,
-		"-m", "mark", "--mark", SRv6PacketMark, "-j", "NOTRACK")
-	if err != nil {
-		return fmt.Errorf("failed to append return rule: %w", err)
+		return fmt.Errorf("failed to clear %s chain: %w", CTZoneChainName, err)
 	}
 	err = ipt.DeleteIfExists("raw", "PREROUTING",
-		"-j", DefaultSRv6TableName)
+		"-j", CTZoneChainName)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
 	}
 	err = ipt.InsertUnique("raw", "PREROUTING", 1,
-		"-j", DefaultSRv6TableName)
+		"-j", CTZoneChainName)
 	if err != nil {
 		return fmt.Errorf("failed to insert hook rule to PREROUTING chain: %w", err)
-	}
-	return nil
-}
-
-func ensureRawIPTables4RulesArePresent(ipt *iptables.IPTables, appNet *net.IPNet) error {
-	err := ipt.ClearChain("raw", DefaultSRv6TableName)
-	if err != nil {
-		return fmt.Errorf("failed to clear iptables chain: %w", err)
-	}
-	err = ipt.Append("raw", DefaultSRv6TableName,
-		"-s", appNet.String(), "-d", appNet.String(), "-j", "NOTRACK")
-	if err != nil {
-		return fmt.Errorf("failed to append NOTRACK rule: %w", err)
-	}
-	err = ipt.DeleteIfExists("raw", "PREROUTING",
-		"-j", DefaultSRv6TableName)
-	if err != nil {
-		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
-	}
-	err = ipt.InsertUnique("raw", "PREROUTING", 1,
-		"-j", DefaultSRv6TableName)
-	if err != nil {
-		return fmt.Errorf("failed to insert hook rule to PREROUTING chain: %w", err)
-	}
-	return nil
-}
-
-func ensureRawIPTables4RulesAreRemoved(ipt *iptables.IPTables) error {
-	err := ipt.ClearChain("raw", DefaultSRv6TableName)
-	if err != nil {
-		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
-	}
-	err = ipt.DeleteIfExists("raw", "PREROUTING",
-		"-j", DefaultSRv6TableName)
-	if err != nil {
-		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
-	}
-	err = ipt.DeleteChain("raw", DefaultSRv6TableName)
-	if err != nil {
-		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
 	}
 	return nil
 }
 
 func ensureRawIPTablesRulesAreRemoved(ipt *iptables.IPTables) error {
-	err := ipt.ClearChain("raw", DefaultSRv6TableName)
+	err := ipt.ClearChain("raw", CTZoneChainName)
 	if err != nil {
-		return fmt.Errorf("failed to clear %s chain: %w", DefaultSRv6TableName, err)
+		return fmt.Errorf("failed to clear %s chain: %w", CTZoneChainName, err)
 	}
 	err = ipt.DeleteIfExists("raw", "PREROUTING",
-		"-j", DefaultSRv6TableName)
+		"-j", CTZoneChainName)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing hook rule to PREROUTING chain: %w", err)
 	}
-	err = ipt.DeleteChain("raw", DefaultSRv6TableName)
+	err = ipt.DeleteChain("raw", CTZoneChainName)
 	if err != nil {
-		return fmt.Errorf("failed to delete %s chain: %w", DefaultSRv6TableName, err)
+		return fmt.Errorf("failed to delete %s chain: %w", CTZoneChainName, err)
+	}
+	return nil
+}
+
+// addRouterVRFCTZoneRules places traffic entering the router VRF through its static interfaces into the
+// router VRF's conntrack zone.
+func (d *Software) addRouterVRFCTZoneRules() error {
+	ifaces := []string{
+		geneve.TunnelName,
+		d.routingSubnet.Bridge.Name,
+		DecapInterfaceName,
+		DecapPeerInterfaceName,
+	}
+	for _, iface := range ifaces {
+		err := d.addCTZoneRule(iface, d.routingSubnet.Vrf.Table)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// addCTZoneRule places traffic entering a VRF through ifaceName into conntrack zone `zone`.
+func (d *Software) addCTZoneRule(ifaceName string, zone uint32) error {
+	rule := []string{"-i", ifaceName, "-j", "CT", "--zone", strconv.FormatUint(uint64(zone), 10)}
+	err := d.ipt.AppendUnique("raw", CTZoneChainName, rule...)
+	if err != nil {
+		return fmt.Errorf("failed to append IPv6 CT zone rule for %s: %w", ifaceName, err)
+	}
+	if d.ip4t != nil {
+		err = d.ip4t.AppendUnique("raw", CTZoneChainName, rule...)
+		if err != nil {
+			return fmt.Errorf("failed to append IPv4 CT zone rule for %s: %w", ifaceName, err)
+		}
+	}
+	return nil
+}
+
+func noSNATRule(clusterNet *net.IPNet) []string {
+	return []string{
+		"-s", clusterNet.String(), "-d", clusterNet.String(),
+		"-m", "comment", "--comment", NoSNATRuleComment,
+		"-j", "ACCEPT",
+	}
+}
+
+// ensureNatIPTables4RulesArePresent prevents intra-cluster traffic from being SNATed by
+// other POSTROUTING rules (e.g. kube-proxy masquerading).
+func ensureNatIPTables4RulesArePresent(ipt *iptables.IPTables, clusterNet *net.IPNet) error {
+	rule := noSNATRule(clusterNet)
+	err := ipt.DeleteIfExists("nat", "POSTROUTING", rule...)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing no-SNAT rule from POSTROUTING chain: %w", err)
+	}
+	err = ipt.Insert("nat", "POSTROUTING", 1, rule...)
+	if err != nil {
+		return fmt.Errorf("failed to insert no-SNAT rule to POSTROUTING chain: %w", err)
+	}
+	return nil
+}
+
+func ensureNatIPTables4RulesAreRemoved(ipt *iptables.IPTables, clusterNet *net.IPNet) error {
+	err := ipt.DeleteIfExists("nat", "POSTROUTING", noSNATRule(clusterNet)...)
+	if err != nil {
+		return fmt.Errorf("failed to delete no-SNAT rule from POSTROUTING chain: %w", err)
 	}
 	return nil
 }
@@ -590,6 +634,19 @@ func (d *Software) createSubnetToSubnetTunnels(sub1, sub2 Subnet) (sub1TunData, 
 	err = netlink.LinkSetMaster(tun2, vrf2)
 	if err != nil {
 		return
+	}
+	// Traffic entering the router VRF through its tunnel end is tracked in the router VRF's conntrack zone.
+	if sub1.GetVRFName() == RoutingVRFName {
+		err = d.addCTZoneRule(tunName1, d.routingSubnet.Vrf.Table)
+		if err != nil {
+			return
+		}
+	}
+	if sub2.GetVRFName() == RoutingVRFName {
+		err = d.addCTZoneRule(tunName2, d.routingSubnet.Vrf.Table)
+		if err != nil {
+			return
+		}
 	}
 	err = netlink.AddrAdd(tun1, &netlink.Addr{IPNet: tun1IPv6})
 	if err != nil {
