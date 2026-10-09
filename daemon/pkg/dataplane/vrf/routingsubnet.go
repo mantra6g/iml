@@ -474,4 +474,8 @@ func (r *RoutingSubnet) GetVRFName() string {
 	return r.Vrf.Name
 }
 
+func (r *RoutingSubnet) GetVRFTable() uint32 {
+	return r.Vrf.Table
+}
+
 func (r *RoutingSubnet) SetTunnel(_ string) {}

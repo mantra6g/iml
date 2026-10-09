@@ -90,6 +90,7 @@ type Subnet interface {
 	GetGateway() netutils.DualStackAddress
 	GetStack() StackType
 	GetVRFName() string
+	GetVRFTable() uint32
 	SetTunnel(string)
 }
 
@@ -353,9 +354,61 @@ func (d *Software) addRouterVRFCTZoneRules() error {
 	return nil
 }
 
+// addAppSubnetCTZoneRules places traffic entering an app subnet's VRF through its static interfaces
+// into that VRF's conntrack zone.
+func (d *Software) addAppSubnetCTZoneRules(subnet *AppSubnet) error {
+	for _, iface := range appSubnetCTZoneInterfaces(subnet) {
+		err := d.addCTZoneRule(iface, subnet.Vrf.Table)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// removeAppSubnetCTZoneRules removes the conntrack zone rules of an app subnet's static interfaces.
+func (d *Software) removeAppSubnetCTZoneRules(subnet *AppSubnet) error {
+	for _, iface := range appSubnetCTZoneInterfaces(subnet) {
+		err := d.removeCTZoneRule(iface, subnet.Vrf.Table)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// appSubnetCTZoneInterfaces returns the static interfaces through which traffic enters an app subnet's VRF:
+// the VRF end of the bridge-VRF veth pair and the bridge itself.
+func appSubnetCTZoneInterfaces(subnet *AppSubnet) []string {
+	return []string{
+		subnet.VethBridgeVRF.PeerName,
+		subnet.Bridge.Name,
+	}
+}
+
+func ctZoneRule(ifaceName string, zone uint32) []string {
+	return []string{"-i", ifaceName, "-j", "CT", "--zone", strconv.FormatUint(uint64(zone), 10)}
+}
+
+// removeCTZoneRule removes the rule added by addCTZoneRule.
+func (d *Software) removeCTZoneRule(ifaceName string, zone uint32) error {
+	rule := ctZoneRule(ifaceName, zone)
+	err := d.ipt.DeleteIfExists("raw", CTZoneChainName, rule...)
+	if err != nil {
+		return fmt.Errorf("failed to delete IPv6 CT zone rule for %s: %w", ifaceName, err)
+	}
+	if d.ip4t != nil {
+		err = d.ip4t.DeleteIfExists("raw", CTZoneChainName, rule...)
+		if err != nil {
+			return fmt.Errorf("failed to delete IPv4 CT zone rule for %s: %w", ifaceName, err)
+		}
+	}
+	return nil
+}
+
 // addCTZoneRule places traffic entering a VRF through ifaceName into conntrack zone `zone`.
 func (d *Software) addCTZoneRule(ifaceName string, zone uint32) error {
-	rule := []string{"-i", ifaceName, "-j", "CT", "--zone", strconv.FormatUint(uint64(zone), 10)}
+	rule := ctZoneRule(ifaceName, zone)
 	err := d.ipt.AppendUnique("raw", CTZoneChainName, rule...)
 	if err != nil {
 		return fmt.Errorf("failed to append IPv6 CT zone rule for %s: %w", ifaceName, err)
@@ -511,15 +564,34 @@ func (d *Software) addApplicationSubnet(appID types.NamespacedName) (subnet *App
 		return nil, fmt.Errorf("failed to create application subnet: %w", err)
 	}
 
-	// From now on, if any errors happen when configuring this subnet, tear it down
+	// From now on, if any errors happen when configuring this subnet, tear it down.
+	// The subnet is captured here because returning nil resets the named result before the defer runs.
+	newSubnet := subnet
+	var routingSubnetTunData, newSubnetTunData *subnetTunData
 	defer func() {
 		if err != nil {
 			logger.Error(err, "Failed to add application subnet")
-			subnet.Teardown()
+			if ctErr := d.removeAppSubnetCTZoneRules(newSubnet); ctErr != nil {
+				logger.Error(ctErr, "failed to remove app subnet CT zone rules. Ignoring error...")
+			}
+			if routingSubnetTunData != nil && newSubnetTunData != nil {
+				if ctErr := d.removeCTZoneRule(routingSubnetTunData.InterfaceName, d.routingSubnet.Vrf.Table); ctErr != nil {
+					logger.Error(ctErr, "failed to remove routing subnet tunnel CT zone rule. Ignoring error...")
+				}
+				if ctErr := d.removeCTZoneRule(newSubnetTunData.InterfaceName, newSubnet.Vrf.Table); ctErr != nil {
+					logger.Error(ctErr, "failed to remove app subnet tunnel CT zone rule. Ignoring error...")
+				}
+			}
+			newSubnet.Teardown()
 		}
 	}()
 
-	routingSubnetTunData, newSubnetTunData, err := d.createSubnetToSubnetTunnels(d.routingSubnet, subnet)
+	err = d.addAppSubnetCTZoneRules(subnet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add app subnet CT zone rules: %w", err)
+	}
+
+	routingSubnetTunData, newSubnetTunData, err = d.createSubnetToSubnetTunnels(d.routingSubnet, subnet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create subnet to application subnet: %w", err)
 	}
@@ -635,18 +707,25 @@ func (d *Software) createSubnetToSubnetTunnels(sub1, sub2 Subnet) (sub1TunData, 
 	if err != nil {
 		return
 	}
-	// Traffic entering the router VRF through its tunnel end is tracked in the router VRF's conntrack zone.
-	if sub1.GetVRFName() == RoutingVRFName {
-		err = d.addCTZoneRule(tunName1, d.routingSubnet.Vrf.Table)
+	// Traffic entering each VRF through its tunnel end is tracked in that VRF's conntrack zone.
+	// The caller doesn't learn the tunnel names on failure, so the rules are removed here.
+	defer func() {
 		if err != nil {
-			return
+			if ctErr := d.removeCTZoneRule(tunName1, sub1.GetVRFTable()); ctErr != nil {
+				d.log.Error(ctErr, "failed to remove tunnel CT zone rule. Ignoring error...", "tunnel", tunName1)
+			}
+			if ctErr := d.removeCTZoneRule(tunName2, sub2.GetVRFTable()); ctErr != nil {
+				d.log.Error(ctErr, "failed to remove tunnel CT zone rule. Ignoring error...", "tunnel", tunName2)
+			}
 		}
+	}()
+	err = d.addCTZoneRule(tunName1, sub1.GetVRFTable())
+	if err != nil {
+		return
 	}
-	if sub2.GetVRFName() == RoutingVRFName {
-		err = d.addCTZoneRule(tunName2, d.routingSubnet.Vrf.Table)
-		if err != nil {
-			return
-		}
+	err = d.addCTZoneRule(tunName2, sub2.GetVRFTable())
+	if err != nil {
+		return
 	}
 	err = netlink.AddrAdd(tun1, &netlink.Addr{IPNet: tun1IPv6})
 	if err != nil {
