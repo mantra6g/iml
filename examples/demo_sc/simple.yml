@@ -18,7 +18,7 @@ metadata:
   name: pkt-logger-1
   namespace: default
   labels:
-    nf: logger
+    nf: logger-1
 spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/logger.p4"
   targetSelector:
@@ -30,7 +30,7 @@ metadata:
   name: pkt-logger-2
   namespace: default
   labels:
-    nf: logger
+    nf: logger-2
 spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/logger.p4"
   targetSelector:
@@ -41,6 +41,15 @@ kind: BMv2Target
 metadata:
   name: bmv2-target-1
 spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: web-client
+        namespaces:
+        - default
+        topologyKey: "kubernetes.io/hostname"
   resources:
     requests:
       cpu: "500m"
@@ -54,6 +63,15 @@ kind: BMv2Target
 metadata:
   name: bmv2-target-2
 spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: web-server
+        namespaces:
+        - default
+        topologyKey: "kubernetes.io/hostname"
   resources:
     requests:
       cpu: "500m"
@@ -76,9 +94,9 @@ spec:
     namespace: default
   functions:
     - matchLabels:
-        nf: logger
+        nf: logger-1
     - matchLabels:
-        nf: logger
+        nf: logger-2
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -108,6 +126,15 @@ spec:
             }
           ]
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: web-server
+            namespaces:
+            - default
+            topologyKey: "kubernetes.io/hostname"
       containers:
         - name: nginx
           image: nginx:1.31.6-alpine
@@ -148,19 +175,6 @@ spec:
             }
           ]
     spec:
-      affinity:
-        podAntiAffinity:
-          # This changed from 'required' to 'preferred'
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - web-server
-                topologyKey: "kubernetes.io/hostname"
       containers:
         - name: web-client
           image: alpine:3.20
