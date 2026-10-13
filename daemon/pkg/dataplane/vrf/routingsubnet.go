@@ -1,6 +1,7 @@
 package vrf
 
 import (
+	"errors"
 	"fmt"
 	"github.com/mantra6g/iml/daemon/ebpf"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
@@ -62,6 +63,11 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 		return nil, fmt.Errorf("failed to create IPv6 allocator for routing subnet: %w", err)
 	}
 	subnet.SIDAllocator = sidIP6Allocator
+
+	// Links from a previous run that exited without tearing down would make LinkAdd fail with EEXIST.
+	if err = cleanupStaleRoutingSubnet(logger); err != nil {
+		return nil, fmt.Errorf("failed to clean up stale routing subnet: %w", err)
+	}
 
 	routerVrf := &netlink.Vrf{
 		LinkAttrs: netlink.LinkAttrs{
@@ -197,6 +203,49 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 	subnet.DecapSIDv4 = decapSidv4
 	subnet.Vrf = routerVrf
 	return subnet, nil
+}
+
+// cleanupStaleRoutingSubnet removes the router VRF, the bridges enslaved to it and the decap veth pair
+// left behind by a previous daemon run. Missing links are ignored.
+func cleanupStaleRoutingSubnet(logger logr.Logger) error {
+	routerVrf, err := netlink.LinkByName(RoutingVRFName)
+	if err == nil {
+		links, err := netlink.LinkList()
+		if err != nil {
+			return fmt.Errorf("failed to list links: %w", err)
+		}
+		for _, link := range links {
+			if link.Attrs().MasterIndex != routerVrf.Attrs().Index || link.Type() != "bridge" {
+				continue
+			}
+			logger.Info("Deleting stale routing subnet bridge", "bridge", link.Attrs().Name)
+			if err = netlink.LinkDel(link); err != nil {
+				return fmt.Errorf("failed to delete stale bridge %s: %w", link.Attrs().Name, err)
+			}
+		}
+		logger.Info("Deleting stale router VRF", "vrf", RoutingVRFName)
+		if err = netlink.LinkDel(routerVrf); err != nil {
+			return fmt.Errorf("failed to delete stale router VRF: %w", err)
+		}
+	} else if !errors.As(err, &netlink.LinkNotFoundError{}) {
+		return fmt.Errorf("failed to get router VRF: %w", err)
+	}
+
+	// Deleting one end of a veth pair also deletes its peer, so the peer is usually gone by the second lookup.
+	for _, name := range []string{DecapInterfaceName, DecapPeerInterfaceName} {
+		link, err := netlink.LinkByName(name)
+		if errors.As(err, &netlink.LinkNotFoundError{}) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("failed to get %s: %w", name, err)
+		}
+		logger.Info("Deleting stale decap interface", "interface", name)
+		if err = netlink.LinkDel(link); err != nil {
+			return fmt.Errorf("failed to delete stale %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func (r *RoutingSubnet) Teardown() {

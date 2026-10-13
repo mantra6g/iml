@@ -99,7 +99,7 @@ type P4TargetInstance struct {
 	ifaceName string
 }
 
-func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Client) (dataplane.Dataplane, error) {
+func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Client) (_ dataplane.Dataplane, err error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("global config is nil")
 	}
@@ -178,6 +178,12 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 	if err != nil {
 		return nil, fmt.Errorf("failed to create routing subnet: %w", err)
 	}
+	// Nothing is registered with the janitor until NewSoftware returns, so undo the routing subnet here.
+	defer func() {
+		if err != nil {
+			rtrSubnet.Teardown()
+		}
+	}()
 
 	ip6t, err := iptables.New(iptables.IPFamily(iptables.ProtocolIPv6))
 	if err != nil {
