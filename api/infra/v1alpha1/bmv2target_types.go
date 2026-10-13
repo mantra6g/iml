@@ -50,6 +50,10 @@ type BMv2TargetSpec struct {
 	// Resources defines the compute resource requirements for the BMv2 target.
 	// +optional
 	Resources ResourceRequirements `json:"resources,omitempty,omitzero"`
+
+	// Affinity defines the node affinity for the BMv2 target.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty,omitzero"`
 }
 
 type BMv2TargetConditionType string

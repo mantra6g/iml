@@ -204,4 +204,80 @@ var _ = Describe("NetworkFunction Controller", func() {
 			}).Should(Succeed())
 		})
 	})
+
+	Context("When scheduling several network functions at once", func() {
+		const nfNamespace = "default"
+		const targetName = "test-target-concurrent"
+		const targetArchitecture = "v1model-concurrent"
+		nfNames := []string{"test-nf-concurrent-a", "test-nf-concurrent-b", "test-nf-concurrent-c"}
+		ctx := context.Background()
+
+		boundNFs := func(g Gomega) int {
+			bound := 0
+			for _, name := range nfNames {
+				nf := &corev1alpha1.NetworkFunction{}
+				g.Expect(k8sClient.Get(ctx, ctrlclient.ObjectKey{Name: name, Namespace: nfNamespace}, nf)).To(Succeed())
+				if nf.Spec.TargetName == targetName {
+					bound++
+				}
+			}
+			return bound
+		}
+
+		It("should not schedule more network functions than the target has slots", func() {
+			By("Creating a ready target with 1 nf-slot")
+			targetResource := &corev1alpha1.P4Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      targetName,
+					Namespace: nfNamespace,
+					Labels: map[string]string{
+						corev1alpha1.P4TargetArchitectureLabel: targetArchitecture,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, targetResource) })
+
+			targetResource.Status.Conditions = []corev1alpha1.P4TargetCondition{{
+				Type:   corev1alpha1.P4TargetConditionReady,
+				Status: metav1.ConditionTrue,
+			}}
+			targetResource.Status.Capacity = corev1.ResourceList{
+				"loom.io/nf-slots": *res.NewQuantity(1, res.DecimalSI),
+			}
+			Expect(k8sClient.Status().Update(ctx, targetResource)).To(Succeed())
+
+			By("Creating several NetworkFunctions back to back")
+			for _, name := range nfNames {
+				resource := &corev1alpha1.NetworkFunction{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: nfNamespace,
+					},
+					Spec: corev1alpha1.NetworkFunctionSpec{
+						TargetSelector: map[string]string{
+							corev1alpha1.P4TargetArchitectureLabel: targetArchitecture,
+						},
+						P4File: "https://example.com/p4file.p4",
+					},
+				}
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				DeferCleanup(func() { _ = k8sClient.Delete(ctx, resource) })
+			}
+
+			By("Verifying exactly one NetworkFunction is scheduled to the target")
+			Eventually(boundNFs).Should(Equal(1))
+			Consistently(boundNFs, "3s").Should(Equal(1))
+
+			By("Raising the target's capacity of nf-slots to 3")
+			Expect(k8sClient.Get(ctx, ctrlclient.ObjectKeyFromObject(targetResource), targetResource)).To(Succeed())
+			targetResource.Status.Capacity = corev1.ResourceList{
+				"loom.io/nf-slots": *res.NewQuantity(3, res.DecimalSI),
+			}
+			Expect(k8sClient.Status().Update(ctx, targetResource)).To(Succeed())
+
+			By("Verifying all NetworkFunctions get scheduled to the target")
+			Eventually(boundNFs, "20s").Should(Equal(len(nfNames)))
+		})
+	})
 })
