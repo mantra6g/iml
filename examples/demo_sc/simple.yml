@@ -77,6 +77,8 @@ spec:
   functions:
     - matchLabels:
         nf: logger
+    - matchLabels:
+        nf: logger
 ---
 apiVersion: apps/v1
 kind: Deployment
