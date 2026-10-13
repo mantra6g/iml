@@ -86,6 +86,7 @@ metadata:
   name: web-server
   namespace: default
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: web-server
