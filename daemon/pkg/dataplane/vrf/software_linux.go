@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/mantra6g/iml/daemon/env"
@@ -298,11 +299,42 @@ func ensureFilterIPTablesRulesArePresent(ipt *iptables.IPTables) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert hook rule to FORWARD chain: %w", err)
 	}
-	err = ipt.DeleteById("filter", "KUBE-FORWARD", 1)
+	err = deleteKubeForwardInvalidDropRules(ipt)
 	if err != nil {
-		return fmt.Errorf("failed to delete hook rule to KUBE-FORWARD chain: %w", err)
+		return fmt.Errorf("failed to delete INVALID drop rule from KUBE-FORWARD chain: %w", err)
 	}
 	return nil
+}
+
+// deleteKubeForwardInvalidDropRules removes kube-proxy's conntrack INVALID drop rules from KUBE-FORWARD,
+// which would otherwise drop forwarded SRv6 traffic. Rules are matched by content rather than position
+// so that repeated daemon restarts never delete unrelated kube-proxy rules.
+func deleteKubeForwardInvalidDropRules(ipt *iptables.IPTables) error {
+	exists, err := ipt.ChainExists("filter", "KUBE-FORWARD")
+	if err != nil || !exists {
+		return err
+	}
+	rules, err := ipt.List("filter", "KUBE-FORWARD")
+	if err != nil {
+		return err
+	}
+	// rules[0] is the "-N KUBE-FORWARD" chain declaration, so rules[i] is rule number i.
+	// Delete from the end so the remaining rule numbers stay valid.
+	for i := len(rules) - 1; i >= 1; i-- {
+		if !isInvalidDropRule(rules[i]) {
+			continue
+		}
+		if err = ipt.DeleteById("filter", "KUBE-FORWARD", i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isInvalidDropRule reports whether an `iptables -S` rule drops conntrack INVALID packets, e.g. kube-proxy's
+// "-A KUBE-FORWARD -m conntrack --ctstate INVALID -m nfacct --nfacct-name ct_state_invalid_dropped_pkts -j DROP".
+func isInvalidDropRule(rule string) bool {
+	return strings.Contains(rule, "--ctstate INVALID") && strings.HasSuffix(rule, "-j DROP")
 }
 
 // ensureRawIPTablesRulesArePresent creates (or flushes) the chain holding the per-tunnel conntrack zone
