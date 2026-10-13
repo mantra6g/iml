@@ -171,6 +171,8 @@ kind-load-targets: ## Load all target images into the local cluster.
 build-installer: ## Generate a consolidated YAML with CRDs and deployment.
 	$(MAKE) -C operator build-installer IMG=${IMG_OPERATOR} IMG_BMV2_CP=${IMG_BMV2_CP} IMG_BMV2_DP=${IMG_BMV2_DP}
 	$(MAKE) -C daemon build-installer IMG=${IMG_DAEMON} IMG_CNI=${IMG_CNI}
+	$(MAKE) -C dpcs build-installer IMG=${IMG_DPCS}
+	$(MAKE) -C dns build-installer IMG=${IMG_DNS}
 	$(KUSTOMIZE) . > install.yaml
 
 .PHONY: install
