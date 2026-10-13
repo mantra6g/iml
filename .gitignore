@@ -27,3 +27,4 @@ install.yaml
 *.o
 
 artifacts/
+dist/
