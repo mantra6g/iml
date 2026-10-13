@@ -244,6 +244,7 @@ func EnsureBMv2PodSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	if spec == nil {
 		spec = &corev1.PodSpec{}
 	}
+	spec.Affinity = bmv2Target.Spec.Affinity
 	spec.ServiceAccountName = cfg.DriverServiceAccount
 	if spec.Containers == nil {
 		spec.Containers = []corev1.Container{}

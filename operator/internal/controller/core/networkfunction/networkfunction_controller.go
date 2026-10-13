@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	nfutils "github.com/mantra6g/iml/operator/internal/controller/core/networkfunction/util"
@@ -43,6 +44,15 @@ import (
 type NetworkFunctionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// APIReader reads directly from the API server, bypassing the informer cache.
+	// Scheduling decisions must use it because the cache does not reflect our own
+	// writes immediately, which would let several NFs claim the same free slot.
+	APIReader client.Reader
+
+	// schedulingMu serializes scheduling decisions so that the
+	// list -> filter -> pick -> bind sequence is atomic within this process.
+	schedulingMu sync.Mutex
 }
 
 // +kubebuilder:rbac:groups=core.loom.io,resources=networkfunctions,verbs=get;list;watch;create;update;patch;delete
@@ -80,6 +90,9 @@ func (r *NetworkFunctionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			nfutils.UpdateNFCondition(&nf.Status, cond)
 			_ = r.updateStatus(ctx, nf)
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		} else if apierrors.IsConflict(err) {
+			logger.Info("NetworkFunction changed while scheduling, requeuing")
+			return ctrl.Result{Requeue: true}, nil
 		} else if err != nil {
 			logger.Error(err, "failed to schedule NetworkFunction")
 			return ctrl.Result{}, err
@@ -146,6 +159,19 @@ func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
 	ctx context.Context, nf *corev1alpha1.NetworkFunction) error {
 	logger := logf.FromContext(ctx)
 
+	r.schedulingMu.Lock()
+	defer r.schedulingMu.Unlock()
+
+	// The cached copy of the nf may be stale, so check whether it was already bound
+	live := &corev1alpha1.NetworkFunction{}
+	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(nf), live); err != nil {
+		return fmt.Errorf("failed to get live NetworkFunction: %w", err)
+	}
+	if live.Spec.TargetName != "" {
+		live.DeepCopyInto(nf)
+		return nil
+	}
+
 	// List available P4Targets
 	allTargets, err := r.listTargets(ctx, nf)
 	if err != nil {
@@ -153,7 +179,13 @@ func (r *NetworkFunctionReconciler) scheduleNetworkFunction(
 		return err
 	}
 
-	feasible := r.filterFeasible(ctx, nf, allTargets)
+	usedSlots, err := r.countUsedSlots(ctx)
+	if err != nil {
+		logger.Error(err, "Failed to count used nf slots", "nf", client.ObjectKeyFromObject(nf))
+		return err
+	}
+
+	feasible := r.filterFeasible(nf, allTargets, usedSlots)
 	if len(feasible) == 0 {
 		logger.Info("No feasible P4Targets found for NetworkFunction",
 			"nf", client.ObjectKeyFromObject(nf), "targetsProcessed", len(feasible))
@@ -211,8 +243,25 @@ func (r *NetworkFunctionReconciler) listTargets(ctx context.Context,
 	return targets, nil
 }
 
-func (r *NetworkFunctionReconciler) filterFeasible(ctx context.Context,
-	nf *corev1alpha1.NetworkFunction, allTargets []*corev1alpha1.P4Target) []*corev1alpha1.P4Target {
+// countUsedSlots returns the number of NetworkFunctions bound to each target.
+// It reads from the API server rather than the cache so that bindings made by
+// previous scheduling decisions are always taken into account.
+func (r *NetworkFunctionReconciler) countUsedSlots(ctx context.Context) (map[string]int64, error) {
+	nfList := &corev1alpha1.NetworkFunctionList{}
+	if err := r.APIReader.List(ctx, nfList); err != nil {
+		return nil, fmt.Errorf("failed to list NetworkFunctions: %w", err)
+	}
+	used := make(map[string]int64)
+	for i := range nfList.Items {
+		if target := nfList.Items[i].Spec.TargetName; target != "" {
+			used[target]++
+		}
+	}
+	return used, nil
+}
+
+func (r *NetworkFunctionReconciler) filterFeasible(nf *corev1alpha1.NetworkFunction,
+	allTargets []*corev1alpha1.P4Target, usedSlots map[string]int64) []*corev1alpha1.P4Target {
 	feasible := make([]*corev1alpha1.P4Target, 0)
 	for _, t := range allTargets {
 		// Skip targets with taints
@@ -223,20 +272,12 @@ func (r *NetworkFunctionReconciler) filterFeasible(ctx context.Context,
 			continue
 		}
 
-		// List all network functions that are already scheduled to this target and check if we can fit this
-		// new nf in terms of resources.
-		nfList := &corev1alpha1.NetworkFunctionList{}
-		err := r.List(ctx, nfList, client.MatchingFields{".spec.targetName": t.Name})
-		if err != nil {
-			logf.FromContext(ctx).Error(err, "Failed to list NetworkFunctions for target during feasibility check",
-				"target", client.ObjectKeyFromObject(t))
-			continue
-		}
+		// Check if we can fit this new nf given the network functions already scheduled to this target
 		totalSlots := t.Status.Capacity.Name("loom.io/nf-slots", resource.DecimalSI)
 		if totalSlots == nil || totalSlots.Value() <= 0 {
 			continue
 		}
-		if totalSlots.Value()-int64(len(nfList.Items)) > 0 {
+		if totalSlots.Value()-usedSlots[t.Name] > 0 {
 			feasible = append(feasible, t)
 		}
 	}
@@ -336,5 +377,6 @@ func (r *NetworkFunctionReconciler) updateNFWithChosenTarget(ctx context.Context
 	nf *corev1alpha1.NetworkFunction, chosen *corev1alpha1.P4Target) error {
 	original := nf.DeepCopy()
 	nf.Spec.TargetName = chosen.Name
-	return r.Patch(ctx, nf, client.MergeFrom(original))
+	// Optimistic lock so that a stale copy of the nf fails with a conflict instead of rebinding it
+	return r.Patch(ctx, nf, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 }
