@@ -50,17 +50,15 @@ func (j *janitor) Cleanup() error {
 
 	var errs []error
 
-	// Run in reverse order (stack semantics).
+	// Run in reverse order (stack semantics). Every callback runs even after the timeout hits:
+	// skipping one would leave host state (links, iptables rules) behind for the next daemon run.
 	for i := len(callbacks) - 1; i >= 0; i-- {
 		if err := callbacks[i](ctx); err != nil {
 			errs = append(errs, err)
 		}
-
-		// Stop early if timeout/cancellation hit.
-		if ctx.Err() != nil {
-			errs = append(errs, ctx.Err())
-			break
-		}
+	}
+	if ctx.Err() != nil {
+		errs = append(errs, ctx.Err())
 	}
 
 	return errors.Join(errs...)

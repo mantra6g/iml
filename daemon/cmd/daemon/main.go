@@ -76,7 +76,7 @@ func main() {
 	// Request the NodeManager subnet from IML
 	// This will be used to assign IPs to app containers and VNFs.
 	setupLog.Info("Requesting NodeManager subnet from IML")
-	config, err := env.SetUpNode(bootstrapClient)
+	config, err := env.SetUpNode(setupLog, bootstrapClient)
 	if err != nil {
 		setupLog.Error(err, "unable to request NodeManager subnet")
 		os.Exit(1)
