@@ -230,6 +230,8 @@ jobs:
           export IMG_DAEMON="${REPO}/daemon:${VERSION}"
           export IMG_CNI="${REPO}/cni:${VERSION}"
           export IMG_BMV2_CP="${REPO}/targets-bmv2:${VERSION}"
+          export IMG_DPCS="${REPO}/dpcs:${VERSION}"
+          export IMG_DNS="${REPO}/dns:${VERSION}"
 
           make build-installer
           mkdir -p chart/templates
