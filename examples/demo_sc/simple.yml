@@ -39,7 +39,7 @@ spec:
 apiVersion: infra.loom.io/v1alpha1
 kind: BMv2Target
 metadata:
-  name: bmv2-target
+  name: bmv2-target-1
 spec:
   resources:
     requests:
@@ -52,7 +52,7 @@ spec:
 apiVersion: infra.loom.io/v1alpha1
 kind: BMv2Target
 metadata:
-  name: bmv2-target
+  name: bmv2-target-2
 spec:
   resources:
     requests:
