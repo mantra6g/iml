@@ -131,7 +131,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
-                app: web-server
+                app: web-client
             namespaces:
             - default
             topologyKey: "kubernetes.io/hostname"
