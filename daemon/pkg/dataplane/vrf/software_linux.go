@@ -419,7 +419,6 @@ func (d *Software) removeAppSubnetCTZoneRules(subnet *AppSubnet) error {
 // the VRF end of the bridge-VRF veth pair and the bridge itself.
 func appSubnetCTZoneInterfaces(subnet *AppSubnet) []string {
 	return []string{
-		subnet.VethBridgeVRF.PeerName,
 		subnet.Bridge.Name,
 	}
 }
