@@ -33,7 +33,7 @@ jobs:
       contents: read
       packages: write
     env:
-      MODULES: '["cni", "daemon", "operator", "targets-bmv2"]'
+      MODULES: '["cni", "daemon", "dpcs", "dns", "operator", "targets-bmv2"]'
       # Every module is tested on every run so the merged coverage report is complete.
       TEST_MODULES: '["cni", "daemon", "dpcs", "dns", "operator", "targets-bmv2"]'
       GOVERSION: 1.26.1
