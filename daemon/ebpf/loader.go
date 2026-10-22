@@ -13,11 +13,17 @@ import (
 
 type Program []byte
 
-// RecalculateChecksumProgram is the bytecode for the eBPF program that recalculates checksums on packets after
-// they are modified by any network function.
+// SRv6EndProgram is the bytecode for the eBPF program that applies the SRv6 End behavior to packets.
 //
-//go:embed recalc_csum.o
-var RecalculateChecksumProgram Program
+//go:embed srv6_end.ebpf.o
+var SRv6EndProgram Program
+
+// SRv6SR0Program is the bytecode for the eBPF program that steers traffic to p4targets with
+// split input and output interfaces, i.e., an interface in0 that only receives packets and
+// an interface out0 that only sends packets.
+//
+//go:embed srv6_splitio.ebpf.o
+var SRv6SR0Program Program
 
 func AttachProgramToInterface(program Program, ifaceName string) error {
 	// 1. Load the BPF program into the kernel

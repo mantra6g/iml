@@ -3,7 +3,6 @@ package vrf
 import (
 	"errors"
 	"fmt"
-	"github.com/mantra6g/iml/daemon/ebpf"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
 	"net"
 
@@ -111,10 +110,6 @@ func NewRoutingSubnet(logger logr.Logger, targetNetwork, sidNetwork *net.IPNet, 
 		return nil, fmt.Errorf("failed to add address %s to bridge %s: %w", targetNetwork.String(), bridgeName, err)
 	}
 	subnet.Gateway = gwIPv6.IP
-	err = ebpf.AttachProgramToInterface(ebpf.RecalculateChecksumProgram, bridgeName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to attach program to bridge %s: %w", bridgeName, err)
-	}
 
 	decapPeerName := DecapPeerInterfaceName
 	decapIface := &netlink.Veth{
