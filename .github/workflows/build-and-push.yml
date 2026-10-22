@@ -13,6 +13,7 @@ on:
       - daemon/**
       - dpcs/**
       - dns/**
+      - dpcsclient/**
       - operator/**
       - targets/bmv2/**
       - .github/workflows/**
@@ -35,7 +36,7 @@ jobs:
     env:
       MODULES: '["cni", "daemon", "dpcs", "dns", "operator", "targets-bmv2"]'
       # Every module is tested on every run so the merged coverage report is complete.
-      TEST_MODULES: '["cni", "daemon", "dpcs", "dns", "operator", "targets-bmv2"]'
+      TEST_MODULES: '["cni", "daemon", "dpcs", "dns", "dpcsclient", "operator", "targets-bmv2"]'
       GOVERSION: 1.26.1
 
     steps:
@@ -90,7 +91,7 @@ jobs:
         uses: actions/cache@v6
         id: go-mod-cache
         with:
-          key: ${{ runner.os }}-gomod-${{ hashFiles('go.work.sum', 'api/go.sum', 'cni/go.sum', 'daemon/go.sum', 'dpcs/go.sum', 'dns/go.sum', 'operator/go.sum', 'tools/go.sum', 'targets/bmv2/go.sum') }}
+          key: ${{ runner.os }}-gomod-${{ hashFiles('go.work.sum', 'api/go.sum', 'cni/go.sum', 'daemon/go.sum', 'dpcs/go.sum', 'dns/go.sum', 'dpcsclient/go.sum', 'operator/go.sum', 'tools/go.sum', 'targets/bmv2/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-gomod-
           path: cache-go-mod

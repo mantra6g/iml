@@ -27,13 +27,20 @@ variable "MODS" {
     ]
 }
 
+# Modules that only have tests and no image.
+variable "TEST_ONLY_MODS" {
+  default = [
+      {name = "dpcsclient", bin = ""}
+    ]
+}
+
 target "docker-metadata-action" {
   tags = ["__target__:local"]
 }
 
 target "_common" {
   matrix = {
-    mod = MODS
+    mod = concat(MODS, TEST_ONLY_MODS)
   }
   context = "."
   dockerfile = "Dockerfile"
@@ -61,7 +68,7 @@ target "image-all" {
 
 target "test-all" {
   matrix = {
-    mod = MODS
+    mod = concat(MODS, TEST_ONLY_MODS)
   }
   inherits = ["_common-${mod.name}"]
   target = "test"
