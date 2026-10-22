@@ -49,6 +49,73 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
+              network:
+                description: Network configures how the host connects to the P4 target
+                  and handles its SRv6 traffic.
+                properties:
+                  hostInterfaces:
+                    description: |-
+                      HostInterfaces configures the host-side interfaces connecting to the target.
+                      Defaults to a single interface created by the daemon. It is immutable, since the daemon
+                      cannot change the interfaces of a running target.
+                    properties:
+                      create:
+                        description: Create configures the host-side interfaces created
+                          by the daemon. Only used when Strategy is Create.
+                        properties:
+                          count:
+                            default: 1
+                            description: Count is the number of host-side interfaces
+                              that will connect to the P4 target's namespace.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                        type: object
+                      reuse:
+                        description: Reuse lists the existing host-side interfaces
+                          to attach to. Only used when Strategy is Reuse.
+                        properties:
+                          names:
+                            description: Names of the existing host-side interfaces
+                              used to route the traffic to the target.
+                            items:
+                              type: string
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                        required:
+                        - names
+                        type: object
+                      strategy:
+                        default: Create
+                        description: Strategy defines whether the daemon creates new
+                          host-side interfaces or reuses existing ones.
+                        enum:
+                        - Create
+                        - Reuse
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: hostInterfaces is immutable
+                      rule: self == oldSelf
+                    - message: reuse must be set if and only if strategy is Reuse
+                      rule: 'self.strategy == ''Reuse'' ? has(self.reuse) && !has(self.create)
+                        : !has(self.reuse)'
+                  srv6:
+                    description: SRv6 configures how SRv6 is handled for the network
+                      functions running on the target.
+                    properties:
+                      mode:
+                        default: Native
+                        description: |-
+                          Mode selects who applies the SRv6 End behavior. Either way, IPv6 must be enabled
+                          on the P4 target for SRv6 to work.
+                        enum:
+                        - Native
+                        - Proxy
+                        type: string
+                    type: object
+                type: object
               nfCIDR:
                 description: NfCIDR is the range assigned to the network functions
                   running on this target.
@@ -78,6 +145,10 @@ spec:
                   for new network functions.
                 type: boolean
             type: object
+            x-kubernetes-validations:
+            - message: network.hostInterfaces cannot be added or removed after creation
+              rule: (has(self.network) && has(self.network.hostInterfaces)) == (has(oldSelf.network)
+                && has(oldSelf.network.hostInterfaces))
           status:
             description: status defines the observed state of P4Target
             properties:

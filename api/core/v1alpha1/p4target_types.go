@@ -53,7 +53,83 @@ type Taint struct {
 	TimeAdded metav1.Time `json:"timeAdded,omitempty"`
 }
 
+// SRv6Mode selects who applies the SRv6 End behavior for the network functions running on a P4 target.
+// +kubebuilder:validation:Enum=Native;Proxy
+type SRv6Mode string
+
+const (
+	// SRv6ModeNative means the target or its network functions update the SRv6 headers themselves.
+	SRv6ModeNative SRv6Mode = "Native"
+	// SRv6ModeProxy means the host applies the End behavior on behalf of the network functions.
+	SRv6ModeProxy SRv6Mode = "Proxy"
+)
+
+type SRv6Config struct {
+	// Mode selects who applies the SRv6 End behavior. Either way, IPv6 must be enabled
+	// on the P4 target for SRv6 to work.
+	// +kubebuilder:default=Native
+	// +optional
+	Mode SRv6Mode `json:"mode,omitempty"`
+}
+
+// HostInterfaceStrategy defines how the host-side interfaces connecting to a P4 target are obtained.
+// +kubebuilder:validation:Enum=Create;Reuse
+type HostInterfaceStrategy string
+
+const (
+	// HostInterfaceStrategyCreate makes the daemon create the host-side interfaces.
+	HostInterfaceStrategyCreate HostInterfaceStrategy = "Create"
+	// HostInterfaceStrategyReuse makes the daemon attach to already existing host-side interfaces.
+	HostInterfaceStrategyReuse HostInterfaceStrategy = "Reuse"
+)
+
+// +kubebuilder:validation:XValidation:rule="self.strategy == 'Reuse' ? has(self.reuse) && !has(self.create) : !has(self.reuse)",message="reuse must be set if and only if strategy is Reuse"
+type HostInterfaces struct {
+	// Strategy defines whether the daemon creates new host-side interfaces or reuses existing ones.
+	// +kubebuilder:default=Create
+	// +optional
+	Strategy HostInterfaceStrategy `json:"strategy,omitempty"`
+
+	// Create configures the host-side interfaces created by the daemon. Only used when Strategy is Create.
+	// +optional
+	Create *CreateHostInterfaces `json:"create,omitempty"`
+
+	// Reuse lists the existing host-side interfaces to attach to. Only used when Strategy is Reuse.
+	// +optional
+	Reuse *ReuseHostInterfaces `json:"reuse,omitempty"`
+}
+
+type CreateHostInterfaces struct {
+	// Count is the number of host-side interfaces that will connect to the P4 target's namespace.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
+	// +optional
+	Count int32 `json:"count,omitempty"`
+}
+
+type ReuseHostInterfaces struct {
+	// Names of the existing host-side interfaces used to route the traffic to the target.
+	// +kubebuilder:validation:MinItems=1
+	// +listType=set
+	// +required
+	Names []string `json:"names"`
+}
+
+type P4TargetNetwork struct {
+	// SRv6 configures how SRv6 is handled for the network functions running on the target.
+	// +optional
+	SRv6 *SRv6Config `json:"srv6,omitempty"`
+
+	// HostInterfaces configures the host-side interfaces connecting to the target.
+	// Defaults to a single interface created by the daemon. It is immutable, since the daemon
+	// cannot change the interfaces of a running target.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="hostInterfaces is immutable"
+	// +optional
+	HostInterfaces *HostInterfaces `json:"hostInterfaces,omitempty"`
+}
+
 // P4TargetSpec defines the desired state of P4Target
+// +kubebuilder:validation:XValidation:rule="(has(self.network) && has(self.network.hostInterfaces)) == (has(oldSelf.network) && has(oldSelf.network.hostInterfaces))",message="network.hostInterfaces cannot be added or removed after creation"
 type P4TargetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -72,6 +148,10 @@ type P4TargetSpec struct {
 	// NfCIDR is the range assigned to the network functions running on this target.
 	// +optional
 	NfCIDR string `json:"nfCIDR,omitempty"`
+
+	// Network configures how the host connects to the P4 target and handles its SRv6 traffic.
+	// +optional
+	Network *P4TargetNetwork `json:"network,omitempty"`
 }
 
 // Taints that can be applied to P4Targets to indicate their state or
