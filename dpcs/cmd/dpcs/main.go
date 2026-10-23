@@ -39,7 +39,7 @@ func main() {
 	flag.StringVar(&listenAddress, "listen-addr",
 		defaultListenAddress, "Listen address for the DPCS P4Runtime gRPC server")
 	flag.StringVar(&deviceMapFile, "device-map-file",
-		defaultDeviceMapFile, "Path to the device-map.env file (device_id=P4Target-name per line)")
+		defaultDeviceMapFile, "Path to the device-map.env file (device_id=P4Target-name[,P4Target-name...] per line)")
 	flag.UintVar(&driverGRPCPort, "driver-grpc-port",
 		defaultDriverGRPCPort, "Port the driver's own P4Runtime gRPC server listens on")
 
@@ -55,12 +55,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	deviceIDToTargetName, err := devicemap.ParseIfExists(deviceMapFile)
+	deviceIDToTargetNames, err := devicemap.ParseIfExists(deviceMapFile)
 	if err != nil {
 		setupLog.Error(err, "failed to parse device-map file", "path", deviceMapFile)
 		os.Exit(1)
 	}
-	setupLog.Info("Loaded device-map", "path", deviceMapFile, "numDevices", len(deviceIDToTargetName))
+	setupLog.Info("Loaded device-map", "path", deviceMapFile, "numDevices", len(deviceIDToTargetNames))
 
 	ctx := ctrl.SetupSignalHandler()
 
@@ -86,7 +86,7 @@ func main() {
 	}
 	driverAddressResolver := resolver.New(p4targetCache, uint16(driverGRPCPort))
 
-	dpcsServer := server.New(deviceMapFile, deviceIDToTargetName, driverAddressResolver, ctrl.Log.WithName("dpcs-server"))
+	dpcsServer := server.New(deviceMapFile, deviceIDToTargetNames, driverAddressResolver, ctrl.Log.WithName("dpcs-server"))
 
 	grpcServer := grpc.NewServer()
 	p4v1.RegisterP4RuntimeServer(grpcServer, dpcsServer)
