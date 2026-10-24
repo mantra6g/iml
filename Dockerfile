@@ -24,6 +24,7 @@ COPY tools/go.mod tools/go.sum tools/
 COPY targets/bmv2/go.mod targets/bmv2/go.sum targets/bmv2/
 COPY dpcs/go.mod dpcs/go.sum dpcs/
 COPY dns/go.mod dns/go.sum dns/
+COPY dpcsclient/go.mod dpcsclient/go.sum dpcsclient/
 RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
     go mod download all
 
@@ -62,6 +63,7 @@ FROM base AS cni-prebuilder
 FROM base AS targets-bmv2-prebuilder
 FROM base AS dpcs-prebuilder
 FROM base AS dns-prebuilder
+FROM base AS dpcsclient-prebuilder
 FROM ${MOD}-prebuilder AS prebuilder
 
 # TEST
