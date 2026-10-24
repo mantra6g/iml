@@ -5,16 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mantra6g/iml/cni/logger"
-	types2 "github.com/mantra6g/iml/cni/types"
 	"net/http"
 	"os"
+
+	"github.com/mantra6g/iml/cni/ebpf"
+	"github.com/mantra6g/iml/cni/logger"
+	types2 "github.com/mantra6g/iml/cni/types"
 
 	nsutils "github.com/mantra6g/iml/cni/utils/netns"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	current "github.com/containernetworking/cni/pkg/types/100"
+	types100 "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -98,7 +100,7 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 }
 
 func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.CmdArgs, cniConf *types2.IMLCNIConfig) (types.Result, error) {
-	logger.DebugLogger().Printf("Deploying application with config: %+v\n", netConfig)
+	logger.DebugLogger().Printf("Deploying %s with config: %+v\n", cniConf.Args.CNI.AppType, netConfig)
 
 	if netConfig.IPNets.IsEmpty() {
 		return nil, fmt.Errorf("IPNets is empty")
@@ -110,15 +112,250 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 		return nil, fmt.Errorf("clusterCIDRs is empty")
 	}
 
+	var result types.Result
+	var err error
+	if netConfig.CreateInterfaces && len(netConfig.MultiInterfaceNames) == 0 {
+		result, err = SetupSingleContainerInterface(cniArgs, netConfig, cniConf)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup single container interface: %w", err)
+		}
+		err = attachHostVethToBridge(netConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach host veth to bridge: %w", err)
+		}
+	} else if netConfig.CreateInterfaces {
+		result, err = SetupMultiContainerInterfaces(cniArgs, netConfig, cniConf)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup multi container interfaces: %w", err)
+		}
+		err = attachHostVethToBridge(netConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach host veth to bridge: %w", err)
+		}
+		err = setStaticNeighborEntryForDispatcher(netConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set static neighbor entry for dispatcher: %w", err)
+		}
+	}
+
+	if netConfig.EnableSRv6Proxy {
+		err = InstallSRv6Proxy(netConfig.BridgeVethName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to install SRv6 proxy: %w", err)
+		}
+	}
+
+	return result, nil
+}
+
+func setStaticNeighborEntryForDispatcher(netConfig *types2.NetworkConfig) error {
+	bridge, err := netlink.LinkByName(netConfig.BridgeName)
+	if err != nil {
+		return fmt.Errorf("failed to get bridge interface %s: %w", netConfig.BridgeName, err)
+	}
+	dispatcher, err := netlink.LinkByName(netConfig.OtherVethName)
+	if err != nil {
+		return fmt.Errorf("failed to get dispatcher interface %s: %w", netConfig.OtherVethName, err)
+	}
+	// ip neigh replace <IP of target> lladdr <MAC of dispatcher> dev <bridge> nud permanent
+	neighbor := &netlink.Neigh{
+		LinkIndex:  bridge.Attrs().Index,
+		HardwareAddr: dispatcher.Attrs().HardwareAddr,
+		IP:        netConfig.IPNets.IPv6Net.IP,
+		State:     netlink.NUD_PERMANENT,
+	}
+	if err := netlink.NeighAdd(neighbor); err != nil {
+		return fmt.Errorf("failed to add static neighbor entry for dispatcher: %w", err)
+	}
+	return nil
+}
+
+func attachHostVethToBridge(netConfig *types2.NetworkConfig) error {
+	hostLink, err := netlink.LinkByName(netConfig.BridgeVethName)
+	if err != nil {
+		return fmt.Errorf("failed to get host interface %s: %w", netConfig.BridgeVethName, err)
+	}
+
+	bridge, err := netlink.LinkByName(netConfig.BridgeName)
+	if err != nil {
+		return fmt.Errorf("failed to get bridge interface: %w", err)
+	}
+
+	err = netlink.LinkSetMaster(hostLink, bridge)
+	if err != nil {
+		return fmt.Errorf("failed to set host interface %s master to bridge: %w", netConfig.BridgeVethName, err)
+	}
+
+	err = netlink.LinkSetUp(hostLink)
+	if err != nil {
+		return fmt.Errorf("failed to set host interface %s up: %w", netConfig.BridgeVethName, err)
+	}
+	return nil
+}
+
+func getIPv4IPv6Status(netConfig *types2.NetworkConfig) (bool, bool, error) {
 	ipv4Enabled := netConfig.IPNets.IPv4Net != nil
 	ipv6Enabled := netConfig.IPNets.IPv6Net != nil
 	if ipv4Enabled && (netConfig.Gateways.IPv4 == nil || netConfig.ClusterCIDRs.IPv4Net == nil) {
-		return nil, fmt.Errorf("inconsistent IPv4 configuration: IPNet is set but gateway or cluster CIDR is not")
+		return false, false, fmt.Errorf("inconsistent IPv4 configuration: IPNet is set but gateway or cluster CIDR is not")
 	}
 	if ipv6Enabled && (netConfig.Gateways.IPv6 == nil || netConfig.ClusterCIDRs.IPv6Net == nil) {
-		return nil, fmt.Errorf("inconsistent IPv6 configuration: IPNet is set but gateway or cluster CIDR is not")
+		return false, false, fmt.Errorf("inconsistent IPv6 configuration: IPNet is set but gateway or cluster CIDR is not")
+	}
+	return ipv4Enabled, ipv6Enabled, nil
+}
+
+func InstallSRv6Proxy(hostLink string) error {
+	objs, err := ebpf.LoadSRv6End(ebpf.SharedPinPaths(), nil)
+	if err != nil {
+		return fmt.Errorf("failed to load SRv6 End eBPF program: %w", err)
+	}
+	defer objs.Close()
+
+	if err := ebpf.AttachTC(objs.Srv6End, hostLink, ebpf.Ingress); err != nil {
+		return fmt.Errorf("failed to attach SRv6 End to %s ingress: %w", hostLink, err)
+	}
+	return nil
+}
+
+func SetupMultiContainerInterfaces(cniArgs *skel.CmdArgs, netConfig *types2.NetworkConfig, cniConf *types2.IMLCNIConfig) (*types100.Result, error) {
+
+	// Create a veth pair for the container
+	// The container interface is called "iml0"
+	// The host interface is called "nfr-..."
+	bridgeVeth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: netConfig.OtherVethName,
+			MTU:  int(netConfig.MTU),
+		},
+		PeerName: netConfig.BridgeVethName,
+		PeerMTU:  netConfig.MTU,
 	}
 
+	// Add the veth pair
+	if err := netlink.LinkAdd(bridgeVeth); err != nil {
+		return nil, fmt.Errorf("failed to create veth pair: %w", err)
+	}
+
+	objs, err := ebpf.LoadSRv6Dispatch(ebpf.TargetPinPaths(cniConf.Args.CNI.TargetName), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load SRv6 Dispatch eBPF program: %w", err)
+	}
+	defer objs.Close()
+
+	err = ebpf.AttachTC(objs.Srv6Dispatch, netConfig.OtherVethName, ebpf.Ingress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach SRv6 Dispatch to %s ingress: %w", netConfig.OtherVethName, err)
+	}
+
+	err = netlink.LinkSetUp(bridgeVeth)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set other side of bridge veth up: %w", err)
+	}
+
+	if netConfig.CreateInterfaces {
+		for i, ifaceName := range netConfig.MultiInterfaceNames {
+			containerSideInterfaceName := fmt.Sprintf("nf%d", i)
+			err = CreateCrossNamespaceInterface(cniArgs.Netns, ifaceName, containerSideInterfaceName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create cross-namespace interface: %w", err)
+			}
+		}
+	}
+
+	for _, ifaceName := range netConfig.MultiInterfaceNames {
+		err = ebpf.AttachTC(objs.Srv6Dispatch, ifaceName, ebpf.Ingress)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach SRv6 Dispatch to %s ingress: %w", ifaceName, err)
+		}
+	}
+
+	err = UpdateDispatchMap(objs, netConfig.OtherVethName, netConfig.MultiInterfaceNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update dispatch map: %w", err)
+	}
+
+	return &types100.Result{}, nil
+}
+
+func UpdateDispatchMap(objs *ebpf.Srv6DispatchObjects, dispatcher string, ports []string) error {
+	dispatcherLink, err := netlink.LinkByName(dispatcher)
+	if err != nil {
+		return fmt.Errorf("failed to get dispatcher interface %s: %w", dispatcher, err)
+	}
+	err = objs.Cfg.Put(uint32(0), ebpf.Srv6DispatchConfig{
+		DispatchIfindex: uint32(dispatcherLink.Attrs().Index),
+		Vmac: [6]uint8(dispatcherLink.Attrs().HardwareAddr),
+		Pad:  [2]uint8{0, 0},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update dispatch map for dispatcher %s: %w", dispatcher, err)
+	}
+	instances := make([]ebpf.Srv6DispatchInstance, 0, len(ports))
+	for _, port := range ports {
+		portLink, err := netlink.LinkByName(port)
+		if err != nil {
+			return fmt.Errorf("failed to get port interface %s: %w", port, err)
+		}
+		instances = append(instances, ebpf.Srv6DispatchInstance{
+			Ifindex: uint32(portLink.Attrs().Index),
+			Mac: [6]uint8(portLink.Attrs().HardwareAddr),
+			Pad: [2]uint8{0, 0},
+		})
+	}
+	if err = ebpf.FillBuckets(objs.Buckets, instances); err != nil {
+		return fmt.Errorf("failed to fill dispatch buckets: %w", err)
+	}
+	return nil
+}
+
+func CreateCrossNamespaceInterface(containerNetns string, hostSideName string, containerSideName string) error {
+	hostNs, err := netns.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get host netns: %w", err)
+	}
+
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: containerSideName,
+		},
+		PeerName: hostSideName,
+	}
+
+	err = nsutils.ExecInsideNetworkNamespace(containerNetns, func() error {
+		// Add the veth pair
+		if err := netlink.LinkAdd(veth); err != nil {
+			return fmt.Errorf("failed to create veth pair: %w", err)
+		}
+		hostSidePeer, err := netlink.LinkByName(veth.PeerName)
+		if err != nil {
+			return fmt.Errorf("failed to get host interface %s: %w", veth.PeerName, err)
+		}
+		// Move the peer interface to the host namespace
+		if err = netlink.LinkSetNsFd(hostSidePeer, int(hostNs)); err != nil {
+			return fmt.Errorf("failed to move host interface %s to host netns: %w", veth.PeerName, err)
+		}
+		// Set both ends of the veth pair up
+		if err = netlink.LinkSetUp(veth); err != nil {
+			return fmt.Errorf("failed to set container interface up: %w", err)
+		}
+		return nil
+	})
+	if errors.Is(err, &nsutils.FunctionExecutionError{}) {
+		return fmt.Errorf("failed to execute inside container netns %s: %w", containerNetns, err)
+	} else if err != nil {
+		return fmt.Errorf("failed to create cross-namespace interface: %w", err)
+	}
+	_ = hostNs.Close()
+	return nil
+}
+
+func SetupSingleContainerInterface(cniArgs *skel.CmdArgs, netConfig *types2.NetworkConfig, cniConf *types2.IMLCNIConfig) (*types100.Result, error) {
+	ipv4Enabled, ipv6Enabled, err := getIPv4IPv6Status(netConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine IPv4/IPv6 status: %w", err)
+	}
+	
 	// Get the host's network namespace
 	hostNs, err := netns.Get()
 	if err != nil {
@@ -133,18 +370,16 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 			Name: "iml0",
 			MTU:  int(netConfig.MTU),
 		},
-		PeerName: netConfig.IfaceName,
+		PeerName: netConfig.BridgeVethName,
 		PeerMTU:  netConfig.MTU,
 	}
 
-	// Change to the container namespace
 	err = nsutils.ExecInsideNetworkNamespace(cniArgs.Netns, func() error {
 		// Add the veth pair
-		if err = netlink.LinkAdd(imlInterface); err != nil {
+		if err := netlink.LinkAdd(imlInterface); err != nil {
 			return fmt.Errorf("failed to create veth pair: %w", err)
 		}
-		var peerInterface netlink.Link
-		peerInterface, err = netlink.LinkByName(imlInterface.PeerName)
+		peerInterface, err := netlink.LinkByName(imlInterface.PeerName)
 		if err != nil {
 			return fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
 		}
@@ -227,47 +462,27 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 		return nil, err
 	}
 
-	hostLink, err := netlink.LinkByName(imlInterface.PeerName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get host interface %s: %w", imlInterface.PeerName, err)
-	}
-
-	bridge, err := netlink.LinkByName(netConfig.BridgeName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get bridge interface: %w", err)
-	}
-
-	err = netlink.LinkSetMaster(hostLink, bridge)
-	if err != nil {
-		return nil, fmt.Errorf("failed to set host interface %s master to bridge: %w", imlInterface.PeerName, err)
-	}
-
-	err = netlink.LinkSetUp(hostLink)
-	if err != nil {
-		return nil, fmt.Errorf("failed to set host interface %s up: %w", imlInterface.PeerName, err)
-	}
-
 	intfIndex := 0
-	result := &current.Result{
-		Interfaces: []*current.Interface{
+	result := &types100.Result{
+		Interfaces: []*types100.Interface{
 			{
 				Name:    imlInterface.Name,
 				Sandbox: cniArgs.Netns,
 				Mtu:     int(netConfig.MTU),
 			},
 		},
-		IPs:    make([]*current.IPConfig, 0),
+		IPs:    make([]*types100.IPConfig, 0),
 		Routes: make([]*types.Route, 0),
 	}
 	if ipv4Enabled {
-		result.IPs = append(result.IPs, &current.IPConfig{
+		result.IPs = append(result.IPs, &types100.IPConfig{
 			Interface: &intfIndex,
 			Address:   *netConfig.IPNets.IPv4Net,
 			Gateway:   netConfig.Gateways.IPv4,
 		})
 	}
 	if ipv6Enabled {
-		result.IPs = append(result.IPs, &current.IPConfig{
+		result.IPs = append(result.IPs, &types100.IPConfig{
 			Interface: &intfIndex,
 			Address:   *netConfig.IPNets.IPv6Net,
 			Gateway:   netConfig.Gateways.IPv6,
