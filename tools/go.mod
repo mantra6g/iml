@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/bitfield/gotestdox v0.2.2 // indirect
 	github.com/boumenot/gocover-cobertura v1.5.0 // indirect
+	github.com/cilium/ebpf v0.21.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
 	github.com/fatih/color v1.18.0 // indirect
@@ -42,6 +43,7 @@ require (
 
 tool (
 	github.com/boumenot/gocover-cobertura
+	github.com/cilium/ebpf/cmd/bpf2go
 	github.com/wadey/gocovmerge
 	gotest.tools/gotestsum
 	sigs.k8s.io/controller-runtime/tools/setup-envtest

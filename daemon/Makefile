@@ -85,15 +85,6 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${IMG_CNI}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
-.PHONY: ebpf-compile
-ebpf-compile: ## Compiles the eBPF code with the current version of clang.
-	clang -O2 -g -target bpf -I /usr/include/ -I /usr/include/${ARCH} -c ebpf/src/recalc_csum.c -o /tmp/recalc_csum.o
-
-.PHONY: ebpf-verify
-ebpf-verify: ebpf-compile ## Verifies the eBPF code with the current version of clang.
-	sudo bpftool prog load /tmp/recalc_csum.o /sys/fs/bpf/test_prog
-	sudo rm /sys/fs/bpf/test_prog
-
 ##@ Deployment
 
 ifndef ignore-not-found

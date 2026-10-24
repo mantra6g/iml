@@ -1,28 +1,32 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * nf_dispatch.bpf.c - per-function flow dispatcher for multi-instance NFs.
+ * srv6_dispatch.ebpf.c - per-target flow dispatcher (one loaded instance per target).
  *
- * Per function F (namespace F with full-duplex nf0..nfN-1), namespace A has:
+ * Load this object once PER TARGET and pin it under that target's own
+ * directory, e.g.
  *
- *   shared bridge ── veth-sh-f ══ veth-f ──┬──► f-nf0 ══ F:nf0
- *     [srv6_end on veth-sh-f ingress]      ├──► f-nf1 ══ F:nf1
- *                                          └──► ...
+ *   /sys/fs/bpf/loom/targets/<target_name>/programs/srv6_dispatch     program
+ *   /sys/fs/bpf/loom/targets/<target_name>/maps/cfg                   this target's config
+ *   /sys/fs/bpf/loom/targets/<target_name>/maps/buckets               this target's bucket table
  *
- * veth-f's MAC is the function's "virtual MAC" (vMAC): the only MAC the
- * bridge and A's neighbor table ever see for F.
+ * Per target T, the host's namespace has:
  *
- * One program (nf_port) on tc ingress of veth-f and every f-nfX. Role comes
- * from `port_cfg`, keyed by ingress ifindex:
+ *   routing bridge ── bridge-veth ══ target-veth ──┬──► tgt-if0 ══ T:nf0
+ *                                                  ├──► tgt-if1 ══ T:nf1
+ *                                                  └──► ...
  *
- *   DISPATCH (veth-f): accept frames for vMAC only, hash the flow
- *                      (inner 5-tuple for SRv6 H.Encaps), pick a bucket,
- *                      dst MAC := instance MAC, redirect to f-nfX.
- *   RETURN   (f-nfX):  unicast only, src MAC := vMAC, redirect to veth-f
- *                      (-> veth-sh-f -> srv6_end -> bridge -> A's stack).
+ * Attach srv6_dispatch to tc ingress of target-veth and of every tgt-nfX. Role is implicit:
  *
- * The hash is symmetric (A->B and B->A of a flow pick the same instance) and
- * goes through a 256-entry bucket table per function, so adding, removing or
- * draining an instance only moves the buckets you rewrite.
+ *   ingress on target-veth (config.dispatch_ifindex)  -> DISPATCH
+ *       accept frames for the vMAC only, hash the flow (inner 5-tuple for
+ *       SRv6 H.Encaps, symmetric), bucket -> instance, dst MAC := instance
+ *       MAC, redirect to tgt-nfX.
+ *   ingress on any other port it is attached to  -> RETURN
+ *       unicast only, src MAC := vMAC, redirect to target-veth
+ *       (-> bridge-veth -> srv6_end -> bridge -> host's stack).
+ *
+ * Because every map belongs to exactly one function there is no function ID,
+ * no global registry, and deleting a function is "detach + rm -r its dir".
  */
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
@@ -33,41 +37,37 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
-#define NBUCKETS	256		/* per function, power of two */
-#define MAX_FUNCS	64
-#define MAX_EXT_HDRS	6
+#define NBUCKETS     256        /* power of two */
+#define MAX_EXT_HDRS 6
 
-enum { ROLE_DISPATCH = 1, ROLE_RETURN = 2 };
-
-struct port_cfg {
-	__u32 role;
-	__u32 arg;			/* DISPATCH: function id, RETURN: ifindex of veth-f */
-	__u8  vmac[ETH_ALEN];		/* function's virtual MAC */
+struct config {
+	__u32 dispatch_ifindex;		/* target-veth (0 = not configured: drop all) */
+	__u8  vmac[ETH_ALEN];		/* function's virtual MAC (target-veth's MAC) */
 	__u8  pad[2];
 };
 
 struct instance {
-	__u32 ifindex;			/* A-side peer of nfX (0 = bucket unused) */
-	__u8  mac[ETH_ALEN];		/* MAC of nfX */
+	__u32 ifindex;              /* host-side peer of the instance (0 = unused) */
+	__u8  mac[ETH_ALEN];        /* MAC of the instance's interface */
 	__u8  pad[2];
 };
 
 struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
 	__type(key, __u32);
-	__type(value, struct port_cfg);
-} port_cfg SEC(".maps");
+	__type(value, struct config);
+} cfg SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, MAX_FUNCS * NBUCKETS);
-	__type(key, __u32);		/* fid * NBUCKETS + bucket */
+	__uint(max_entries, NBUCKETS);
+	__type(key, __u32);
 	__type(value, struct instance);
 } buckets SEC(".maps");
 
 struct tuple {
-	__u32 src[4], dst[4];		/* IPv4 uses [0] */
+	__u32 src[4], dst[4];       /* IPv4 uses [0] */
 	__u16 sport, dport;
 	__u8  proto;
 };
@@ -217,13 +217,13 @@ static __always_inline void parse_outer_ipv6(struct __sk_buff *skb,
 /* ------------------------------------------------------------- datapath */
 
 static __always_inline int dispatch(struct __sk_buff *skb,
-				    const struct port_cfg *c)
+				    const struct config *c)
 {
 	struct tuple t = {};
 	struct instance *in;
 	__u8 dmac[ETH_ALEN];
 	__u16 proto;
-	__u32 idx;
+	__u32 bucket;
 
 	if (bpf_skb_load_bytes(skb, 0, dmac, ETH_ALEN) ||
 	    bpf_skb_load_bytes(skb, 12, &proto, sizeof(proto)))
@@ -232,7 +232,7 @@ static __always_inline int dispatch(struct __sk_buff *skb,
 #pragma unroll
 	for (int i = 0; i < ETH_ALEN; i++)
 		if (dmac[i] != c->vmac[i])
-			return TC_ACT_SHOT;	/* floods, other functions' frames */
+			return TC_ACT_SHOT;	/* floods, frames not for us */
 
 	if (proto == bpf_htons(ETH_P_IPV6))
 		parse_outer_ipv6(skb, &t);
@@ -240,10 +240,8 @@ static __always_inline int dispatch(struct __sk_buff *skb,
 		parse_ipv4(skb, sizeof(struct ethhdr), &t);
 	/* anything else hashes to a constant bucket */
 
-	if (c->arg >= MAX_FUNCS)
-		return TC_ACT_SHOT;
-	idx = c->arg * NBUCKETS + (flow_hash(&t) & (NBUCKETS - 1));
-	in = bpf_map_lookup_elem(&buckets, &idx);
+	bucket = flow_hash(&t) & (NBUCKETS - 1);
+	in = bpf_map_lookup_elem(&buckets, &bucket);
 	if (!in || !in->ifindex)
 		return TC_ACT_SHOT;
 
@@ -252,32 +250,30 @@ static __always_inline int dispatch(struct __sk_buff *skb,
 	return bpf_redirect(in->ifindex, 0);
 }
 
-static __always_inline int ret(struct __sk_buff *skb, const struct port_cfg *c)
+static __always_inline int ret(struct __sk_buff *skb, const struct config *c)
 {
 	__u8 d0;
 
 	if (bpf_skb_load_bytes(skb, 0, &d0, 1))
 		return TC_ACT_SHOT;
-	if (d0 & 1)				/* NF's own multicast/broadcast stays home */
+	if (d0 & 1)			/* instance's own multicast/broadcast stays home */
 		return TC_ACT_SHOT;
 	if (bpf_skb_store_bytes(skb, ETH_ALEN, c->vmac, ETH_ALEN, 0))
 		return TC_ACT_SHOT;
-	return bpf_redirect(c->arg, 0);
+	return bpf_redirect(c->dispatch_ifindex, 0);
 }
 
 SEC("tc")
-int nf_port(struct __sk_buff *skb)
+int srv6_dispatch(struct __sk_buff *skb)
 {
-	__u32 key = skb->ifindex;
-	struct port_cfg* c = bpf_map_lookup_elem(&port_cfg, &key);
+	__u32 zero = 0;
+	struct config* c = bpf_map_lookup_elem(&cfg, &zero);
 
-	if (!c)
+	if (!c || !c->dispatch_ifindex)
 		return TC_ACT_SHOT;
-	if (c->role == ROLE_DISPATCH)
+	if (skb->ifindex == c->dispatch_ifindex)
 		return dispatch(skb, c);
-	if (c->role == ROLE_RETURN)
-		return ret(skb, c);
-	return TC_ACT_SHOT;
+	return ret(skb, c);
 }
 
 char LICENSE[] SEC("license") = "GPL";

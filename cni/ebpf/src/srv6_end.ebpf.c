@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * srv6_end.bpf.c - SRv6 End behavior.
+ * srv6_end.ebpf.c - SRv6 End behavior.
  *
- * Attach to TC ingress of the host-side pod veths.
+ * Attaches to the TC ingress of the bridge-side of the routing bridge.
  *
  * This program applies the End behavior (RFC 8986, 4.1):
  *
  *     SL = SL - 1
  *     IPv6 DA = Segment List[SL]
  *
- * and returns TC_ACT_OK, which passes the frame up to the host's IPv6 stack, 
+ * This is the standard End behavior for SRv6. The program modifies the packet
+ * by decrementing the segment list and updating the destination address.
+ *
+ * The program returns TC_ACT_OK, which passes the frame up to the host's IPv6 stack, 
  * which routes it to the next SID (route lookup, hop-limit decrement, 
  * NDP and ICMP errors are all handled by the kernel).
  *
- * Non-SRv6 traffic, and SRv6 packets with SL == 0, are passed through untouched.
+ * Non-SRv6 traffic, are passed through untouched.
+ * SRv6 traffic with SL=0 are dropped, following the standard End behavior.
  *
  * Assumptions: untagged Ethernet, SRH immediately follows the IPv6 header.
  */
@@ -32,7 +36,7 @@
 #define FIXED_HDRS (sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + \
 		    sizeof(struct ipv6_sr_hdr))
 
-SEC("tc/ingress")
+SEC("tc")
 int srv6_end(struct __sk_buff *skb)
 {
 	void *data, *data_end;
@@ -64,7 +68,7 @@ int srv6_end(struct __sk_buff *skb)
 		return TC_ACT_OK;			/* not SRv6: bridge normally */
 
 	if (srh->segments_left == 0)
-		return TC_ACT_OK;			/* final destination handles it */
+		return TC_ACT_SHOT;			/* SL=0: drop */
 
 	/* ---- End behavior ---- */
 	sl = srh->segments_left - 1;

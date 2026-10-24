@@ -1,6 +1,5 @@
 ARG GOVERSION=1.26.1-alpine
 ARG ENVTEST_K8S_VERSION=1.34.1
-ARG UBUNTUVERSION=24.04
 ARG ALPINEVERSION=3.20
 ARG P4CVERSION=1.2.5.15
 #GOOS=${TARGETOS:-linux}
@@ -34,29 +33,7 @@ RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
 
 # PREBUILD
 
-FROM ubuntu:${UBUNTUVERSION} AS daemon-ebpf-builder
-RUN DEBIAN_FRONTEND=noninteractive \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    clang \
-    llvm \
-    libbpf-dev \
-    linux-headers-generic \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /workspace
-COPY daemon/ebpf/ daemon/ebpf/
-
-RUN ARCH=$(uname -m | sed 's/x86_64/x86_64-linux-gnu/') && \
-    clang -O2 -g -target bpf \
-    -I/usr/include/$ARCH \
-    -I/usr/include \
-    -c daemon/ebpf/src/recalc_csum.c -o daemon/ebpf/recalc_csum.o
-
 FROM base AS daemon-prebuilder
-COPY --from=daemon-ebpf-builder /workspace /workspace
-
 FROM base AS operator-prebuilder
 FROM base AS cni-prebuilder
 FROM base AS targets-bmv2-prebuilder
