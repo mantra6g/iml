@@ -159,10 +159,10 @@ func setStaticNeighborEntryForDispatcher(netConfig *types2.NetworkConfig) error 
 	}
 	// ip neigh replace <IP of target> lladdr <MAC of dispatcher> dev <bridge> nud permanent
 	neighbor := &netlink.Neigh{
-		LinkIndex:  bridge.Attrs().Index,
+		LinkIndex:    bridge.Attrs().Index,
 		HardwareAddr: dispatcher.Attrs().HardwareAddr,
-		IP:        netConfig.IPNets.IPv6Net.IP,
-		State:     netlink.NUD_PERMANENT,
+		IP:           netConfig.IPNets.IPv6Net.IP,
+		State:        netlink.NUD_PERMANENT,
 	}
 	if err := netlink.NeighAdd(neighbor); err != nil {
 		return fmt.Errorf("failed to add static neighbor entry for dispatcher: %w", err)
@@ -285,8 +285,8 @@ func UpdateDispatchMap(objs *ebpf.Srv6DispatchObjects, dispatcher string, ports 
 	}
 	err = objs.Cfg.Put(uint32(0), ebpf.Srv6DispatchConfig{
 		DispatchIfindex: uint32(dispatcherLink.Attrs().Index),
-		Vmac: [6]uint8(dispatcherLink.Attrs().HardwareAddr),
-		Pad:  [2]uint8{0, 0},
+		Vmac:            [6]uint8(dispatcherLink.Attrs().HardwareAddr),
+		Pad:             [2]uint8{0, 0},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to update dispatch map for dispatcher %s: %w", dispatcher, err)
@@ -299,8 +299,8 @@ func UpdateDispatchMap(objs *ebpf.Srv6DispatchObjects, dispatcher string, ports 
 		}
 		instances = append(instances, ebpf.Srv6DispatchInstance{
 			Ifindex: uint32(portLink.Attrs().Index),
-			Mac: [6]uint8(portLink.Attrs().HardwareAddr),
-			Pad: [2]uint8{0, 0},
+			Mac:     [6]uint8(portLink.Attrs().HardwareAddr),
+			Pad:     [2]uint8{0, 0},
 		})
 	}
 	if err = ebpf.FillBuckets(objs.Buckets, instances); err != nil {
@@ -355,7 +355,7 @@ func SetupSingleContainerInterface(cniArgs *skel.CmdArgs, netConfig *types2.Netw
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine IPv4/IPv6 status: %w", err)
 	}
-	
+
 	// Get the host's network namespace
 	hostNs, err := netns.Get()
 	if err != nil {

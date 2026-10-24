@@ -14,9 +14,9 @@ var debuglogger *log.Logger
 var infoonce sync.Once
 var erroronce sync.Once
 var debugonce sync.Once
+
 // var debugMode = false
 var debugMode = true
-
 
 const logFilePath = "/var/log/iml/cni.log"
 

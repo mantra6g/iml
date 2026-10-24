@@ -37,17 +37,17 @@ type K8sArgs struct {
 **************************************************************/
 
 type NetworkConfig struct {
-	IPNets       netutils.DualStackNetwork `json:"ip_nets"`
-	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
-	ServiceCIDRs netutils.DualStackNetwork `json:"service_cidrs"`
-	Gateways     netutils.DualStackAddress `json:"gateways"`
-	BridgeVethName  string                 `json:"bridge_veth_name"`
-	OtherVethName   string                 `json:"other_veth_name"`
-	MultiInterfaceNames []string           `json:"multi_interface_names"`
-	CreateInterfaces bool                  `json:"create_interfaces"`
-	EnableSRv6Proxy bool                   `json:"enable_srv6_proxy"`
-	BridgeName   string                    `json:"bridge_name"`
-	MTU          uint32                    `json:"mtu"`
+	IPNets              netutils.DualStackNetwork `json:"ip_nets"`
+	ClusterCIDRs        netutils.DualStackNetwork `json:"cluster_cidrs"`
+	ServiceCIDRs        netutils.DualStackNetwork `json:"service_cidrs"`
+	Gateways            netutils.DualStackAddress `json:"gateways"`
+	BridgeVethName      string                    `json:"bridge_veth_name"`
+	OtherVethName       string                    `json:"other_veth_name"`
+	MultiInterfaceNames []string                  `json:"multi_interface_names"`
+	CreateInterfaces    bool                      `json:"create_interfaces"`
+	EnableSRv6Proxy     bool                      `json:"enable_srv6_proxy"`
+	BridgeName          string                    `json:"bridge_name"`
+	MTU                 uint32                    `json:"mtu"`
 }
 
 // =========== Applications ===========
