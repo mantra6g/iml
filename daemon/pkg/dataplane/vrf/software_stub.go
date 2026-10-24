@@ -30,8 +30,7 @@ func (s *Software) DeleteAppInstance(containerID string) error {
 	return fmt.Errorf("unsupported architecture")
 }
 
-func (s *Software) ConfigureP4TargetInstance(targetName string, containerID string,
-) (*dataplane.P4TargetConfig, error) {
+func (s *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*dataplane.P4TargetConfig, error) {
 	return nil, fmt.Errorf("unsupported architecture")
 }
 func (s *Software) DeleteP4TargetInstance(containerID string) error {
