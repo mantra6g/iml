@@ -54,6 +54,7 @@ func NewServer(logger logr.Logger, k8sClient client.Client, dp dataplane.Datapla
 	//router.HandleFunc("/api/v1/cni/vnf/teardown", cniController.handleVnfInstanceTeardown).Methods("POST")
 	router.HandleFunc("/api/v1/cni/p4target/register", cniController.handleP4TargetRegistration).Methods("POST")
 	router.HandleFunc("/api/v1/cni/p4target/teardown", cniController.handleP4TargetTeardown).Methods("POST")
+	router.HandleFunc("/api/v1/cni/p4target/register/callback", cniController.handleP4TargetRegistrationCallback).Methods("POST")
 	go server.ListenAndServe()
 	return server, nil
 }
@@ -126,7 +127,8 @@ func (c *Controller) handleAppInstanceRegistration(response http.ResponseWriter,
 		ServiceCIDRs: instanceConfig.ServiceCIDRs,
 		Gateways:     instanceConfig.Gateways,
 		BridgeName:   instanceConfig.Bridge,
-		IfaceName:    instanceConfig.IfaceName,
+		BridgeVethName:  instanceConfig.IfaceName,
+		CreateInterfaces: true,
 		MTU:          instanceConfig.MTU,
 	}
 
@@ -191,13 +193,34 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 		return
 	}
 
-	p4TargetConfig, err := c.Dataplane.ConfigureP4TargetInstance(requestData.P4TargetName, requestData.P4TargetName)
+	target := &corev1alpha1.P4Target{}
+	err = c.Client.Get(context.Background(), types.NamespacedName{Name: requestData.P4TargetName}, target)
+	if apierrors.IsNotFound(err) {
+		logger.Error(err, "P4Target not found", "name", requestData.P4TargetName)
+		http.Error(response, err.Error(), http.StatusNotFound)
+		return
+	}
 	if err != nil {
-		logger.Error(err, "failed to configure P4Target", "name", requestData.P4TargetName)
+		logger.Error(err, "failed to get P4Target", "name", requestData.P4TargetName)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	p4TargetConfig, err := c.Dataplane.ConfigureP4TargetInstance(target)
+	if err != nil {
+		logger.Error(err, "failed to configure P4Target", "name", target.Name)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	createInterfaces := target.Spec.Network == nil || 
+						target.Spec.Network.HostInterfaces == nil || 
+						target.Spec.Network.HostInterfaces.Strategy == corev1alpha1.HostInterfaceStrategyCreate
+	
+	enableSRv6Proxy := target.Spec.Network != nil &&
+						target.Spec.Network.SRv6 != nil &&
+						target.Spec.Network.SRv6.Mode == corev1alpha1.SRv6ModeProxy
+	
 	configResponse := &NetworkConfig{
 		IPNets: netutils.DualStackNetwork{
 			IPv6Net: &p4TargetConfig.IPv6Net,
@@ -209,7 +232,11 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 			IPv6: p4TargetConfig.IPv6Gateway,
 		},
 		BridgeName: p4TargetConfig.Bridge,
-		IfaceName:  p4TargetConfig.IfaceName,
+		BridgeVethName: p4TargetConfig.IfaceConfig.BridgeVethPeerName,
+		OtherVethName: p4TargetConfig.IfaceConfig.OtherVethPeerName,
+		MultiInterfaceNames: p4TargetConfig.IfaceConfig.CrossNamespaceInterfaces,
+		CreateInterfaces: createInterfaces,
+		EnableSRv6Proxy: enableSRv6Proxy,
 		MTU:        9000,
 	}
 
@@ -219,6 +246,11 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (c *Controller) handleP4TargetRegistrationCallback(response http.ResponseWriter, request *http.Request) {
+	logger := c.Log
+	logger.V(1).Info("received p4target registration callback")
 }
 
 func (c *Controller) handleP4TargetTeardown(response http.ResponseWriter, request *http.Request) {

@@ -34,7 +34,13 @@ type P4TargetConfig struct {
 	IPv6Gateway     net.IP
 	Bridge          string
 	MTU             int
-	IfaceName       string
+	IfaceConfig     *InterfaceConfig
+}
+
+type InterfaceConfig struct {
+	CrossNamespaceInterfaces []string
+	BridgeVethPeerName       string
+	OtherVethPeerName        string
 }
 
 type Dataplane interface {
@@ -43,7 +49,7 @@ type Dataplane interface {
 	ConfigureAppInstance(app *corev1alpha1.Application, containerID string) (*AppConfig, error)
 	DeleteAppInstance(containerID string) error
 
-	ConfigureP4TargetInstance(targetName string, containerID string) (*P4TargetConfig, error)
+	ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*P4TargetConfig, error)
 	AssignP4TargetIPs(target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error)
 	DeleteP4TargetInstance(containerID string) error
 

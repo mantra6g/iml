@@ -13,7 +13,11 @@ type NetworkConfig struct {
 	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
 	ServiceCIDRs netutils.DualStackNetwork `json:"service_cidrs"`
 	Gateways     netutils.DualStackAddress `json:"gateways"`
-	IfaceName    string                    `json:"iface_name"`
+	BridgeVethName  string                 `json:"bridge_veth_name"`
+	OtherVethName   string                 `json:"other_veth_name"`
+	MultiInterfaceNames []string           `json:"multi_interface_names"`
+	CreateInterfaces bool                  `json:"create_interfaces"`
+	EnableSRv6Proxy bool                   `json:"enable_srv6_proxy"`
 	BridgeName   string                    `json:"bridge_name"`
 	MTU          uint32                    `json:"mtu"`
 }
@@ -41,4 +45,8 @@ type ContainerizedP4TargetConfigRequest struct {
 
 type ContainerizedP4TargetTeardownRequest struct {
 	ContainerID string `json:"container_id" validate:"required"`
+}
+
+type P4TargetRegistrationCallbackRequest struct {
+	P4TargetName string `json:"p4target_name" validate:"required"`
 }
