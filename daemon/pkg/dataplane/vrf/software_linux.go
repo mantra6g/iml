@@ -923,6 +923,24 @@ func (d *Software) ConfigureP4TargetInstance(targetName string, _ string) (*data
 	}, nil
 }
 
+func (d *Software) AssignP4TargetIPs(target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error) {
+	d.p4Mu.Lock()
+	defer d.p4Mu.Unlock()
+
+	if target.Status.NodeName != d.cfg.NodeName {
+		return netutils.DualStackNetwork{}, fmt.Errorf("P4Target %s/%s is not scheduled on this node", target.Name, target.Namespace)
+	}
+	p4TargetConfig, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
+	if exists {
+		return p4TargetConfig.TargetIPs, nil
+	}
+	ips, err := d.routingSubnet.AllocateIPs()
+	if err != nil {
+		return netutils.DualStackNetwork{}, fmt.Errorf("failed to allocate IPs for target \"%s\": %w", target.Name, err)
+	}
+	return ips, nil
+}
+
 func (d *Software) DeleteP4TargetInstance(_ string) error {
 	// Nothing to do here by now
 	return nil
@@ -945,11 +963,11 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 	if target.Status.NodeName != d.cfg.NodeName {
 		return nil
 	}
-	if len(target.Status.TargetIPs) == 0 || len(target.Status.DriverIPs) == 0 || target.Spec.NfCIDR == "" {
+	if len(target.Spec.TargetDataplaneIPs) == 0 || target.Spec.NfCIDR == "" {
 		// We don't have enough information about the object yet to update its routes.
 		return nil
 	}
-	targetAddrs, err := vrfutil.ParseDualStackGatewayFromStrings(target.Status.TargetIPs)
+	targetAddrs, err := vrfutil.ParseDualStackGatewayFromStrings(target.Spec.TargetDataplaneIPs)
 	if err != nil {
 		return fmt.Errorf("failed to parse target IPs for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 	}

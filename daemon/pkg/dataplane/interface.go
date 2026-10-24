@@ -44,6 +44,7 @@ type Dataplane interface {
 	DeleteAppInstance(containerID string) error
 
 	ConfigureP4TargetInstance(targetName string, containerID string) (*P4TargetConfig, error)
+	AssignP4TargetIPs(target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error)
 	DeleteP4TargetInstance(containerID string) error
 
 	UpdateAppRoutes(app *corev1alpha1.Application) error

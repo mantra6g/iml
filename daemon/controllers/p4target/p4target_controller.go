@@ -72,6 +72,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
+	if nodeName == r.Config.NodeName && len(target.Spec.TargetDataplaneIPs) == 0 {
+		// Assign IPs to the target if it's on this node and doesn't have any yet.
+		original := target.DeepCopy()
+		ips, err := r.Dataplane.AssignP4TargetIPs(target)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to assign IPs to P4Target %s: %w", req.Name, err)
+		}
+		target.Spec.TargetDataplaneIPs = []string{ips.IPv6Net.IP.String()}
+		err = r.Patch(ctx, target, client.MergeFrom(original))
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update P4Target %s with assigned IPs: %w", req.Name, err)
+		}
+	}
+
 	if nodeName == r.Config.NodeName {
 		// The target is attached to this node's routing bridge, so it can be routed to directly.
 		if err = r.removeRemoteRoute(req.NamespacedName); err != nil {

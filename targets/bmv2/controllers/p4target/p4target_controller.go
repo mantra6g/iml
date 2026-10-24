@@ -17,12 +17,13 @@ limitations under the License.
 package p4target
 
 import (
-	"github.com/mantra6g/iml/targets/bmv2/controllers/lease"
-	"github.com/mantra6g/iml/targets/bmv2/controllers/p4target/utils"
-	"github.com/mantra6g/iml/targets/bmv2/managers/p4target"
 	"context"
 	"os"
 	"time"
+
+	"github.com/mantra6g/iml/targets/bmv2/controllers/lease"
+	"github.com/mantra6g/iml/targets/bmv2/controllers/p4target/utils"
+	"github.com/mantra6g/iml/targets/bmv2/managers/p4target"
 
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
@@ -128,7 +129,7 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 	targetStatus.Capacity = r.P4TargetManager.GetCapacity()
 	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
 
-	targetStatus.TargetIPs = utils.FilterIPs(r.P4TargetManager.GetTargetIPs())
+	targetStatus.TargetManagementIPs = utils.FilterIPs(r.P4TargetManager.GetTargetIPs())
 	targetStatus.DriverIPs = utils.FilterIPs(r.P4TargetManager.GetDriverIPs())
 
 	occupiedCondition := r.P4TargetManager.GetOccupiedCondition()

@@ -149,6 +149,10 @@ type P4TargetSpec struct {
 	// +optional
 	NfCIDR string `json:"nfCIDR,omitempty"`
 
+	// TargetDataplaneIPs are the IPs of the programmable target. They can be either in-cluster or public-facing IPs.
+	// +optional
+	TargetDataplaneIPs []string `json:"targetIPs,omitempty"`
+
 	// Network configures how the host connects to the P4 target and handles its SRv6 traffic.
 	// +optional
 	Network *P4TargetNetwork `json:"network,omitempty"`
@@ -188,8 +192,8 @@ type P4TargetStatus struct {
 	// NodeName is the name of the Kubernetes node that the P4 target is associated with, if any.
 	NodeName string `json:"nodeName,omitempty"`
 
-	// TargetIPs are the detected IPs of the programmable target. They can be either in-cluster or public-facing IPs.
-	TargetIPs []string `json:"targetIPs,omitempty"`
+	// TargetManagementIPs are the detected IPs of the programmable target. They can be either in-cluster or public-facing IPs.
+	TargetManagementIPs []string `json:"targetIPs,omitempty"`
 
 	// DriverIPs are the detected IPs that were assigned to the programmable target's driver.
 	DriverIPs []string `json:"driverIPs,omitempty"`
