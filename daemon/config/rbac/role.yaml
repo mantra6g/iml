@@ -18,7 +18,6 @@ rules:
   resources:
   - applications
   - networkfunctions
-  - p4targets
   - servicechains
   verbs:
   - get
@@ -40,6 +39,15 @@ rules:
   - servicechains/status
   verbs:
   - get
+- apiGroups:
+  - core.loom.io
+  resources:
+  - p4targets
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
 - apiGroups:
   - infra.loom.io
   resources:

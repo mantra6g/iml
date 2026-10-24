@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/mantra6g/iml/daemon/env"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane"
@@ -38,7 +39,7 @@ type Reconciler struct {
 	remoteRoutes map[types.NamespacedName]remoteRoute
 }
 
-// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -74,16 +75,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if nodeName == r.Config.NodeName && len(target.Spec.TargetDataplaneIPs) == 0 {
 		// Assign IPs to the target if it's on this node and doesn't have any yet.
-		original := target.DeepCopy()
-		ips, err := r.Dataplane.AssignP4TargetIPs(target)
+		_, err := r.Dataplane.AssignP4TargetIPs(ctx, target)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to assign IPs to P4Target %s: %w", req.Name, err)
 		}
-		target.Spec.TargetDataplaneIPs = []string{ips.IPv6Net.IP.String()}
-		err = r.Patch(ctx, target, client.MergeFrom(original))
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update P4Target %s with assigned IPs: %w", req.Name, err)
-		}
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	if nodeName == r.Config.NodeName {

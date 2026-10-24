@@ -886,7 +886,7 @@ func (d *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*da
 	defer d.p4Mu.Unlock()
 
 	p4TargetConfig, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
-	if exists {
+	if exists && !p4TargetConfig.TargetIPs.IsEmpty() && p4TargetConfig.ifaceConfig != nil {
 		return &dataplane.P4TargetConfig{
 			IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
 			ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
@@ -896,37 +896,39 @@ func (d *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*da
 			IfaceConfig:     p4TargetConfig.ifaceConfig,
 		}, nil
 	}
-
-	ips, err := d.routingSubnet.AllocateIPs()
-	if err != nil {
-		return nil, fmt.Errorf("failed to allocate IPs for target \"%s\": %w", target.Name, err)
-	}
-	d.log.V(1).Info("Allocated IPs for P4Target", "targetName", target.Name, "ips", ips)
-
-	ifaceConfig, err := d.ensureHostInterfaces(target)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure host interfaces for P4Target %s/%s: %w", target.Name, target.Namespace, err)
+	if !exists {
+		p4TargetConfig = &P4TargetInstance{}
 	}
 
-	d.p4Targets[client.ObjectKeyFromObject(target)] = &P4TargetInstance{
-		TargetIPs:   ips,
-		ifaceConfig: ifaceConfig,
+	if p4TargetConfig.TargetIPs.IsEmpty() {
+		ips, err := d.assignP4TargetIPs(context.Background(), target)
+		if err != nil {
+			return nil, fmt.Errorf("failed to assign IPs for P4Target %s/%s: %w", target.Name, target.Namespace, err)
+		}
+		p4TargetConfig.TargetIPs = ips
 	}
+
+	if p4TargetConfig.ifaceConfig == nil {
+		ifaceConfig, err := d.ensureHostInterfaces(target)
+		if err != nil {
+			return nil, fmt.Errorf("failed to ensure host interfaces for P4Target %s/%s: %w", target.Name, target.Namespace, err)
+		}
+		p4TargetConfig.ifaceConfig = ifaceConfig
+	}
+
+	d.p4Targets[client.ObjectKeyFromObject(target)] = p4TargetConfig
 
 	return &dataplane.P4TargetConfig{
-		IPv6Net:         *ips.IPv6Net,
+		IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
 		ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
 		IPv6Gateway:     d.routingSubnet.Gateway,
 		Bridge:          d.routingSubnet.Bridge.Name,
 		MTU:             DefaultMTU,
-		IfaceConfig:     ifaceConfig,
+		IfaceConfig:     p4TargetConfig.ifaceConfig,
 	}, nil
 }
 
 func (d *Software) ensureHostInterfaces(target *corev1alpha1.P4Target) (*dataplane.InterfaceConfig, error) {
-	if target.Status.NodeName != d.cfg.NodeName {
-		return nil, fmt.Errorf("P4Target %s/%s is not scheduled on this node", target.Name, target.Namespace)
-	}
 	var ifaceNames []string
 	var otherVethPeerName string
 	bridgeVethPeerName, err := vrfutil.GenerateRandomName("tgtbr", 6)
@@ -972,20 +974,43 @@ func (d *Software) generateHostInterfaceNames(target *corev1alpha1.P4Target) ([]
 	return interfaces, nil
 }
 
-func (d *Software) AssignP4TargetIPs(target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error) {
+func (d *Software) AssignP4TargetIPs(ctx context.Context, target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error) {
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
 	if target.Status.NodeName != d.cfg.NodeName {
 		return netutils.DualStackNetwork{}, fmt.Errorf("P4Target %s/%s is not scheduled on this node", target.Name, target.Namespace)
 	}
-	p4TargetConfig, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
-	if exists {
-		return p4TargetConfig.TargetIPs, nil
+
+	config, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
+	if exists && !config.TargetIPs.IsEmpty() {
+		return config.TargetIPs, nil
 	}
+
+	ips, err := d.assignP4TargetIPs(ctx, target)
+	if err != nil {
+		return netutils.DualStackNetwork{}, err
+	}
+
+	if config == nil {
+		config = &P4TargetInstance{}
+	}
+	config.TargetIPs = ips
+	d.p4Targets[client.ObjectKeyFromObject(target)] = config
+
+	return ips, nil
+}
+
+func (d *Software) assignP4TargetIPs(ctx context.Context, target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error) {
+	original := target.DeepCopy()
 	ips, err := d.routingSubnet.AllocateIPs()
 	if err != nil {
 		return netutils.DualStackNetwork{}, fmt.Errorf("failed to allocate IPs for target \"%s\": %w", target.Name, err)
+	}
+	target.Spec.TargetDataplaneIPs = []string{ips.IPv6Net.IP.String()}
+	err = d.Client.Patch(ctx, target, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
+	if err != nil {
+		return netutils.DualStackNetwork{}, fmt.Errorf("failed to patch P4Target %s/%s with allocated IPs: %w", target.Name, target.Namespace, err)
 	}
 	return ips, nil
 }
