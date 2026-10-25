@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"net/netip"
 	"strings"
 	"sync"
@@ -17,14 +16,12 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
-	"github.com/vishvananda/netlink"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ManagerConfig struct {
 	Switch          *p4switch.SwitchClient
 	P4TargetManager p4targetpkg.Manager
-	NFInterface     string
 	Log             logr.Logger
 	MaxNFSlots      int
 }
@@ -50,7 +47,6 @@ type trackedOp struct {
 type RealManager struct {
 	switchClient    *p4switch.SwitchClient
 	p4targetManager p4targetpkg.Manager
-	nfInterface     string
 	maxNFSlots      int
 	log             logr.Logger
 
@@ -72,7 +68,6 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	return &RealManager{
 		switchClient:    cfg.Switch,
 		p4targetManager: cfg.P4TargetManager,
-		nfInterface:     cfg.NFInterface,
 		maxNFSlots:      cfg.MaxNFSlots,
 		programs:        make(map[client.ObjectKey]*api.P4Program),
 		ops:             make(map[client.ObjectKey]*trackedOp),
@@ -283,45 +278,19 @@ func (m *RealManager) deploy(ctx context.Context, nf *corev1alpha1.NetworkFuncti
 	return m.switchClient.DeployPipeline(reqCtx, program)
 }
 
-// setupNetworkForwarding is a no-op when no NF interface is configured (e.g. in tests).
+// setupNetworkForwarding records the IP the NF is reached at. No setup is needed inside the pod: the daemon
+// delivers the traffic for the target straight to the switch's interface. For the return traffic to work, the
+// NF must reflect the packet back with its source and destination MAC addresses swapped, so it reaches the
+// host's routing bridge. Its destination IP is either determined by the NF itself or is the next segment in the
+// SRv6 path; in both cases, it MUST be set by the NF.
 func (m *RealManager) setupNetworkForwarding(nf *corev1alpha1.NetworkFunction, ip netip.Prefix) error {
 	key := client.ObjectKeyFromObject(nf)
 	program := m.programs[key]
 
-	if m.nfInterface == "" || program == nil || !ip.IsValid() {
+	if program == nil || !ip.IsValid() {
 		return fmt.Errorf("invalid parameters for setting up network forwarding")
 	}
-	if err := m.configureTrafficForwardingToNetworkFunctionInterface(ip, m.nfInterface); err != nil {
-		return fmt.Errorf("could not configure traffic forwarding for NF: %w", err)
-	}
 	program.IP = ip
-	return nil
-}
-
-// configureTrafficForwardingToNetworkFunctionInterface sets up the necessary routes and neighbor entries to ensure
-// that traffic to the NF IP gets forwarded to the NF interface via the bridge. This is needed because the NF interface
-// will have an IP in the same subnet as the bridge, so we need to ensure that traffic to that IP gets forwarded to the
-// correct interface.
-// In order for the return traffic to work correctly, we assume that the NF will reflect the packet back to
-// the MAC address of the bridge interface. When doing so, the source and destination MAC addresses will be swapped,
-// which allows the traffic to be correctly forwarded back to the bridge. For the destination IP, this will
-// either be determined by the NF itself, or it will be the next segment in the SRv6 path; in both cases, this MUST
-// be set by the NF. Afterwards, the packet will be routed by the bridge back to the iml0 interface out of the container
-// and back to the routing VRF in the host.
-func (m *RealManager) configureTrafficForwardingToNetworkFunctionInterface(nfIP netip.Prefix, nfIfaceName string) error {
-	nfInterface, err := netlink.LinkByName(nfIfaceName)
-	if err != nil {
-		return fmt.Errorf("failed to get NF interface: %w", err)
-	}
-	nfAddr := &netlink.Addr{
-		IPNet: &net.IPNet{
-			IP:   nfIP.Addr().Unmap().AsSlice(),
-			Mask: net.CIDRMask(nfIP.Bits(), nfIP.Addr().BitLen()),
-		},
-	}
-	if err := netlink.AddrAdd(nfInterface, nfAddr); err != nil {
-		return fmt.Errorf("failed to add address for NF IP %s: %w", nfIP.String(), err)
-	}
 	return nil
 }
 
@@ -368,8 +337,7 @@ func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKe
 	if !ok {
 		return nil // no tracked op for this NF, so nothing to delete
 	}
-	program, ok := m.programs[nfKey]
-	if !ok {
+	if _, ok := m.programs[nfKey]; !ok {
 		delete(m.ops, nfKey) // no compiled program, so just remove the op tracking
 		return nil           // no compiled program, so nothing was deployed; just remove the op tracking
 	}
@@ -382,10 +350,6 @@ func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKe
 		return nil
 	}
 
-	if err := m.teardownNetworkForwarding(program.IP, m.nfInterface); err != nil {
-		return fmt.Errorf("tearing down network forwarding: %w", err)
-	}
-
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -393,39 +357,5 @@ func (m *RealManager) deleteResources(ctx context.Context, nfKey client.ObjectKe
 		return fmt.Errorf("resetting forwarding pipeline: %w", err)
 	}
 
-	return nil
-}
-
-// teardownNetworkForwarding removes the host route and neighbor entry that were
-// installed by configureTrafficForwardingToNetworkFunctionInterface when the NF was deployed.
-func (m *RealManager) teardownNetworkForwarding(nfIP netip.Prefix, nfIfaceName string) error {
-	nfInterface, err := netlink.LinkByName(nfIfaceName)
-	if err != nil {
-		return fmt.Errorf("failed to get NF interface: %w", err)
-	}
-	nfAddr := &netlink.Addr{
-		IPNet: &net.IPNet{
-			IP:   nfIP.Addr().Unmap().AsSlice(),
-			Mask: net.CIDRMask(nfIP.Bits(), nfIP.Addr().BitLen()),
-		},
-	}
-	if err := netlink.AddrDel(nfInterface, nfAddr); err != nil {
-		return fmt.Errorf("failed to delete address for NF IP %s: %w", nfIP.String(), err)
-	}
-	// nfVeth, ok := nfInterface.(*netlink.Veth)
-	// if !ok {
-	// 	return nil // not a veth interface, so no neighbor entry to delete
-	// }
-	// nfPeer, err := netlink.LinkByName(nfVeth.PeerName)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get peer interface for NF veth: %w", err)
-	// }
-	// neighbor := &netlink.Neigh{
-	// 	LinkIndex: nfPeer.Attrs().Index,
-	// 	IP:        nfIP.Unmap().AsSlice(),
-	// }
-	// if err := netlink.NeighDel(neighbor); err != nil {
-	// 	return fmt.Errorf("failed to delete neighbor entry for NF IP %s: %w", nfIP.String(), err)
-	// }
 	return nil
 }

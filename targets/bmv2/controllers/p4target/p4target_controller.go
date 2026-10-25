@@ -18,6 +18,7 @@ package p4target
 
 import (
 	"context"
+	"net"
 	"os"
 	"time"
 
@@ -29,7 +30,6 @@ import (
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -57,12 +57,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	target := &corev1alpha1.P4Target{}
 	if err := r.Get(ctx, types.NamespacedName{Name: r.P4TargetManager.GetName()}, target); err != nil {
 		if errors.IsNotFound(err) {
-			err = r.createP4Target(ctx)
-			if err != nil {
-				logger.Error(err, "Failed to create P4Target")
-				return ctrl.Result{}, err
-			}
-			logger.Info("P4Target created")
+			// The P4Target is created along with this pod, e.g. by the BMv2Target controller.
+			logger.Info("P4Target not found. Requeueing after 10 seconds.")
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		logger.Error(err, "Failed to get P4Target")
@@ -101,19 +97,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	return ctrl.Result{}, r.updateP4TargetStatus(ctx, target, targetPod)
 }
 
-func (r *Reconciler) createP4Target(ctx context.Context) error {
-	target := &corev1alpha1.P4Target{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: r.P4TargetManager.GetName(),
-			Labels: map[string]string{
-				corev1alpha1.P4TargetArchitectureLabel: "v1model",
-			},
-		},
-		Spec: corev1alpha1.P4TargetSpec{},
-	}
-	return r.Create(ctx, target)
-}
-
 func (r *Reconciler) updateP4TargetStatus(ctx context.Context, target *corev1alpha1.P4Target, targetPod *v1.Pod) error {
 	original := target.DeepCopy()
 	target.Status = r.calculateP4TargetStatus(targetPod)
@@ -129,8 +112,7 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 	targetStatus.Capacity = r.P4TargetManager.GetCapacity()
 	targetStatus.Allocatable = r.P4TargetManager.GetAllocatable()
 
-	targetStatus.TargetManagementIPs = utils.FilterIPs(r.P4TargetManager.GetTargetIPs())
-	targetStatus.DriverIPs = utils.FilterIPs(r.P4TargetManager.GetDriverIPs())
+	targetStatus.DriverIPs = utils.FilterIPs(podIPs(targetPod))
 
 	occupiedCondition := r.P4TargetManager.GetOccupiedCondition()
 	healthyCondition := r.P4TargetManager.GetHealthyCondition()
@@ -143,6 +125,17 @@ func (r *Reconciler) calculateP4TargetStatus(targetPod *v1.Pod) corev1alpha1.P4T
 	targetStatus.Conditions = append(targetStatus.Conditions, netconfCondition)
 	targetStatus.Conditions = append(targetStatus.Conditions, occupiedCondition)
 	return targetStatus
+}
+
+// podIPs returns the IPs the primary CNI assigned to the pod.
+func podIPs(pod *v1.Pod) []net.IP {
+	ips := make([]net.IP, 0, len(pod.Status.PodIPs))
+	for _, podIP := range pod.Status.PodIPs {
+		if ip := net.ParseIP(podIP.IP); ip != nil {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
 }
 
 func (r *Reconciler) Start(ctx context.Context) error {

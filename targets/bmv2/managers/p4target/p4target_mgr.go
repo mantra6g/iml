@@ -3,7 +3,6 @@ package p4target
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/netip"
 	"sync"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/go-logr/logr"
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
-	"github.com/vishvananda/netlink"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,11 +29,8 @@ type NetConfig struct {
 
 type ManagerConfig struct {
 	Name       string
-	TargetIPs  []net.IP
-	DriverIPs  []net.IP
 	MaxNFSlots int
 	P4Client   p4v1.P4RuntimeClient
-	BridgeName string
 	Log        logr.Logger
 }
 
@@ -47,8 +42,6 @@ type Manager interface {
 	GetReadyCondition(corev1alpha1.P4TargetCondition, corev1alpha1.P4TargetCondition) corev1alpha1.P4TargetCondition
 	GetNetworkConfiguredCondition() corev1alpha1.P4TargetCondition
 	GetOccupiedCondition() corev1alpha1.P4TargetCondition
-	GetTargetIPs() []net.IP
-	GetDriverIPs() []net.IP
 	EnsureNetworkConfiguration(NetConfig) error
 	AllocateNetworkFunctionIP() (netip.Addr, error)
 	GetNfCIDR() netip.Prefix
@@ -66,11 +59,8 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	}
 	return &RealManager{
 		name:         cfg.Name,
-		targetIPs:    cfg.TargetIPs,
-		driverIPs:    cfg.DriverIPs,
 		maxNFSlots:   cfg.MaxNFSlots,
 		p4client:     cfg.P4Client,
-		BridgeName:   cfg.BridgeName,
 		allocatedIPs: make(map[netip.Addr]struct{}),
 		log:          cfg.Log,
 	}, nil
@@ -81,11 +71,8 @@ var _ Manager = &RealManager{}
 
 type RealManager struct {
 	name       string
-	targetIPs  []net.IP
-	driverIPs  []net.IP
 	maxNFSlots int
 	p4client   p4v1.P4RuntimeClient
-	BridgeName string
 	log        logr.Logger
 
 	mu           sync.RWMutex
@@ -101,10 +88,6 @@ func (r *RealManager) GetNfCIDR() netip.Prefix {
 }
 
 func (r *RealManager) GetName() string { return r.name }
-
-func (r *RealManager) GetTargetIPs() []net.IP { return r.targetIPs }
-
-func (r *RealManager) GetDriverIPs() []net.IP { return r.driverIPs }
 
 func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	cidr, err := netip.ParsePrefix(cfg.TargetCIDR)
@@ -127,15 +110,6 @@ func (r *RealManager) EnsureNetworkConfiguration(cfg NetConfig) error {
 	r.cidr = cidr
 	r.ipAllocator = alloc
 	r.allocatedIPs = make(map[netip.Addr]struct{})
-	if r.BridgeName != "" {
-		bridgeIP, err := alloc.Next()
-		if err != nil {
-			return fmt.Errorf("failed to allocate bridge IP from %s: %w", cidr, err)
-		}
-		if err := r.configureNFBridge(bridgeIP, cidr); err != nil {
-			return fmt.Errorf("failed to configure NF bridge: %w", err)
-		}
-	}
 	return nil
 }
 
@@ -303,40 +277,4 @@ func (r *RealManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 		Reason:            "SlotsAvailable",
 		Message:           fmt.Sprintf("%d/%d slots used", used, r.maxNFSlots),
 	}
-}
-
-// configureNFBridge configures the bridge interface with the given IP and subnet mask based
-// on the allocated CIDR for the target. This is needed to ensure that the bridge has an IP
-// in the same subnet as the NF interfaces, and also to ensure that it can act as a kind of
-// gateway for the NFs to forward traffic back to the host.
-func (r *RealManager) configureNFBridge(bridgeIP netip.Addr, nfCIDR netip.Prefix) error {
-	nfBridge, err := netlink.LinkByName(r.BridgeName)
-	if err != nil {
-		return err
-	}
-	// List and remove old addresses, except for link-local and loopback addresses
-	previousAddresses, err := netlink.AddrList(nfBridge, netlink.FAMILY_ALL)
-	if err != nil {
-		return fmt.Errorf("failed to list existing addresses on bridge: %w", err)
-	}
-	for _, addr := range previousAddresses {
-		if addr.IP.IsLinkLocalUnicast() || addr.IP.IsLoopback() || addr.IP.IsLinkLocalMulticast() {
-			continue
-		}
-		if err := netlink.AddrDel(nfBridge, &addr); err != nil {
-			return fmt.Errorf("failed to remove old address %s from bridge: %w", addr.IP.String(), err)
-		}
-	}
-	// Add the new address for the bridge based on the allocated CIDR
-	newBridgeAddr := &netlink.Addr{
-		IPNet: &net.IPNet{
-			IP:   bridgeIP.Unmap().AsSlice(),
-			Mask: net.CIDRMask(nfCIDR.Bits(), bridgeIP.BitLen()),
-		},
-	}
-	err = netlink.AddrAdd(nfBridge, newBridgeAddr)
-	if err != nil {
-		return fmt.Errorf("failed to add new address %s to bridge: %w", newBridgeAddr.IPNet.String(), err)
-	}
-	return nil
 }

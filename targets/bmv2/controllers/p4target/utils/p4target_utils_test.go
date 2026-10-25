@@ -3,7 +3,47 @@ package utils
 import (
 	"net"
 	"testing"
+
+	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 )
+
+func TestStatusChanged(t *testing.T) {
+	base := corev1alpha1.P4TargetStatus{
+		NodeName:  "node-a",
+		DriverIPs: []string{"10.0.0.1"},
+	}
+	tests := []struct {
+		name     string
+		modify   func(*corev1alpha1.P4TargetStatus)
+		expected bool
+	}{
+		{
+			name:     "unchanged",
+			modify:   func(*corev1alpha1.P4TargetStatus) {},
+			expected: false,
+		},
+		{
+			name:     "node name changed",
+			modify:   func(s *corev1alpha1.P4TargetStatus) { s.NodeName = "node-b" },
+			expected: true,
+		},
+		{
+			name:     "driver IPs changed",
+			modify:   func(s *corev1alpha1.P4TargetStatus) { s.DriverIPs = []string{"10.0.0.2"} },
+			expected: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := &corev1alpha1.P4Target{Status: *base.DeepCopy()}
+			target := original.DeepCopy()
+			tt.modify(&target.Status)
+			if got := StatusChanged(original, target); got != tt.expected {
+				t.Errorf("StatusChanged() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
 
 func TestFilterIPs(t *testing.T) {
 	tests := []struct {

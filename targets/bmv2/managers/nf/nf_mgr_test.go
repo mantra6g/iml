@@ -107,8 +107,6 @@ func (m *mockP4TargetManager) GetNetworkConfiguredCondition() corev1alpha1.P4Tar
 func (m *mockP4TargetManager) GetOccupiedCondition() corev1alpha1.P4TargetCondition {
 	return corev1alpha1.P4TargetCondition{}
 }
-func (m *mockP4TargetManager) GetTargetIPs() []net.IP { return nil }
-func (m *mockP4TargetManager) GetDriverIP() net.IP    { return nil }
 func (m *mockP4TargetManager) EnsureNetworkConfiguration(_ p4targetpkg.NetConfig) error {
 	return nil
 }

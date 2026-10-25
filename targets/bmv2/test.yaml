@@ -37,6 +37,21 @@ spec:
   - port: 8080
     targetPort: 8080
 ---
+# The daemon reads the P4Target's network configuration when the CNI plugin sets up the pod, so it
+# must exist first. The BMv2Target controller creates the same object for its pods.
+apiVersion: core.loom.io/v1alpha1
+kind: P4Target
+metadata:
+  name: web-client
+  labels:
+    p4target.loom.io/arch: v1model
+spec:
+  network:
+    hostInterfaces:
+      strategy: Create
+      create:
+        count: 1
+---
 apiVersion: v1
 kind: Pod
 metadata:
@@ -51,8 +66,7 @@ metadata:
           "namespace": "loom-system",
           "cni-args": {
             "app_type": "p4target",
-            "target_name": "web-client",
-            "nf_interfaces": 1
+            "target_name": "web-client"
           }
         }
       ]
@@ -62,10 +76,7 @@ spec:
   - name: bmv2-driver
     image: mantra6g/bmv2-driver:latest
     imagePullPolicy: Never
-    securityContext:
-      capabilities:
-        add: ["NET_ADMIN"]
-    args: ["--data-iface=iml0"]
+    args: ["--p4target-name=web-client"]
     resources:
       requests:
         cpu: 100m

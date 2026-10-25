@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -18,8 +17,6 @@ import (
 	nfcfgmgr "github.com/mantra6g/iml/targets/bmv2/managers/nfcfg"
 	p4targetmgr "github.com/mantra6g/iml/targets/bmv2/managers/p4target"
 	p4switch "github.com/mantra6g/iml/targets/bmv2/pkg/p4switch"
-
-	"github.com/vishvananda/netlink"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
@@ -63,7 +60,7 @@ func init() {
 func main() {
 	var leaseRenewIntervalSeconds, leaseDurationSeconds, statusUpdateIntervalSeconds uint
 	var maxNFSlots int
-	var p4targetName, switchAddr, grpcListenAddress, driverIP, dataIface, controlIface, nfIface string
+	var p4targetName, switchAddr, grpcListenAddress string
 
 	flag.UintVar(&leaseRenewIntervalSeconds, "lease-renew-interval-seconds",
 		DefaultLeaseRenewIntervalSeconds, "Interval at which to renew the Lease for this P4Target")
@@ -77,35 +74,14 @@ func main() {
 		defaultSwitchAddr, "Address of the P4Runtime gRPC server on the BMv2 switch")
 	flag.StringVar(&grpcListenAddress, "grpc-listen-addr",
 		defaultGRPCListenAddress, "Listen address for this driver's own P4Runtime gRPC server (DPCS-facing)")
-	flag.StringVar(&driverIP, "driver-ip",
-		"", "IP address of this driver (reported in P4Target status)")
 	flag.IntVar(&maxNFSlots, "max-nf-slots",
 		DefaultMaxNFSlots, "Maximum number of network functions this target can host")
-	flag.StringVar(&dataIface, "data-iface",
-		"iml0", "Network interface to discover target IPs from")
-	flag.StringVar(&controlIface, "control-iface",
-		"eth0", "Network interface to discover driver IPs from")
-	flag.StringVar(&nfIface, "nf-iface",
-		"nf0", "Network interface connected to the NF data plane (used for traffic forwarding setup)")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	targetIPs, err := discoverIPs(dataIface)
-	if err != nil {
-		setupLog.Error(err, "failed to discover target IPs", "iface", dataIface)
-		os.Exit(1)
-	}
-	setupLog.Info(fmt.Sprintf("Discovered target IPs on %s: %v", dataIface, targetIPs))
-	driverIPs, err := discoverIPs(controlIface)
-	if err != nil {
-		setupLog.Error(err, "failed to discover driver IPs", "iface", controlIface)
-		os.Exit(1)
-	}
-	setupLog.Info(fmt.Sprintf("Discovered driver IPs on %s: %v", controlIface, driverIPs))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:  scheme,
@@ -191,9 +167,6 @@ func main() {
 		Name:       p4targetName,
 		P4Client:   c,
 		MaxNFSlots: maxNFSlots,
-		TargetIPs:  targetIPs,
-		DriverIPs:  driverIPs,
-		BridgeName: "br0",
 		Log:        ctrl.Log.WithName("p4target-manager"),
 	})
 	if err != nil {
@@ -207,7 +180,6 @@ func main() {
 	nfMgr, err := nfmgr.NewManager(nfmgr.ManagerConfig{
 		Switch:          switchClient,
 		P4TargetManager: p4targetMgr,
-		NFInterface:     nfIface,
 		MaxNFSlots:      maxNFSlots,
 		Log:             ctrl.Log.WithName("nf-manager"),
 	})
@@ -242,7 +214,7 @@ func main() {
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
 		P4TargetManager: p4targetMgr,
-		PullInterval:    time.Duration(DefaultStatusUpdateIntervalSeconds) * time.Second,
+		PullInterval:    time.Duration(statusUpdateIntervalSeconds) * time.Second,
 		Log:             ctrl.Log.WithName("p4target-status-updater"),
 	}
 	if err = mgr.Add(statusUpdater); err != nil {
@@ -283,22 +255,4 @@ func main() {
 		setupLog.Error(err, "could not start manager")
 		os.Exit(1)
 	}
-}
-
-func discoverIPs(ifaceName string) ([]net.IP, error) {
-	link, err := netlink.LinkByName(ifaceName)
-	if err != nil {
-		return nil, fmt.Errorf("interface %q not found: %w", ifaceName, err)
-	}
-	addrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list addresses on %q: %w", ifaceName, err)
-	}
-	ips := make([]net.IP, 0, len(addrs))
-	for _, a := range addrs {
-		if a.IP != nil {
-			ips = append(ips, a.IP)
-		}
-	}
-	return ips, nil
 }
