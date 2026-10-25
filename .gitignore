@@ -10,6 +10,9 @@ kustomize
 .vscode
 .idea/
 
+# Claude Code local settings and state
+.claude/
+
 # macOS generated files
 .DS_Store
 
