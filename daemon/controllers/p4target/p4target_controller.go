@@ -2,6 +2,7 @@ package p4target
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -20,6 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// hostInterfacesRetryPeriod is how often the daemon checks again for host interfaces a device hasn't exposed yet.
+const hostInterfacesRetryPeriod = 10 * time.Second
 
 // remoteRoute records an NF CIDR routed through the tunnel towards the node hosting a P4Target.
 type remoteRoute struct {
@@ -57,6 +61,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err = r.removeRemoteRoute(req.NamespacedName); err != nil {
 			return ctrl.Result{}, err
 		}
+		if err = r.Dataplane.DeleteP4TargetInstance(req.NamespacedName); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete P4Target instance: %w", err)
+		}
 		err = r.Dataplane.RemoveP4TargetRoutes(req.NamespacedName)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove P4Target routes: %w", err)
@@ -87,11 +94,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err = r.removeRemoteRoute(req.NamespacedName); err != nil {
 			return ctrl.Result{}, err
 		}
+		var result ctrl.Result
+		// Containerized targets are wired when the CNI plugin reports their interfaces, so this
+		// only repairs them (e.g. after a daemon restart). Targets reusing interfaces the device
+		// exposes on the host are never seen by the CNI plugin and are wired here alone.
+		err = r.Dataplane.EnsureP4TargetHostWiring(target)
+		if errors.Is(err, dataplane.ErrP4TargetLinksMissing) {
+			if dataplane.ReusesHostInterfaces(target) {
+				logger.Info("Waiting for the P4Target's host interfaces", "target", req.NamespacedName, "reason", err.Error())
+				result.RequeueAfter = hostInterfacesRetryPeriod
+			}
+		} else if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to wire P4Target host interfaces: %w", err)
+		}
 		err = r.Dataplane.UpdateP4TargetRoutes(target)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update P4Target routes: %w", err)
 		}
-		return ctrl.Result{}, nil
+		return result, nil
 	}
 
 	// The target lives on a peer node: send its NF CIDR through the tunnel towards that node,
