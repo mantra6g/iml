@@ -15,12 +15,10 @@ import (
 )
 
 const (
-	// DefaultSharedProgramsPinPath is the bpffs directory where programs shared between CNI invocations and the
-	// daemon are pinned.
+	// DefaultSharedProgramsPinPath is the bpffs directory where programs shared by every target are pinned.
 	DefaultSharedProgramsPinPath = "/sys/fs/bpf/loom/programs"
 
-	// DefaultSharedMapsPinPath is the bpffs directory where maps shared between CNI invocations and the
-	// daemon are pinned.
+	// DefaultSharedMapsPinPath is the bpffs directory where maps shared by every target are pinned.
 	DefaultSharedMapsPinPath = "/sys/fs/bpf/loom/maps"
 
 	// DefaultTargetPinPathFormat is the bpffs directory holding every object pinned for a specific target.
@@ -94,7 +92,7 @@ func LoadSRv6End(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6EndObjects, 
 
 // LoadSRv6Dispatch loads a target's flow dispatcher into the kernel. Each target has its own
 // instance, so pass TargetPinPaths(target): the first call pins the program and its "cfg" and
-// "buckets" maps, later calls (and the daemon) reuse them. The caller owns the returned
+// "buckets" maps, later calls (e.g. after a daemon restart) reuse them. The caller owns the returned
 // objects and must Close them.
 func LoadSRv6Dispatch(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6DispatchObjects, error) {
 	spec, err := LoadSrv6Dispatch()

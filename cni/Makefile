@@ -53,30 +53,6 @@ vet: ## Run go vet against code.
 #test: manifests generate fmt vet setup-envtest ## Run tests.
 #	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-##@ eBPF
-
-# BPF_INCLUDE_ARCH points clang at the multiarch kernel headers (asm/types.h, ...).
-BPF_INCLUDE_ARCH ?= /usr/include/$(shell uname -m)-linux-gnu
-export BPF_INCLUDE_ARCH
-
-# BPF2GO_STRIP falls back to a versioned llvm-strip (e.g. llvm-strip-19) when the unversioned one is missing.
-BPF2GO_STRIP ?= $(shell command -v llvm-strip || ls /usr/bin/llvm-strip-* 2>/dev/null | sort -V | tail -n1)
-export BPF2GO_STRIP
-
-.PHONY: ebpf-generate
-ebpf-generate: ## Compile the eBPF programs and regenerate their Go bindings with bpf2go.
-	go generate ./ebpf/...
-
-.PHONY: ebpf-verify
-ebpf-verify: ## Load the eBPF programs through the kernel verifier and run their packet tests (needs sudo).
-	go test -exec sudo -count=1 -v ./ebpf/...
-
-.PHONY: ebpf-check
-ebpf-check: ebpf-generate ## Fail if the committed eBPF objects and bindings are out of date.
-	git diff --exit-code -- ebpf/
-	@test -z "$$(git ls-files --others --exclude-standard -- ebpf/)" || \
-		{ echo "untracked generated eBPF files:"; git ls-files --others --exclude-standard -- ebpf/; exit 1; }
-
 ##@ Dependencies
 
 ## Location to install dependencies to

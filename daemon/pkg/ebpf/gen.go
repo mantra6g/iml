@@ -1,4 +1,4 @@
-// Package ebpf contains the eBPF programs used by the CNI plugin and the Go code to load and
+// Package ebpf contains the eBPF programs used by the daemon and the Go code to load and
 // attach them. The C sources live in src/. Run `make ebpf-generate` after changing them to
 // rebuild the objects and regenerate the Go bindings (srv6*_bpfel.go/.o, srv6*_bpfeb.go/.o).
 package ebpf

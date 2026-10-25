@@ -85,6 +85,30 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/daemon && $(KUSTOMIZE) edit set image daemon=${IMG} cni=${IMG_CNI}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
+##@ eBPF
+
+# BPF_INCLUDE_ARCH points clang at the multiarch kernel headers (asm/types.h, ...).
+BPF_INCLUDE_ARCH ?= /usr/include/$(shell uname -m)-linux-gnu
+export BPF_INCLUDE_ARCH
+
+# BPF2GO_STRIP falls back to a versioned llvm-strip (e.g. llvm-strip-19) when the unversioned one is missing.
+BPF2GO_STRIP ?= $(shell command -v llvm-strip || ls /usr/bin/llvm-strip-* 2>/dev/null | sort -V | tail -n1)
+export BPF2GO_STRIP
+
+.PHONY: ebpf-generate
+ebpf-generate: ## Compile the eBPF programs and regenerate their Go bindings with bpf2go.
+	go generate ./pkg/ebpf/...
+
+.PHONY: ebpf-verify
+ebpf-verify: ## Load the eBPF programs through the kernel verifier and run their packet tests (needs sudo).
+	go test -exec sudo -count=1 -v ./pkg/ebpf/...
+
+.PHONY: ebpf-check
+ebpf-check: ebpf-generate ## Fail if the committed eBPF objects and bindings are out of date.
+	git diff --exit-code -- pkg/ebpf/
+	@test -z "$$(git ls-files --others --exclude-standard -- pkg/ebpf/)" || \
+		{ echo "untracked generated eBPF files:"; git ls-files --others --exclude-standard -- pkg/ebpf/; exit 1; }
+
 ##@ Deployment
 
 ifndef ignore-not-found
