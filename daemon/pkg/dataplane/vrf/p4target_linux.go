@@ -30,8 +30,7 @@ const (
 //	routing bridge ── BridgeVeth ══ Dispatcher ──┬──► Ports[0]
 //	                                             └──► ...
 //
-// A single-interface target has no Dispatcher or Ports: BridgeVeth is the host-side peer of its
-// iml0 interface. Names are derived from the target's name so they survive a daemon restart.
+// Names are derived from the target's name so they survive a daemon restart.
 type p4TargetLinks struct {
 	BridgeVeth string
 	Dispatcher string
@@ -39,27 +38,24 @@ type p4TargetLinks struct {
 }
 
 // newP4TargetLinks returns the host-side interfaces of target, as configured by
-// spec.network.hostInterfaces:
-//   - unset: a single iml0 interface, created by the CNI plugin.
-//   - Create: Count nfX interfaces, created by the CNI plugin, behind a dispatcher.
-//   - Reuse: the named interfaces, exposed by the device itself (e.g. a BlueField-3), behind a dispatcher.
+// spec.network.hostInterfaces, behind a dispatcher:
+//   - Create: Count nfX interfaces, created by the CNI plugin. This is the default, with a Count of 1.
+//   - Reuse: the named interfaces, exposed by the device itself (e.g. a BlueField-3).
 func newP4TargetLinks(target *corev1alpha1.P4Target) (*p4TargetLinks, error) {
 	links := defaultP4TargetLinks(target.Name)
-	if target.Spec.Network == nil || target.Spec.Network.HostInterfaces == nil {
-		links.Dispatcher = ""
-		return links, nil
-	}
-	hostIfaces := target.Spec.Network.HostInterfaces
 	if dataplane.ReusesHostInterfaces(target) {
-		if hostIfaces.Reuse == nil || len(hostIfaces.Reuse.Names) == 0 {
+		reuse := target.Spec.Network.HostInterfaces.Reuse
+		if reuse == nil || len(reuse.Names) == 0 {
 			return nil, fmt.Errorf("hostInterfaces.reuse.names must not be empty")
 		}
-		links.Ports = append([]string(nil), hostIfaces.Reuse.Names...)
+		links.Ports = append([]string(nil), reuse.Names...)
 		return links, nil
 	}
+	// The API defaults hostInterfaces to Create with a Count of 1, so a missing field means the same.
 	count := 1
-	if hostIfaces.Create != nil && hostIfaces.Create.Count > 0 {
-		count = int(hostIfaces.Create.Count)
+	if target.Spec.Network != nil && target.Spec.Network.HostInterfaces != nil &&
+		target.Spec.Network.HostInterfaces.Create != nil && target.Spec.Network.HostInterfaces.Create.Count > 0 {
+		count = int(target.Spec.Network.HostInterfaces.Create.Count)
 	}
 	prefix := p4TargetLinkPrefix(target.Name)
 	for i := range count {
@@ -98,10 +94,6 @@ func (d *Software) EnsureP4TargetHostWiring(target *corev1alpha1.P4Target) error
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	if target.Status.NodeName != d.cfg.NodeName {
-		return fmt.Errorf("P4Target %s is not scheduled on this node", target.Name)
-	}
-
 	key := client.ObjectKeyFromObject(target)
 	instance, exists := d.p4Targets[key]
 	if !exists {
@@ -128,9 +120,9 @@ func (d *Software) EnsureP4TargetHostWiring(target *corev1alpha1.P4Target) error
 }
 
 // wireP4Target connects the target's links to the routing bridge:
-//   - multi-interface targets get a bridge veth ↔ dispatcher pair, with srv6_dispatch spreading the
-//     traffic for targetIP across the ports, and a static neighbor entry resolving targetIP to the
-//     dispatcher, since nothing answers neighbor solicitations for it.
+//   - a bridge veth ↔ dispatcher pair, with srv6_dispatch spreading the traffic for targetIP across
+//     the ports, and a static neighbor entry resolving targetIP to the dispatcher, since nothing
+//     answers neighbor solicitations for it.
 //   - with srv6Proxy, srv6_end applies the SRv6 End behavior to the traffic coming back from the target.
 func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetIP net.IP, srv6Proxy bool) error {
 	bridge, err := netlink.LinkByName(d.routingSubnet.Bridge.Name)
@@ -138,34 +130,32 @@ func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetI
 		return fmt.Errorf("failed to get routing bridge: %w", err)
 	}
 
-	if links.Dispatcher != "" {
-		ports := make([]netlink.Link, 0, len(links.Ports))
-		for _, name := range links.Ports {
-			port, err := linkByName(name)
-			if err != nil {
-				return err
-			}
-			if err = netlink.LinkSetUp(port); err != nil {
-				return fmt.Errorf("failed to set %s up: %w", name, err)
-			}
-			ports = append(ports, port)
-		}
-		dispatcher, err := ensureDispatcherPair(links, minMTU(ports))
+	ports := make([]netlink.Link, 0, len(links.Ports))
+	for _, name := range links.Ports {
+		port, err := linkByName(name)
 		if err != nil {
 			return err
 		}
-		if err = attachDispatcher(targetName, dispatcher, ports); err != nil {
-			return err
+		if err = netlink.LinkSetUp(port); err != nil {
+			return fmt.Errorf("failed to set %s up: %w", name, err)
 		}
-		err = netlink.NeighSet(&netlink.Neigh{
-			LinkIndex:    bridge.Attrs().Index,
-			HardwareAddr: dispatcher.Attrs().HardwareAddr,
-			IP:           targetIP,
-			State:        netlink.NUD_PERMANENT,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to set static neighbor entry for %s: %w", targetIP, err)
-		}
+		ports = append(ports, port)
+	}
+	dispatcher, err := ensureDispatcherPair(links, minMTU(ports))
+	if err != nil {
+		return err
+	}
+	if err = attachDispatcher(targetName, dispatcher, ports); err != nil {
+		return err
+	}
+	err = netlink.NeighSet(&netlink.Neigh{
+		LinkIndex:    bridge.Attrs().Index,
+		HardwareAddr: dispatcher.Attrs().HardwareAddr,
+		IP:           targetIP,
+		State:        netlink.NUD_PERMANENT,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set static neighbor entry for %s: %w", targetIP, err)
 	}
 
 	bridgeVeth, err := linkByName(links.BridgeVeth)
@@ -306,11 +296,6 @@ func (d *Software) unwireP4Target(target client.ObjectKey) error {
 			targetIP = instance.TargetIPs.IPv6Net.IP
 		}
 	}
-	if links.Dispatcher == "" {
-		// The bridge veth is the peer of the target's iml0, which the CNI plugin deletes.
-		return nil
-	}
-
 	for _, port := range links.Ports {
 		if err := ebpf.DetachTC(port, ebpf.Ingress); err != nil {
 			return fmt.Errorf("failed to detach SRv6 Dispatch from %s: %w", port, err)

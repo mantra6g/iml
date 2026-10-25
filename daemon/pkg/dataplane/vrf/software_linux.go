@@ -896,6 +896,13 @@ func (d *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*da
 	}
 
 	if p4TargetConfig.TargetIPs.IsEmpty() {
+		// The daemon may have restarted since the IP was assigned. It's recorded in the spec.
+		addrs, err := vrfutil.ParseDualStackGatewayFromStrings(target.Spec.TargetDataplaneIPs)
+		if err == nil && addrs.IPv6 != nil {
+			p4TargetConfig.TargetIPs.IPv6Net = &net.IPNet{IP: addrs.IPv6, Mask: net.CIDRMask(128, 128)}
+		}
+	}
+	if p4TargetConfig.TargetIPs.IsEmpty() {
 		ips, err := d.assignP4TargetIPs(context.Background(), target)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assign IPs for P4Target %s/%s: %w", target.Name, target.Namespace, err)
@@ -914,15 +921,8 @@ func (d *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*da
 	d.p4Targets[key] = p4TargetConfig
 
 	return &dataplane.P4TargetConfig{
-		IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
-		ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
-		IPv6Gateway:     d.routingSubnet.Gateway,
-		Bridge:          d.routingSubnet.Bridge.Name,
-		MTU:             DefaultP4TargetMTU,
-		IfaceConfig: &dataplane.InterfaceConfig{
-			CrossNamespaceInterfaces: p4TargetConfig.links.Ports,
-			BridgeVethPeerName:       p4TargetConfig.links.BridgeVeth,
-		},
+		HostInterfaces: p4TargetConfig.links.Ports,
+		MTU:            DefaultP4TargetMTU,
 	}, nil
 }
 

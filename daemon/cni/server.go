@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/mantra6g/iml/daemon/pkg/dataplane"
-	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
@@ -212,19 +211,9 @@ func (c *Controller) handleP4TargetRegistration(response http.ResponseWriter, re
 		return
 	}
 
-	configResponse := &NetworkConfig{
-		IPNets: netutils.DualStackNetwork{
-			IPv6Net: &p4TargetConfig.IPv6Net,
-		},
-		ClusterCIDRs: netutils.DualStackNetwork{
-			IPv6Net: &p4TargetConfig.ClusterIPv6CIDR,
-		},
-		Gateways: netutils.DualStackAddress{
-			IPv6: p4TargetConfig.IPv6Gateway,
-		},
-		BridgeVethName:      p4TargetConfig.IfaceConfig.BridgeVethPeerName,
-		MultiInterfaceNames: p4TargetConfig.IfaceConfig.CrossNamespaceInterfaces,
-		MTU:                 uint32(p4TargetConfig.MTU),
+	configResponse := &P4TargetNetworkConfig{
+		HostInterfaceNames: p4TargetConfig.HostInterfaces,
+		MTU:                uint32(p4TargetConfig.MTU),
 	}
 
 	response.Header().Set("Content-Type", "application/json")

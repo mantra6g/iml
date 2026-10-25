@@ -29,22 +29,11 @@ type AppConfig struct {
 	MTU          uint32
 }
 
+// P4TargetConfig describes the interfaces the CNI plugin creates for a containerized P4Target.
 type P4TargetConfig struct {
-	IPv6Net         net.IPNet
-	ClusterIPv6CIDR net.IPNet
-	IPv6Gateway     net.IP
-	Bridge          string
-	MTU             int
-	IfaceConfig     *InterfaceConfig
-}
-
-// InterfaceConfig names the host-side interfaces the CNI plugin creates for a containerized P4Target.
-type InterfaceConfig struct {
-	// CrossNamespaceInterfaces are the host-side peers of the target's nfX interfaces. Empty for a
-	// single-interface target, which is connected through BridgeVethPeerName instead.
-	CrossNamespaceInterfaces []string
-	// BridgeVethPeerName is the host-side peer of a single-interface target's iml0 interface.
-	BridgeVethPeerName string
+	// HostInterfaces are the host-side peers of the target's nfX interfaces.
+	HostInterfaces []string
+	MTU            int
 }
 
 // ErrP4TargetLinksMissing reports that the interfaces a P4Target is wired through don't exist yet:
@@ -69,7 +58,8 @@ type Dataplane interface {
 	AssignP4TargetIPs(ctx context.Context, target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error)
 	// EnsureP4TargetHostWiring connects the target's host-side interfaces to the routing bridge and
 	// attaches its eBPF programs. It is idempotent and returns ErrP4TargetLinksMissing if the
-	// interfaces don't exist yet.
+	// interfaces don't exist yet. The caller ensures the target runs on this node: the CNI plugin
+	// calls it before the target's driver has reported status.nodeName.
 	EnsureP4TargetHostWiring(target *corev1alpha1.P4Target) error
 	// TeardownP4TargetHostWiring undoes EnsureP4TargetHostWiring, keeping the target's IPs.
 	TeardownP4TargetHostWiring(target client.ObjectKey) error

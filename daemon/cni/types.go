@@ -13,15 +13,19 @@ type NetworkConfig struct {
 	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
 	ServiceCIDRs netutils.DualStackNetwork `json:"service_cidrs"`
 	Gateways     netutils.DualStackAddress `json:"gateways"`
-	// BridgeName is the bridge the CNI plugin attaches an application's host-side veth to.
-	// P4Targets are attached by the daemon instead.
+	// BridgeName is the bridge the application's host-side veth is attached to.
 	BridgeName string `json:"bridge_name"`
 	// BridgeVethName is the host-side peer of the container's iml0 interface.
 	BridgeVethName string `json:"bridge_veth_name"`
-	// MultiInterfaceNames are the host-side peers of a multi-interface P4Target's nfX interfaces.
-	// When set, no iml0 interface is created.
-	MultiInterfaceNames []string `json:"multi_interface_names"`
-	MTU                 uint32   `json:"mtu"`
+	MTU            uint32 `json:"mtu"`
+}
+
+// P4TargetNetworkConfig names the interfaces the CNI plugin creates for a P4Target, nf0, nf1, ...
+// The daemon wires their host side.
+type P4TargetNetworkConfig struct {
+	// HostInterfaceNames are the host-side peers of the target's nfX interfaces.
+	HostInterfaceNames []string `json:"host_interface_names"`
+	MTU                uint32   `json:"mtu"`
 }
 
 // =========== Applications ===========

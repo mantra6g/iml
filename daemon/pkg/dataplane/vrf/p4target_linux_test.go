@@ -22,10 +22,10 @@ func TestNewP4TargetLinks(t *testing.T) {
 		network *corev1alpha1.P4TargetNetwork
 		want    p4TargetLinks
 	}{
-		{"no network: single iml0", nil,
-			p4TargetLinks{BridgeVeth: prefix + "b"}},
-		{"no host interfaces: single iml0", &corev1alpha1.P4TargetNetwork{},
-			p4TargetLinks{BridgeVeth: prefix + "b"}},
+		{"no network: one created interface", nil,
+			p4TargetLinks{BridgeVeth: prefix + "b", Dispatcher: prefix + "d", Ports: []string{prefix + "p0"}}},
+		{"no host interfaces: one created interface", &corev1alpha1.P4TargetNetwork{},
+			p4TargetLinks{BridgeVeth: prefix + "b", Dispatcher: prefix + "d", Ports: []string{prefix + "p0"}}},
 		{"create without count", &corev1alpha1.P4TargetNetwork{HostInterfaces: &corev1alpha1.HostInterfaces{
 			Strategy: corev1alpha1.HostInterfaceStrategyCreate,
 		}}, p4TargetLinks{BridgeVeth: prefix + "b", Dispatcher: prefix + "d", Ports: []string{prefix + "p0"}}},
