@@ -159,6 +159,48 @@ func TestAttachTC_IsIdempotent(t *testing.T) {
 	}
 }
 
+func TestDetachTC(t *testing.T) {
+	requirePrivileges(t)
+	objs, err := LoadSRv6End(PinPaths{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer objs.Close()
+
+	dummy := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: fmt.Sprintf("imltest%d", os.Getpid()%10000)}}
+	if err := netlink.LinkAdd(dummy); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { netlink.LinkDel(dummy) })
+
+	// Detaching before anything is attached must not fail.
+	if err := DetachTC(dummy.Name, Ingress); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []Direction{Ingress, Egress} {
+		if err := AttachTC(objs.Srv6End, dummy.Name, dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		if err := DetachTC(dummy.Name, Ingress); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for parent, want := range map[uint32]int{netlink.HANDLE_MIN_INGRESS: 0, netlink.HANDLE_MIN_EGRESS: 1} {
+		filters, err := netlink.FilterList(dummy, parent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(filters) != want {
+			t.Fatalf("%d filters on parent %x, want %d", len(filters), parent, want)
+		}
+	}
+	if err := DetachTC("imlmissing0", Ingress); err != nil {
+		t.Fatalf("detaching from a missing interface: %v", err)
+	}
+}
+
 func TestSRv6End(t *testing.T) {
 	requirePrivileges(t)
 	objs, err := LoadSRv6End(PinPaths{}, nil)

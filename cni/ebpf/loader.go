@@ -23,11 +23,14 @@ const (
 	// daemon are pinned.
 	DefaultSharedMapsPinPath = "/sys/fs/bpf/loom/maps"
 
+	// DefaultTargetPinPathFormat is the bpffs directory holding every object pinned for a specific target.
+	DefaultTargetPinPathFormat = "/sys/fs/bpf/loom/targets/%s"
+
 	// DefaultTargetProgramsPinPathFormat is the bpffs directory where programs for a specific target are pinned.
-	DefaultTargetProgramsPinPathFormat = "/sys/fs/bpf/loom/targets/%s/programs"
+	DefaultTargetProgramsPinPathFormat = DefaultTargetPinPathFormat + "/programs"
 
 	// DefaultTargetMapsPinPathFormat is the bpffs directory where maps for a specific target are pinned.
-	DefaultTargetMapsPinPathFormat = "/sys/fs/bpf/loom/targets/%s/maps"
+	DefaultTargetMapsPinPathFormat = DefaultTargetPinPathFormat + "/maps"
 )
 
 // PinPaths are the bpffs directories programs and maps are pinned under. An empty field
@@ -49,6 +52,16 @@ func TargetPinPaths(target string) PinPaths {
 		Programs: fmt.Sprintf(DefaultTargetProgramsPinPathFormat, target),
 		Maps:     fmt.Sprintf(DefaultTargetMapsPinPathFormat, target),
 	}
+}
+
+// UnpinTarget removes every object pinned for target. Programs still attached to an interface
+// stay loaded until they are detached. It is a no-op if nothing is pinned.
+func UnpinTarget(target string) error {
+	dir := fmt.Sprintf(DefaultTargetPinPathFormat, target)
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("failed to remove pin path %q: %w", dir, err)
+	}
+	return nil
 }
 
 // Direction selects the TC hook a program is attached to.
@@ -198,6 +211,52 @@ func AttachTC(prog *ebpf.Program, ifaceName string, dir Direction) error {
 	}
 	if err = netlink.FilterReplace(filter); err != nil {
 		return fmt.Errorf("failed to attach %s to %q: %w", filter.Name, ifaceName, err)
+	}
+	return nil
+}
+
+// DetachTC removes the filter AttachTC installed on ifaceName, leaving the clsact qdisc and any
+// other filter in place. It is a no-op if the interface, the qdisc or the filter is missing.
+func DetachTC(ifaceName string, dir Direction) error {
+	link, err := netlink.LinkByName(ifaceName)
+	if errors.As(err, &netlink.LinkNotFoundError{}) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to lookup interface %q: %w", ifaceName, err)
+	}
+
+	qdiscs, err := netlink.QdiscList(link)
+	if err != nil {
+		return fmt.Errorf("failed to list qdiscs of %q: %w", ifaceName, err)
+	}
+	hasClsact := false
+	for _, q := range qdiscs {
+		if q.Type() == "clsact" {
+			hasClsact = true
+			break
+		}
+	}
+	if !hasClsact {
+		return nil
+	}
+
+	parent := uint32(netlink.HANDLE_MIN_INGRESS)
+	if dir == Egress {
+		parent = netlink.HANDLE_MIN_EGRESS
+	}
+	filters, err := netlink.FilterList(link, parent)
+	if err != nil {
+		return fmt.Errorf("failed to list filters of %q: %w", ifaceName, err)
+	}
+	for _, f := range filters {
+		bpf, ok := f.(*netlink.BpfFilter)
+		if !ok || bpf.Handle != 1 || bpf.Priority != 1 {
+			continue
+		}
+		if err = netlink.FilterDel(bpf); err != nil {
+			return fmt.Errorf("failed to detach %s from %q: %w", bpf.Name, ifaceName, err)
+		}
 	}
 	return nil
 }
