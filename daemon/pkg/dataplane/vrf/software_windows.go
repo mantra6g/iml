@@ -10,6 +10,7 @@ import (
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Software struct {
@@ -30,7 +31,13 @@ func (s *Software) DeleteAppInstance(containerID string) error {
 func (s *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*dataplane.P4TargetConfig, error) {
 	return nil, fmt.Errorf("Windows is not supported yet")
 }
-func (s *Software) DeleteP4TargetInstance(containerID string) error {
+func (s *Software) EnsureP4TargetHostWiring(target *corev1alpha1.P4Target) error {
+	return fmt.Errorf("Windows is not supported yet")
+}
+func (s *Software) TeardownP4TargetHostWiring(target client.ObjectKey) error {
+	return fmt.Errorf("Windows is not supported yet")
+}
+func (s *Software) DeleteP4TargetInstance(target client.ObjectKey) error {
 	return fmt.Errorf("Windows is not supported yet")
 }
 

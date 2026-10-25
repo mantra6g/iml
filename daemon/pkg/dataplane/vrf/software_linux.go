@@ -96,8 +96,8 @@ type Subnet interface {
 }
 
 type P4TargetInstance struct {
-	TargetIPs   netutils.DualStackNetwork
-	ifaceConfig *dataplane.InterfaceConfig
+	TargetIPs netutils.DualStackNetwork
+	links     *p4TargetLinks
 }
 
 func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Client) (_ dataplane.Dataplane, err error) {
@@ -882,20 +882,15 @@ func (d *Software) DeleteAppInstance(_ string) error {
 }
 
 func (d *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*dataplane.P4TargetConfig, error) {
+	if dataplane.ReusesHostInterfaces(target) {
+		return nil, fmt.Errorf("P4Target %s reuses existing host interfaces and is not set up through the CNI plugin", target.Name)
+	}
+
 	d.p4Mu.Lock()
 	defer d.p4Mu.Unlock()
 
-	p4TargetConfig, exists := d.p4Targets[client.ObjectKeyFromObject(target)]
-	if exists && !p4TargetConfig.TargetIPs.IsEmpty() && p4TargetConfig.ifaceConfig != nil {
-		return &dataplane.P4TargetConfig{
-			IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
-			ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
-			IPv6Gateway:     d.routingSubnet.Gateway,
-			Bridge:          d.routingSubnet.Bridge.Name,
-			MTU:             DefaultMTU,
-			IfaceConfig:     p4TargetConfig.ifaceConfig,
-		}, nil
-	}
+	key := client.ObjectKeyFromObject(target)
+	p4TargetConfig, exists := d.p4Targets[key]
 	if !exists {
 		p4TargetConfig = &P4TargetInstance{}
 	}
@@ -908,70 +903,27 @@ func (d *Software) ConfigureP4TargetInstance(target *corev1alpha1.P4Target) (*da
 		p4TargetConfig.TargetIPs = ips
 	}
 
-	if p4TargetConfig.ifaceConfig == nil {
-		ifaceConfig, err := d.ensureHostInterfaces(target)
+	if p4TargetConfig.links == nil {
+		links, err := newP4TargetLinks(target)
 		if err != nil {
-			return nil, fmt.Errorf("failed to ensure host interfaces for P4Target %s/%s: %w", target.Name, target.Namespace, err)
+			return nil, fmt.Errorf("failed to name host interfaces for P4Target %s/%s: %w", target.Name, target.Namespace, err)
 		}
-		p4TargetConfig.ifaceConfig = ifaceConfig
+		p4TargetConfig.links = links
 	}
 
-	d.p4Targets[client.ObjectKeyFromObject(target)] = p4TargetConfig
+	d.p4Targets[key] = p4TargetConfig
 
 	return &dataplane.P4TargetConfig{
 		IPv6Net:         *p4TargetConfig.TargetIPs.IPv6Net,
 		ClusterIPv6CIDR: *d.cfg.ClusterCIDR.IPv6Net,
 		IPv6Gateway:     d.routingSubnet.Gateway,
 		Bridge:          d.routingSubnet.Bridge.Name,
-		MTU:             DefaultMTU,
-		IfaceConfig:     p4TargetConfig.ifaceConfig,
+		MTU:             DefaultP4TargetMTU,
+		IfaceConfig: &dataplane.InterfaceConfig{
+			CrossNamespaceInterfaces: p4TargetConfig.links.Ports,
+			BridgeVethPeerName:       p4TargetConfig.links.BridgeVeth,
+		},
 	}, nil
-}
-
-func (d *Software) ensureHostInterfaces(target *corev1alpha1.P4Target) (*dataplane.InterfaceConfig, error) {
-	var ifaceNames []string
-	var otherVethPeerName string
-	bridgeVethPeerName, err := vrfutil.GenerateRandomName("tgtbr", 6)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate random name for bridge veth peer: %w", err)
-	}
-	if target.Spec.Network == nil ||
-		target.Spec.Network.HostInterfaces == nil ||
-		target.Spec.Network.HostInterfaces.Strategy == corev1alpha1.HostInterfaceStrategyCreate {
-		otherVethPeerName, err = vrfutil.GenerateRandomName("tgtv", 6)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate random name for other veth peer: %w", err)
-		}
-		// Send interface names to the CNI plugin, which will create them.
-		// Once the CNI plugin has created the interfaces, it will report its success to this
-		// daemon, which will then configure the interfaces in the host VRF.
-		ifs, err := d.generateHostInterfaceNames(target)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate host interface names: %w", err)
-		}
-		ifaceNames = append(ifaceNames, ifs...)
-	}
-	return &dataplane.InterfaceConfig{
-		CrossNamespaceInterfaces: ifaceNames,
-		BridgeVethPeerName:       bridgeVethPeerName,
-		OtherVethPeerName:        otherVethPeerName,
-	}, nil
-}
-
-func (d *Software) generateHostInterfaceNames(target *corev1alpha1.P4Target) ([]string, error) {
-	var interfaces = make([]string, 0)
-	var interfacesToCreate = 0
-	if target.Spec.Network.HostInterfaces.Create != nil {
-		interfacesToCreate = int(target.Spec.Network.HostInterfaces.Create.Count)
-	}
-	for i := 0; i < interfacesToCreate; i++ {
-		name, err := vrfutil.GenerateRandomName("tgt", 6)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate random name for host interface: %w", err)
-		}
-		interfaces = append(interfaces, name)
-	}
-	return interfaces, nil
 }
 
 func (d *Software) AssignP4TargetIPs(ctx context.Context, target *corev1alpha1.P4Target) (netutils.DualStackNetwork, error) {
@@ -1013,11 +965,6 @@ func (d *Software) assignP4TargetIPs(ctx context.Context, target *corev1alpha1.P
 		return netutils.DualStackNetwork{}, fmt.Errorf("failed to patch P4Target %s/%s with allocated IPs: %w", target.Name, target.Namespace, err)
 	}
 	return ips, nil
-}
-
-func (d *Software) DeleteP4TargetInstance(_ string) error {
-	// Nothing to do here by now
-	return nil
 }
 
 func (d *Software) UpdateAppRoutes(app *corev1alpha1.Application) error {
