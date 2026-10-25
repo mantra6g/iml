@@ -174,6 +174,48 @@ var _ = Describe("BMv2Target Controller", func() {
 			Expect(deploymentList.Items).To(HaveLen(1))
 		})
 
+		It("should create the P4Target with a single host interface", func() {
+			resource := &infrav1alpha1.BMv2Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			controllerReconciler := &Reconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the P4Target's owner, labels and host interfaces")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			p4target := &corev1alpha1.P4Target{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: resourceName}, p4target)).To(Succeed())
+			Expect(metav1.IsControlledBy(p4target, resource)).To(BeTrue())
+			Expect(p4target.Labels).To(HaveKeyWithValue(corev1alpha1.P4TargetArchitectureLabel, "v1model"))
+			Expect(p4target.Labels).To(HaveKeyWithValue(infrav1alpha1.BMv2TargetLabel, resourceName))
+			Expect(p4target.Spec.Network).NotTo(BeNil())
+			Expect(p4target.Spec.Network.HostInterfaces).NotTo(BeNil())
+			Expect(p4target.Spec.Network.HostInterfaces.Strategy).To(Equal(corev1alpha1.HostInterfaceStrategyCreate))
+			Expect(p4target.Spec.Network.HostInterfaces.Create).NotTo(BeNil())
+			Expect(p4target.Spec.Network.HostInterfaces.Create.Count).To(Equal(int32(1)))
+
+			By("Assigning the NF CIDR and dataplane IPs the way the operator and the daemon would")
+			p4target.Spec.NfCIDR = "fd00:0:0:1::/64"
+			p4target.Spec.TargetDataplaneIPs = []string{"fd00::10"}
+			Expect(k8sClient.Update(ctx, p4target)).To(Succeed())
+
+			By("Verifying that reconciling again keeps them")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: resourceName}, p4target)).To(Succeed())
+			Expect(p4target.Spec.NfCIDR).To(Equal("fd00:0:0:1::/64"))
+			Expect(p4target.Spec.TargetDataplaneIPs).To(Equal([]string{"fd00::10"}))
+		})
+
 		It("should delete the P4Target and the Deployment when the BMv2Target is deleted", func() {
 			resource := &infrav1alpha1.BMv2Target{
 				ObjectMeta: metav1.ObjectMeta{
@@ -190,9 +232,8 @@ var _ = Describe("BMv2Target Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Registering the P4Target the way the driver does, without an owner reference")
-			p4target := &corev1alpha1.P4Target{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
-			Expect(k8sClient.Create(ctx, p4target)).To(Succeed())
+			By("Verifying that the P4Target was created along with the Deployment")
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: resourceName}, &corev1alpha1.P4Target{})).To(Succeed())
 
 			By("Deleting the BMv2Target and reconciling the deletion")
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
@@ -226,7 +267,7 @@ var _ = Describe("BMv2Target Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Creating a BMv2 pod and the P4Target the way the Deployment and the driver would")
+			By("Creating a BMv2 pod the way the Deployment would")
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName + "-pod",
@@ -236,8 +277,6 @@ var _ = Describe("BMv2Target Controller", func() {
 				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "bmv2", Image: "test-dataplane:latest"}}},
 			}
 			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-			p4target := &corev1alpha1.P4Target{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
-			Expect(k8sClient.Create(ctx, p4target)).To(Succeed())
 
 			By("Deleting the BMv2Target while its pod is still running")
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())

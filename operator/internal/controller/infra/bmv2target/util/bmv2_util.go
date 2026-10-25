@@ -131,13 +131,6 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container.Name = cfg.ControlPlaneContainerName
 	container.Image = cfg.ControlPlaneImage
 	container.ImagePullPolicy = corev1.PullIfNotPresent
-	if container.SecurityContext == nil {
-		container.SecurityContext = &corev1.SecurityContext{}
-	}
-	if container.SecurityContext.Capabilities == nil {
-		container.SecurityContext.Capabilities = &corev1.Capabilities{}
-	}
-	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
 	container.Args = []string{
 		"--p4target-name", bmv2Target.Name,
 		"--max-nf-slots", "1",
@@ -283,9 +276,8 @@ type CNIConfig struct {
 }
 
 type CNIArgs struct {
-	AppType      string `json:"app_type"`
-	TargetName   string `json:"target_name"`
-	NFInterfaces uint8  `json:"nf_interfaces"`
+	AppType    string `json:"app_type"`
+	TargetName string `json:"target_name"`
 }
 
 func (c CNIConfig) String() string {
@@ -298,9 +290,8 @@ func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 		Name:      "loom-cni",
 		Namespace: "loom-system",
 		CNIArgs: CNIArgs{
-			AppType:      "p4target",
-			TargetName:   bmv2Target.Name,
-			NFInterfaces: 1,
+			AppType:    "p4target",
+			TargetName: bmv2Target.Name,
 		},
 	}
 }
@@ -323,6 +314,7 @@ func EnsureP4TargetLabels(bmv2Target *infrav1alpha1.BMv2Target,
 		labels = make(map[string]string)
 	}
 	labels[infrav1alpha1.BMv2TargetLabel] = bmv2Target.Name
+	labels[corev1alpha1.P4TargetArchitectureLabel] = "v1model"
 	return labels
 }
 
@@ -343,6 +335,17 @@ func EnsureP4TargetSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	spec *corev1alpha1.P4TargetSpec) *corev1alpha1.P4TargetSpec {
 	if spec == nil {
 		spec = &corev1alpha1.P4TargetSpec{}
+	}
+	if spec.Network == nil {
+		spec.Network = &corev1alpha1.P4TargetNetwork{}
+	}
+	// The BMv2 switch listens on a single nf0 interface, which the CNI plugin creates in its pod.
+	// It applies the SRv6 End behavior itself, so SRv6 is left in Native mode.
+	if spec.Network.HostInterfaces == nil {
+		spec.Network.HostInterfaces = &corev1alpha1.HostInterfaces{
+			Strategy: corev1alpha1.HostInterfaceStrategyCreate,
+			Create:   &corev1alpha1.CreateHostInterfaces{Count: 1},
+		}
 	}
 	return spec
 }

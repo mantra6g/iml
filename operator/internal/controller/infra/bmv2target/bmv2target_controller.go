@@ -84,23 +84,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 
+	// The P4Target must exist before the BMv2 pod does, since the daemon reads its network
+	// configuration when the CNI plugin sets up the pod. The driver then keeps its status up to date.
+	p4target, err := r.ensureP4Target(ctx, bmv2Target)
+	if err != nil {
+		logger.Error(err, "failed to ensure p4target has correct defaults and finalizers")
+		return ctrl.Result{}, err
+	}
+
 	dep, err := r.ensureDeployment(ctx, bmv2Target)
 	if err != nil {
 		logger.Error(err, "failed to ensure bmv2Target has correct defaults and finalizers")
 		return ctrl.Result{}, err
-	}
-
-	// Commenting this out because this should be created by the BMv2 driver.
-	//p4target, err := r.ensureP4Target(ctx, bmv2Target)
-	//if err != nil {
-	//	logger.Error(err, "failed to ensure p4target has correct defaults and finalizers")
-	//	return ctrl.Result{}, err
-	//}
-
-	p4target := &corev1alpha1.P4Target{}
-	err = r.Get(ctx, client.ObjectKey{Name: bmv2Target.Name}, p4target)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, fmt.Errorf("failed to get P4Target: %w", err)
 	}
 
 	err = r.updateStatus(ctx, bmv2Target, p4target, dep)
@@ -168,7 +163,10 @@ func (r *Reconciler) ensureP4Target(
 		p4target.Labels = bmv2utils.EnsureP4TargetLabels(bmv2tgt, p4target.Labels)
 		p4target.Annotations = bmv2utils.EnsureP4TargetAnnotations(bmv2tgt, p4target.Annotations)
 		p4target.Finalizers = bmv2utils.EnsureP4TargetFinalizers(bmv2tgt, p4target.Finalizers)
-		p4target.Spec = *bmv2utils.EnsureP4TargetSpec(bmv2tgt, &p4target.Spec)
+		if p4target.CreationTimestamp.IsZero() {
+			// spec.network.hostInterfaces can only be set when the P4Target is created.
+			p4target.Spec = *bmv2utils.EnsureP4TargetSpec(bmv2tgt, &p4target.Spec)
+		}
 		return controllerutil.SetControllerReference(bmv2tgt, p4target, r.Scheme) // BMv2Target owns P4Target
 	})
 	return p4target, err
