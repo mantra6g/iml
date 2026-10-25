@@ -92,16 +92,24 @@ status:
   new network functions. If set to true, it indicates that new network functions should not be scheduled 
   on this target, but it does not affect already running network functions. This can be used by administrators 
   to mark a target as unschedulable for maintenance or other reasons.
-* `targetIP`: The IP address assigned to the P4 target, which can be used for communication and management purposes.
-  This field is typically updated by the driver when the target is registered and becomes available.
-* `driverIPs`: A list of IP addresses belonging to the driver managing this programmable target. These IPs can be used
-  for retrieving data-plane object information from external pods. These IPs are assigned by the *primary CNI*, when
-  the driver pod is being initialized, and then they are updated to this P4Target's spec by the driver itself. This is
-  a list exclusively for dual-stack configuration purposes.
+* `targetDataplaneIPs`: The IPs that IML uses to route traffic to the P4 target and its NFs. The daemon on the target's
+  node assigns them from its routing subnet and records them here, so they survive a daemon restart.
+* `network`: Configures how the host connects to the P4 target.
+    - `srv6.mode`: Who applies the SRv6 End behavior for the target's NFs: `Native` (the target itself, the default)
+      or `Proxy` (the host, on the target's behalf).
+    - `hostInterfaces`: The host-side interfaces connecting to the target. With `strategy: Create` (the default), the
+      CNI plugin creates `create.count` interfaces, named `nf0`, `nf1`, ... inside the target's pod. With
+      `strategy: Reuse`, the daemon attaches to the existing host interfaces listed in `reuse.names`, e.g. those
+      exposed by a SmartNIC. Defaults to `strategy: Create` with `create.count: 1`. This field is immutable.
 * `nfCIDR`: Block of addresses dedicated to NFs running on this P4Target. This field is assigned and set by IML's 
   operator.
 
 ## Status fields
+* `nodeName`: The Kubernetes node the P4 target runs on. It is reported by the target's driver.
+* `driverIPs`: A list of IP addresses belonging to the driver managing this programmable target. These IPs can be used
+  for retrieving data-plane object information from external pods. They are assigned by the *primary CNI* when the
+  driver pod is initialized, and reported here by the driver itself. This is a list exclusively for dual-stack
+  configuration purposes.
 * `capacity`: Represents the total resources of the P4 target, such as CPU and memory
 * `allocatable`: Represents the resources of the P4 target that are available for allocation to network functions, 
   which may be less than the total capacity due to reserved resources or other factors.

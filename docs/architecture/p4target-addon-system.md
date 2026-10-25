@@ -110,29 +110,35 @@ published as metrics by the P4Target driver, which then can be scraped by Promet
 
 ## Configuring networking
 To allow NFs to communicate with each other and with external applications, the P4Target addon system also provides
-a way to configure networking on the target through the use of the `P4Target` resource. This resource includes
-three fields related to network configuration:
+a way to configure networking on the target through the use of the `P4Target` resource. These are the fields related
+to network configuration:
 
-- `spec.driverIPs`
-- `spec.targetIP`
+- `spec.network`
 - `spec.nfCIDR`
+- `spec.targetDataplaneIPs`
+- `status.driverIPs`
 
-The `spec.driverIPs` field is used to specify the IP addresses of the driver, meaning the IP addresses that were 
-assigned by the primary CNI, and that regular pods that haven't been configured with IML's CNI can use to communicate
-with the driver to extract data-plane object state or to perform any other necessary interactions. There can be 
-multiple driver IPs specified in this field for dual stack support. The driver is responsible for publishing these
-IP addresses in the `spec.driverIPs` field of the `P4Target` resource, so users can easily retrieve this information.
+The `spec.network` field describes how the host connects to the target. `spec.network.hostInterfaces` selects whether
+the networking plugin creates the host-side interfaces (`Create`, used by containerized targets such as BMv2) or
+attaches to interfaces the device already exposes on the host (`Reuse`, used by SmartNICs). `spec.network.srv6`
+selects whether the target applies the SRv6 End behavior itself (`Native`) or the host does it on its behalf
+(`Proxy`). Since the networking plugin needs this information to wire the target, the `P4Target` must exist, with
+`spec.network` set, before the target's pod is created.
 
-The `spec.targetIP` field is used to specify the IP address that IML `Applications` can use to reach the target and
-its NFs. This IP address is used for service chaining and traffic steering. The driver is responsible for publishing 
-this address in the `spec.targetIP` field of the `P4Target` resource, so that the networking plugin can then retrieve
-this information and use it to configure the necessary routes and steering rules.
+The `spec.nfCIDR` field specifies the CIDR that the target can use to assign IP addresses to the NFs running
+on it. This allows the target to have complete control over IP address management of the NFs. This field is
+automatically set by the IML operator whenever it detects that it is empty. If it is not empty, then IML's operator
+assumes that either a CIDR was already assigned by itself or that a custom CIDR was specified by the user, and in
+both cases, it does not modify this field.
 
-Finally, the `spec.nfCIDR` field specifies the CIDR that the target can use to assign IP addresses to the NFs running
-on it. This allows the target to have complete control over IP address management of the NFs. This field automatically
-set by the IML operator whenever it detects that it is empty. If the `spec.targetCIDR` field is not empty, then IML's
-operator assumes that either a CIDR was already assigned by itself or that a custom CIDR was specified by the user, 
-and in both cases, it does not modify this field.
+The `spec.targetDataplaneIPs` field holds the IP addresses that IML `Applications` use to reach the target and its NFs.
+They are used for service chaining and traffic steering. The daemon on the target's node assigns them from its
+routing subnet, and routes `spec.nfCIDR` through them.
+
+The `status.driverIPs` field holds the IP addresses of the driver, meaning the IP addresses that were assigned by the
+primary CNI, and that regular pods that haven't been configured with IML's CNI can use to communicate with the driver
+to extract data-plane object state or to perform any other necessary interactions. There can be multiple driver IPs
+for dual stack support. The driver is responsible for publishing them, so users can easily retrieve this information.
 
 Here is an example sequence diagram illustrating how the network configuration process of a BMv2Target switch works:
 ```mermaid
@@ -147,38 +153,33 @@ sequenceDiagram
 
   %% --- Phase 1: BMv2Target creation ---
   User->>+Operator: Create BMv2Target
-  Operator->>+API: Create Pod (Driver + Switch)
-  API-->>-Operator: Pod scheduled
-
-  Operator->>+API: Create P4Target (CR)
+  Operator->>+API: Create P4Target (spec.network.hostInterfaces.create.count = 1)
   API-->>-Operator: P4Target created
-
+  Operator->>+API: Create Deployment (Driver + Switch)
+  API-->>-Operator: Deployment created
   Operator-->>-User: BMv2Target created
 
   %% --- Phase 2: nfCIDR assignment ---
-  Operator->>+API: Update P4Target (nfCIDR = 10.0.1.0/24)
+  Operator->>+API: Update P4Target (nfCIDR = fd00:0:0:1::/64)
   API-->>-Operator: Acknowledged
 
   %% --- Phase 3: Pod networking setup (CNI mode) ---
   API->>+CNI: ADD (Pod networking)
-  CNI->>+Switch: Configure interfaces + assign targetIP
-  CNI->>Switch: Install default + cluster routes
-  Switch-->>-CNI: Networking ready
-  CNI-->>-API: Result (Pod IP assigned)
+  CNI->>+API: Get P4Target
+  API-->>-CNI: spec.network
+  CNI->>API: Update P4Target (targetDataplaneIPs)
+  CNI->>Switch: Create nf0 (peer of a host-side port)
+  CNI->>Host: Attach the port to the routing bridge through the dispatcher eBPF program
+  CNI-->>-API: Result
 
   %% --- Phase 4: Runtime discovery ---
-  Driver->>+Switch: Query targetIP
-  Switch-->>-Driver: targetIP (e.g. 10.0.0.100)
-
-  Driver->>+API: Update P4Target spec (targetIP, driverIP)
+  Driver->>+API: Update P4Target status (nodeName, driverIPs, capacity, conditions)
   API-->>-Driver: Acknowledged
 
   %% --- Phase 5: Route reconciliation (Controller mode) ---
   API-->>CNI: Watch event (P4Target updated)
-  Note over CNI: Validate spec completeness (nfCIDR + targetIP)
+  Note over CNI: Validate completeness (nodeName + nfCIDR + targetDataplaneIPs)
 
-  CNI->>+Host: Program route (nfCIDR through targetIP)
+  CNI->>+Host: Program route (nfCIDR through targetDataplaneIPs)
   Host-->>-CNI: Route installed
-
-  CNI-->>API: Status/ack (optional)
 ```
