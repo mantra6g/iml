@@ -84,6 +84,31 @@ var _ = Describe("P4Target Controller", func() {
 			Expect(k8sClient.Delete(ctx, createdResource)).To(Succeed())
 		})
 
+		It("should default to a single host interface created by the CNI plugin", func() {
+			By("creating a P4Target without a network configuration")
+			resource := &corev1alpha1.P4Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      targetKey.Name,
+					Namespace: targetKey.Namespace,
+				},
+				Spec: corev1alpha1.P4TargetSpec{},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			By("Verifying that the host interfaces were defaulted")
+			createdResource := &corev1alpha1.P4Target{}
+			Expect(k8sClient.Get(ctx, targetKey, createdResource)).To(Succeed())
+			Expect(createdResource.Spec.Network).NotTo(BeNil())
+			hostIfaces := createdResource.Spec.Network.HostInterfaces
+			Expect(hostIfaces).NotTo(BeNil())
+			Expect(hostIfaces.Strategy).To(Equal(corev1alpha1.HostInterfaceStrategyCreate))
+			Expect(hostIfaces.Create).NotTo(BeNil())
+			Expect(hostIfaces.Create.Count).To(Equal(int32(1)))
+
+			By("Cleanup the specific resource instance P4Target")
+			Expect(k8sClient.Delete(ctx, createdResource)).To(Succeed())
+		})
+
 		It("should use a cluster-wide resource instead of a namespaced resource", func() {
 			By("attempting to create a P4Target resource in a non-default namespace")
 			resource := &corev1alpha1.P4Target{

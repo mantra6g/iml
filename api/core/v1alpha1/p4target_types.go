@@ -121,15 +121,15 @@ type P4TargetNetwork struct {
 	SRv6 *SRv6Config `json:"srv6,omitempty"`
 
 	// HostInterfaces configures the host-side interfaces connecting to the target.
-	// Defaults to a single interface created by the daemon. It is immutable, since the daemon
+	// Defaults to a single interface created by the CNI plugin. It is immutable, since the daemon
 	// cannot change the interfaces of a running target.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="hostInterfaces is immutable"
+	// +kubebuilder:default={strategy: Create, create: {count: 1}}
 	// +optional
 	HostInterfaces *HostInterfaces `json:"hostInterfaces,omitempty"`
 }
 
 // P4TargetSpec defines the desired state of P4Target
-// +kubebuilder:validation:XValidation:rule="(has(self.network) && has(self.network.hostInterfaces)) == (has(oldSelf.network) && has(oldSelf.network.hostInterfaces))",message="network.hostInterfaces cannot be added or removed after creation"
 type P4TargetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -154,6 +154,7 @@ type P4TargetSpec struct {
 	TargetDataplaneIPs []string `json:"targetDataplaneIPs,omitempty"`
 
 	// Network configures how the host connects to the P4 target and handles its SRv6 traffic.
+	// +kubebuilder:default={}
 	// +optional
 	Network *P4TargetNetwork `json:"network,omitempty"`
 }
@@ -191,9 +192,6 @@ type P4TargetStatus struct {
 
 	// NodeName is the name of the Kubernetes node that the P4 target is associated with, if any.
 	NodeName string `json:"nodeName,omitempty"`
-
-	// TargetManagementIPs are the detected IPs of the programmable target. They can be either in-cluster or public-facing IPs.
-	TargetManagementIPs []string `json:"targetManagementIPs,omitempty"`
 
 	// DriverIPs are the detected IPs that were assigned to the programmable target's driver.
 	DriverIPs []string `json:"driverIPs,omitempty"`
