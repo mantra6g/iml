@@ -37,17 +37,19 @@ type K8sArgs struct {
 **************************************************************/
 
 type NetworkConfig struct {
-	IPNets              netutils.DualStackNetwork `json:"ip_nets"`
-	ClusterCIDRs        netutils.DualStackNetwork `json:"cluster_cidrs"`
-	ServiceCIDRs        netutils.DualStackNetwork `json:"service_cidrs"`
-	Gateways            netutils.DualStackAddress `json:"gateways"`
-	BridgeVethName      string                    `json:"bridge_veth_name"`
-	OtherVethName       string                    `json:"other_veth_name"`
-	MultiInterfaceNames []string                  `json:"multi_interface_names"`
-	CreateInterfaces    bool                      `json:"create_interfaces"`
-	EnableSRv6Proxy     bool                      `json:"enable_srv6_proxy"`
-	BridgeName          string                    `json:"bridge_name"`
-	MTU                 uint32                    `json:"mtu"`
+	IPNets       netutils.DualStackNetwork `json:"ip_nets"`
+	ClusterCIDRs netutils.DualStackNetwork `json:"cluster_cidrs"`
+	ServiceCIDRs netutils.DualStackNetwork `json:"service_cidrs"`
+	Gateways     netutils.DualStackAddress `json:"gateways"`
+	// BridgeName is the bridge an application's host-side veth is attached to. P4Targets are
+	// attached by the daemon instead.
+	BridgeName string `json:"bridge_name"`
+	// BridgeVethName is the host-side peer of the container's iml0 interface.
+	BridgeVethName string `json:"bridge_veth_name"`
+	// MultiInterfaceNames are the host-side peers of a multi-interface P4Target's nfX interfaces.
+	// When set, no iml0 interface is created.
+	MultiInterfaceNames []string `json:"multi_interface_names"`
+	MTU                 uint32   `json:"mtu"`
 }
 
 // =========== Applications ===========
@@ -72,5 +74,13 @@ type ContainerizedP4TargetConfigRequest struct {
 }
 
 type ContainerizedP4TargetTeardownRequest struct {
-	ContainerID string `json:"container_id" validate:"required"`
+	ContainerID  string `json:"container_id" validate:"required"`
+	P4TargetName string `json:"p4target_name" validate:"required"`
+}
+
+// P4TargetRegistrationCallbackRequest tells the daemon the target's interfaces exist, so it can
+// wire their host side.
+type P4TargetRegistrationCallbackRequest struct {
+	ContainerID  string `json:"container_id" validate:"required"`
+	P4TargetName string `json:"p4target_name" validate:"required"`
 }

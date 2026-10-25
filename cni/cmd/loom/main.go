@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 
-	"github.com/mantra6g/iml/cni/ebpf"
 	"github.com/mantra6g/iml/cni/logger"
 	types2 "github.com/mantra6g/iml/cni/types"
 
@@ -68,6 +68,15 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 			logger.ErrorLogger().Printf("Failed to deploy programmable target: %v\n", err)
 			return fmt.Errorf("failed to deploy programmable target: %w", err)
 		}
+		// The daemon wires the host side of the interfaces: bridge, eBPF programs and neighbor entries.
+		err = notifyIMLOfP4TargetSetup(types2.P4TargetRegistrationCallbackRequest{
+			ContainerID:  cniArgs.ContainerID,
+			P4TargetName: cniConf.Args.CNI.TargetName,
+		})
+		if err != nil {
+			logger.ErrorLogger().Printf("Failed to wire programmable target host interfaces: %v\n", err)
+			return fmt.Errorf("failed to wire programmable target host interfaces: %w", err)
+		}
 
 	case types2.ApplicationType:
 		logger.InfoLogger().Printf("Deploying application function for container %s\n", cniArgs.ContainerID)
@@ -91,6 +100,11 @@ func cmdAdd(cniArgs *skel.CmdArgs) (err error) {
 			logger.ErrorLogger().Printf("Failed to deploy application function: %v\n", err)
 			return fmt.Errorf("failed to deploy application function: %w", err)
 		}
+		err = attachHostVethToBridge(netConfig)
+		if err != nil {
+			logger.ErrorLogger().Printf("Failed to attach host veth to bridge: %v\n", err)
+			return fmt.Errorf("failed to attach host veth to bridge: %w", err)
+		}
 	default:
 		logger.ErrorLogger().Printf("Unknown app type: %s\n", cniConf.Args.CNI.AppType)
 		return fmt.Errorf("unknown app type: %s", cniConf.Args.CNI.AppType)
@@ -112,62 +126,18 @@ func DeployNetworkConfiguration(netConfig *types2.NetworkConfig, cniArgs *skel.C
 		return nil, fmt.Errorf("clusterCIDRs is empty")
 	}
 
-	var result types.Result
-	var err error
-	if netConfig.CreateInterfaces && len(netConfig.MultiInterfaceNames) == 0 {
-		result, err = SetupSingleContainerInterface(cniArgs, netConfig, cniConf)
-		if err != nil {
-			return nil, fmt.Errorf("failed to setup single container interface: %w", err)
-		}
-		err = attachHostVethToBridge(netConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach host veth to bridge: %w", err)
-		}
-	} else if netConfig.CreateInterfaces {
-		result, err = SetupMultiContainerInterfaces(cniArgs, netConfig, cniConf)
+	if len(netConfig.MultiInterfaceNames) > 0 {
+		result, err := SetupMultiContainerInterfaces(cniArgs, netConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup multi container interfaces: %w", err)
 		}
-		err = attachHostVethToBridge(netConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach host veth to bridge: %w", err)
-		}
-		err = setStaticNeighborEntryForDispatcher(netConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set static neighbor entry for dispatcher: %w", err)
-		}
+		return result, nil
 	}
-
-	if netConfig.EnableSRv6Proxy {
-		err = InstallSRv6Proxy(netConfig.BridgeVethName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to install SRv6 proxy: %w", err)
-		}
+	result, err := SetupSingleContainerInterface(cniArgs, netConfig, cniConf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup single container interface: %w", err)
 	}
-
 	return result, nil
-}
-
-func setStaticNeighborEntryForDispatcher(netConfig *types2.NetworkConfig) error {
-	bridge, err := netlink.LinkByName(netConfig.BridgeName)
-	if err != nil {
-		return fmt.Errorf("failed to get bridge interface %s: %w", netConfig.BridgeName, err)
-	}
-	dispatcher, err := netlink.LinkByName(netConfig.OtherVethName)
-	if err != nil {
-		return fmt.Errorf("failed to get dispatcher interface %s: %w", netConfig.OtherVethName, err)
-	}
-	// ip neigh replace <IP of target> lladdr <MAC of dispatcher> dev <bridge> nud permanent
-	neighbor := &netlink.Neigh{
-		LinkIndex:    bridge.Attrs().Index,
-		HardwareAddr: dispatcher.Attrs().HardwareAddr,
-		IP:           netConfig.IPNets.IPv6Net.IP,
-		State:        netlink.NUD_PERMANENT,
-	}
-	if err := netlink.NeighAdd(neighbor); err != nil {
-		return fmt.Errorf("failed to add static neighbor entry for dispatcher: %w", err)
-	}
-	return nil
 }
 
 func attachHostVethToBridge(netConfig *types2.NetworkConfig) error {
@@ -205,121 +175,39 @@ func getIPv4IPv6Status(netConfig *types2.NetworkConfig) (bool, bool, error) {
 	return ipv4Enabled, ipv6Enabled, nil
 }
 
-func InstallSRv6Proxy(hostLink string) error {
-	objs, err := ebpf.LoadSRv6End(ebpf.SharedPinPaths(), nil)
-	if err != nil {
-		return fmt.Errorf("failed to load SRv6 End eBPF program: %w", err)
-	}
-	defer objs.Close()
-
-	if err := ebpf.AttachTC(objs.Srv6End, hostLink, ebpf.Ingress); err != nil {
-		return fmt.Errorf("failed to attach SRv6 End to %s ingress: %w", hostLink, err)
-	}
-	return nil
-}
-
-func SetupMultiContainerInterfaces(cniArgs *skel.CmdArgs, netConfig *types2.NetworkConfig, cniConf *types2.IMLCNIConfig) (*types100.Result, error) {
-
-	// Create a veth pair for the container
-	// The container interface is called "iml0"
-	// The host interface is called "nfr-..."
-	bridgeVeth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: netConfig.OtherVethName,
-			MTU:  int(netConfig.MTU),
-		},
-		PeerName: netConfig.BridgeVethName,
-		PeerMTU:  netConfig.MTU,
-	}
-
-	// Add the veth pair
-	if err := netlink.LinkAdd(bridgeVeth); err != nil {
-		return nil, fmt.Errorf("failed to create veth pair: %w", err)
-	}
-
-	objs, err := ebpf.LoadSRv6Dispatch(ebpf.TargetPinPaths(cniConf.Args.CNI.TargetName), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load SRv6 Dispatch eBPF program: %w", err)
-	}
-	defer objs.Close()
-
-	err = ebpf.AttachTC(objs.Srv6Dispatch, netConfig.OtherVethName, ebpf.Ingress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to attach SRv6 Dispatch to %s ingress: %w", netConfig.OtherVethName, err)
-	}
-
-	err = netlink.LinkSetUp(bridgeVeth)
-	if err != nil {
-		return nil, fmt.Errorf("failed to set other side of bridge veth up: %w", err)
-	}
-
-	if netConfig.CreateInterfaces {
-		for i, ifaceName := range netConfig.MultiInterfaceNames {
-			containerSideInterfaceName := fmt.Sprintf("nf%d", i)
-			err = CreateCrossNamespaceInterface(cniArgs.Netns, ifaceName, containerSideInterfaceName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create cross-namespace interface: %w", err)
-			}
-		}
-	}
-
-	for _, ifaceName := range netConfig.MultiInterfaceNames {
-		err = ebpf.AttachTC(objs.Srv6Dispatch, ifaceName, ebpf.Ingress)
+// SetupMultiContainerInterfaces creates one veth pair per host-side name, named nf0, nf1, ... in
+// the container. Their host side is wired by the daemon.
+func SetupMultiContainerInterfaces(cniArgs *skel.CmdArgs, netConfig *types2.NetworkConfig) (*types100.Result, error) {
+	result := &types100.Result{}
+	for i, ifaceName := range netConfig.MultiInterfaceNames {
+		containerSideInterfaceName := fmt.Sprintf("nf%d", i)
+		err := CreateCrossNamespaceInterface(cniArgs.Netns, ifaceName, containerSideInterfaceName, int(netConfig.MTU))
 		if err != nil {
-			return nil, fmt.Errorf("failed to attach SRv6 Dispatch to %s ingress: %w", ifaceName, err)
+			return nil, fmt.Errorf("failed to create cross-namespace interface: %w", err)
 		}
-	}
-
-	err = UpdateDispatchMap(objs, netConfig.OtherVethName, netConfig.MultiInterfaceNames)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update dispatch map: %w", err)
-	}
-
-	return &types100.Result{}, nil
-}
-
-func UpdateDispatchMap(objs *ebpf.Srv6DispatchObjects, dispatcher string, ports []string) error {
-	dispatcherLink, err := netlink.LinkByName(dispatcher)
-	if err != nil {
-		return fmt.Errorf("failed to get dispatcher interface %s: %w", dispatcher, err)
-	}
-	err = objs.Cfg.Put(uint32(0), ebpf.Srv6DispatchConfig{
-		DispatchIfindex: uint32(dispatcherLink.Attrs().Index),
-		Vmac:            [6]uint8(dispatcherLink.Attrs().HardwareAddr),
-		Pad:             [2]uint8{0, 0},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to update dispatch map for dispatcher %s: %w", dispatcher, err)
-	}
-	instances := make([]ebpf.Srv6DispatchInstance, 0, len(ports))
-	for _, port := range ports {
-		portLink, err := netlink.LinkByName(port)
-		if err != nil {
-			return fmt.Errorf("failed to get port interface %s: %w", port, err)
-		}
-		instances = append(instances, ebpf.Srv6DispatchInstance{
-			Ifindex: uint32(portLink.Attrs().Index),
-			Mac:     [6]uint8(portLink.Attrs().HardwareAddr),
-			Pad:     [2]uint8{0, 0},
+		result.Interfaces = append(result.Interfaces, &types100.Interface{
+			Name:    containerSideInterfaceName,
+			Sandbox: cniArgs.Netns,
+			Mtu:     int(netConfig.MTU),
 		})
 	}
-	if err = ebpf.FillBuckets(objs.Buckets, instances); err != nil {
-		return fmt.Errorf("failed to fill dispatch buckets: %w", err)
-	}
-	return nil
+	return result, nil
 }
 
-func CreateCrossNamespaceInterface(containerNetns string, hostSideName string, containerSideName string) error {
+func CreateCrossNamespaceInterface(containerNetns string, hostSideName string, containerSideName string, mtu int) error {
 	hostNs, err := netns.Get()
 	if err != nil {
 		return fmt.Errorf("failed to get host netns: %w", err)
 	}
+	defer hostNs.Close()
 
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: containerSideName,
+			MTU:  mtu,
 		},
 		PeerName: hostSideName,
+		PeerMTU:  uint32(mtu),
 	}
 
 	err = nsutils.ExecInsideNetworkNamespace(containerNetns, func() error {
@@ -346,7 +234,6 @@ func CreateCrossNamespaceInterface(containerNetns string, hostSideName string, c
 	} else if err != nil {
 		return fmt.Errorf("failed to create cross-namespace interface: %w", err)
 	}
-	_ = hostNs.Close()
 	return nil
 }
 
@@ -616,12 +503,34 @@ func getP4TargetConfigFromIML(configRequest types2.ContainerizedP4TargetConfigRe
 	return &configResponse, nil
 }
 
-func tearDownP4Target(cniArgs *skel.CmdArgs) error {
+func notifyIMLOfP4TargetSetup(request types2.P4TargetRegistrationCallbackRequest) error {
+	data, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request payload: %w", err)
+	}
+
+	resp, err := http.Post(
+		"http://localhost:7623/api/v1/cni/p4target/register/callback",
+		"application/json", bytes.NewBuffer(data),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to make HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("received non-2XX response: %s: %s", resp.Status, bytes.TrimSpace(body))
+	}
+	return nil
+}
+
+func tearDownP4Target(cniArgs *skel.CmdArgs, cniConf *types2.IMLCNIConfig) error {
 	logger.InfoLogger().Printf("Tearing down p4target for container %s in netns %s\n", cniArgs.ContainerID, cniArgs.Netns)
 
 	// Notify IML of the network function teardown
 	configRequest := types2.ContainerizedP4TargetTeardownRequest{
-		ContainerID: cniArgs.ContainerID,
+		ContainerID:  cniArgs.ContainerID,
+		P4TargetName: cniConf.Args.CNI.TargetName,
 	}
 	err := notifyIMLOfP4TargetTeardown(configRequest)
 	if err != nil {
@@ -634,7 +543,8 @@ func tearDownP4Target(cniArgs *skel.CmdArgs) error {
 		// Get the peer interface by name inside the container's namespace
 		intf, err := netlink.LinkByName("iml0")
 		if err != nil {
-			return fmt.Errorf("failed to get interface %s in netns %s: %w", "iml0", cniArgs.Netns, err)
+			// Multi-interface targets have no iml0, and their nfX interfaces go away with the netns.
+			return nil
 		}
 
 		// Set the interface down
@@ -751,7 +661,7 @@ func cmdDel(args *skel.CmdArgs) error {
 	switch cniConf.Args.CNI.AppType {
 	case types2.P4TargetType:
 		logger.InfoLogger().Printf("Tearing down network function for container %s\n", args.ContainerID)
-		if err := tearDownP4Target(args); err != nil {
+		if err := tearDownP4Target(args, &cniConf); err != nil {
 			logger.ErrorLogger().Printf("Failed to tear down network function: %v\n", err)
 			return fmt.Errorf("failed to tear down network function: %w", err)
 		}
