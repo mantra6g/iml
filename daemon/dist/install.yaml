@@ -26,7 +26,6 @@ rules:
   resources:
   - applications
   - networkfunctions
-  - p4targets
   - servicechains
   verbs:
   - get
@@ -48,6 +47,15 @@ rules:
   - servicechains/status
   verbs:
   - get
+- apiGroups:
+  - core.loom.io
+  resources:
+  - p4targets
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
 - apiGroups:
   - infra.loom.io
   resources:
@@ -120,6 +128,9 @@ spec:
         - mountPath: /etc/iml/config
           name: iml-config
           readOnly: true
+        - mountPath: /sys/fs/bpf
+          mountPropagation: HostToContainer
+          name: bpffs
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       initContainers:
@@ -141,6 +152,10 @@ spec:
       - hostPath:
           path: /opt/cni/bin
         name: cni-bin
+      - hostPath:
+          path: /sys/fs/bpf
+          type: Directory
+        name: bpffs
       - configMap:
           name: loom-iml-config
         name: iml-config

@@ -49,10 +49,18 @@ spec:
             - name: iml-config
               mountPath: /etc/iml/config
               readOnly: true
+            # The host's bpffs, so the eBPF programs and maps pinned for P4Targets outlive the daemon's container.
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: HostToContainer
       volumes:
         - name: cni-bin
           hostPath:
             path: /opt/cni/bin
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
         - name: iml-config
           configMap:
             name: loom-iml-config
