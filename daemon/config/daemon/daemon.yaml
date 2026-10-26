@@ -20,6 +20,21 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       initContainers:
+        # Mounts bpffs on the host if it isn't already (e.g. on kind nodes). The mount must reach the host,
+        # hence Bidirectional, so the daemon's container sees it and the pinned objects outlive the pod.
+        - name: mount-bpffs
+          image: daemon:latest # Used just for the mount command, so any image with /bin/sh would work.
+          command:
+            - /bin/sh
+            - -c
+            - |
+              grep -q '^[^ ]* /sys/fs/bpf bpf ' /proc/mounts || mount -t bpf bpffs /sys/fs/bpf
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
         - name: cni-installer
           image: cni:latest
           command:

@@ -138,6 +138,19 @@ spec:
         - /bin/sh
         - -c
         - |
+          grep -q '^[^ ]* /sys/fs/bpf bpf ' /proc/mounts || mount -t bpf bpffs /sys/fs/bpf
+        image: daemon:local
+        name: mount-bpffs
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /sys/fs/bpf
+          mountPropagation: Bidirectional
+          name: bpffs
+      - command:
+        - /bin/sh
+        - -c
+        - |
           cp /app /host/opt/cni/bin/loom
           chmod +x /host/opt/cni/bin/loom
         image: cni:local
