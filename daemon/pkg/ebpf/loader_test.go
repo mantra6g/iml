@@ -15,6 +15,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 )
 
@@ -23,6 +24,12 @@ const (
 	tcActOK       = 0
 	tcActShot     = 2
 	tcActRedirect = 7
+)
+
+// XDP verdicts from linux/bpf.h.
+const (
+	xdpDrop = 1
+	xdpPass = 2
 )
 
 // requirePrivileges skips tests that load programs into the kernel when the process lacks
@@ -56,6 +63,13 @@ func TestVerifier(t *testing.T) {
 	})
 	t.Run("srv6_dispatch", func(t *testing.T) {
 		objs, err := LoadSRv6Dispatch(PinPaths{}, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		objs.Close()
+	})
+	t.Run("srv6_cap", func(t *testing.T) {
+		objs, err := LoadSRv6Cap(PinPaths{}, opts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -197,6 +211,118 @@ func TestDetachTC(t *testing.T) {
 		}
 	}
 	if err := DetachTC("imlmissing0", Ingress); err != nil {
+		t.Fatalf("detaching from a missing interface: %v", err)
+	}
+}
+
+// xdpTestLinks creates a dummy, which has no driver XDP support, and a veth, which has.
+func xdpTestLinks(t *testing.T) (dummy, veth string) {
+	t.Helper()
+	id := os.Getpid() % 10000
+	d := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: fmt.Sprintf("imltest%d", id)}}
+	v := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: fmt.Sprintf("imlveth%d", id)}, PeerName: fmt.Sprintf("imlpeer%d", id)}
+	for _, l := range []netlink.Link{d, v} {
+		if err := netlink.LinkAdd(l); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { netlink.LinkDel(l) })
+	}
+	return d.Name, v.Name
+}
+
+func xdpState(t *testing.T, ifaceName string) netlink.LinkXdp {
+	t.Helper()
+	link, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if xdp := link.Attrs().Xdp; xdp != nil {
+		return *xdp
+	}
+	return netlink.LinkXdp{}
+}
+
+func TestAttachXDP(t *testing.T) {
+	requirePrivileges(t)
+	objs, err := LoadSRv6Cap(PinPaths{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer objs.Close()
+	info, err := objs.Srv6Cap.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	progID, _ := info.ID()
+	dummy, veth := xdpTestLinks(t)
+
+	check := func(t *testing.T, ifaceName string, mode uint32) {
+		t.Helper()
+		xdp := xdpState(t, ifaceName)
+		if !xdp.Attached || xdp.AttachMode != mode || xdp.ProgId != uint32(progID) {
+			t.Fatalf("XDP on %s = %+v, want program %d attached in mode %d", ifaceName, xdp, progID, mode)
+		}
+	}
+
+	t.Run("falls back to generic mode and is idempotent", func(t *testing.T) {
+		for range 2 {
+			if err := AttachXDP(objs.Srv6Cap, dummy); err != nil {
+				t.Fatal(err)
+			}
+		}
+		check(t, dummy, nl.XDP_ATTACHED_SKB)
+	})
+	t.Run("uses native mode when the driver supports it", func(t *testing.T) {
+		if err := AttachXDP(objs.Srv6Cap, veth); err != nil {
+			t.Fatal(err)
+		}
+		check(t, veth, nl.XDP_ATTACHED_DRV)
+	})
+	t.Run("replaces a generic program in generic mode", func(t *testing.T) {
+		if err := DetachXDP(veth); err != nil {
+			t.Fatal(err)
+		}
+		link, err := netlink.LinkByName(veth)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := netlink.LinkSetXdpFdWithFlags(link, objs.Srv6Cap.FD(), nl.XDP_FLAGS_SKB_MODE); err != nil {
+			t.Fatal(err)
+		}
+		if err := AttachXDP(objs.Srv6Cap, veth); err != nil {
+			t.Fatal(err)
+		}
+		check(t, veth, nl.XDP_ATTACHED_SKB)
+	})
+}
+
+func TestDetachXDP(t *testing.T) {
+	requirePrivileges(t)
+	objs, err := LoadSRv6Cap(PinPaths{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer objs.Close()
+	dummy, veth := xdpTestLinks(t)
+
+	// Detaching before anything is attached must not fail.
+	if err := DetachXDP(dummy); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{dummy, veth} {
+		if err := AttachXDP(objs.Srv6Cap, name); err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			if err := DetachXDP(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if xdp := xdpState(t, name); xdp.Attached {
+			t.Fatalf("XDP on %s = %+v, want nothing attached", name, xdp)
+		}
+	}
+	if err := DetachXDP("imlmissing0"); err != nil {
 		t.Fatalf("detaching from a missing interface: %v", err)
 	}
 }
@@ -438,6 +564,15 @@ func TestSRv6Dispatch(t *testing.T) {
 			t.Fatalf("ret = %d, want TC_ACT_SHOT", ret)
 		}
 	})
+}
+
+func TestSRv6Cap(t *testing.T) {
+	requirePrivileges(t)
+	objs, err := LoadSRv6Cap(PinPaths{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer objs.Close()
 }
 
 // run executes prog on pkt with BPF_PROG_TEST_RUN and returns the verdict and the packet

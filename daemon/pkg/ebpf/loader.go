@@ -11,6 +11,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 )
 
@@ -104,6 +105,25 @@ func LoadSRv6Dispatch(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6Dispatc
 		return nil, fmt.Errorf("failed to load srv6_dispatch: %w", err)
 	}
 	if err := pinOrReuse(&objs.Srv6Dispatch, pins.Programs, "srv6_dispatch"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	return objs, nil
+}
+
+// LoadSRv6Cap loads a target's SRv6 proxy XDP program into the kernel. Each target has its
+// own instance: pass TargetPinPaths(target). The first call pins the program and its "flows"
+// map, later calls reuse them. The caller owns the returned objects and must Close them.
+func LoadSRv6Cap(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6CapObjects, error) {
+	spec, err := LoadSrv6Cap()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+	}
+	objs := &Srv6CapObjects{}
+	if err := load(spec, pins, opts, objs); err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+	}
+	if err := pinOrReuse(&objs.Srv6Cap, pins.Programs, "srv6_cap"); err != nil {
 		objs.Close()
 		return nil, err
 	}
@@ -254,6 +274,66 @@ func DetachTC(ifaceName string, dir Direction) error {
 		}
 		if err = netlink.FilterDel(bpf); err != nil {
 			return fmt.Errorf("failed to detach %s from %q: %w", bpf.Name, ifaceName, err)
+		}
+	}
+	return nil
+}
+
+// AttachXDP attaches prog to ifaceName in native (driver) mode, or in generic mode when the driver
+// doesn't support XDP. It is idempotent: calling it again replaces the attached program. The
+// attachment holds a reference to the program, so it stays attached after the calling process exits.
+func AttachXDP(prog *ebpf.Program, ifaceName string) error {
+	link, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		return fmt.Errorf("failed to lookup interface %q: %w", ifaceName, err)
+	}
+
+	// Native and generic programs can't be active at the same time, so replace a generic one in
+	// generic mode.
+	flags := nl.XDP_FLAGS_DRV_MODE
+	if xdp := link.Attrs().Xdp; xdp != nil && xdp.Attached && xdp.AttachMode == nl.XDP_ATTACHED_SKB {
+		flags = nl.XDP_FLAGS_SKB_MODE
+	}
+	err = netlink.LinkSetXdpFdWithFlags(link, prog.FD(), flags)
+	if errors.Is(err, unix.EOPNOTSUPP) && flags == nl.XDP_FLAGS_DRV_MODE {
+		// The driver has no XDP support.
+		err = netlink.LinkSetXdpFdWithFlags(link, prog.FD(), nl.XDP_FLAGS_SKB_MODE)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to attach %s to %q: %w", programName(prog), ifaceName, err)
+	}
+	return nil
+}
+
+// DetachXDP removes the XDP program attached to ifaceName, in whichever mode it runs. It is a
+// no-op if the interface is missing or has no XDP program.
+func DetachXDP(ifaceName string) error {
+	link, err := netlink.LinkByName(ifaceName)
+	if errors.As(err, &netlink.LinkNotFoundError{}) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to lookup interface %q: %w", ifaceName, err)
+	}
+
+	xdp := link.Attrs().Xdp
+	if xdp == nil || !xdp.Attached {
+		return nil
+	}
+	// The mode must be explicit: without one, the kernel picks driver mode on drivers that
+	// support it and would leave a generic program attached.
+	var modes []int
+	switch xdp.AttachMode {
+	case nl.XDP_ATTACHED_DRV:
+		modes = []int{nl.XDP_FLAGS_DRV_MODE}
+	case nl.XDP_ATTACHED_SKB:
+		modes = []int{nl.XDP_FLAGS_SKB_MODE}
+	default:
+		modes = []int{nl.XDP_FLAGS_DRV_MODE, nl.XDP_FLAGS_SKB_MODE}
+	}
+	for _, flags := range modes {
+		if err = netlink.LinkSetXdpFdWithFlags(link, -1, flags); err != nil {
+			return fmt.Errorf("failed to detach XDP program from %q: %w", ifaceName, err)
 		}
 	}
 	return nil

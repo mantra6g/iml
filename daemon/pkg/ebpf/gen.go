@@ -5,3 +5,4 @@ package ebpf
 
 //go:generate go tool bpf2go -tags linux -cflags "-O2 -g -Wall -Werror" Srv6End src/srv6_end.ebpf.c -- -I$BPF_INCLUDE_ARCH
 //go:generate go tool bpf2go -tags linux -cflags "-O2 -g -Wall -Werror" -type config -type instance Srv6Dispatch src/srv6_dispatch.ebpf.c -- -I$BPF_INCLUDE_ARCH
+//go:generate go tool bpf2go -tags linux -cflags "-O2 -g -Wall -Werror" Srv6Cap src/srv6_cap.ebpf.c -- -I$BPF_INCLUDE_ARCH
