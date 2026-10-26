@@ -1,0 +1,14 @@
+apiVersion: core.loom.io/v1alpha1
+kind: P4Target
+metadata:
+  name: bf3
+spec:
+  network:
+    srv6:
+      mode: Proxy
+    hostInterfaces:
+      strategy: Reuse
+      reuse:
+        names: ["pf0", "sf0"]
+status:
+  nodeName: node1
