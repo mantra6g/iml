@@ -29,12 +29,12 @@ spec:
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
-  name: pkt-logger-2
+  name: metrics
   namespace: default
   labels:
-    nf: logger-2
+    nf: metrics
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/metrics/metrics.p4"
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -98,7 +98,7 @@ spec:
     - matchLabels:
         nf: firewall
     - matchLabels:
-        nf: logger-2
+        nf: metrics
 ---
 apiVersion: apps/v1
 kind: Deployment
