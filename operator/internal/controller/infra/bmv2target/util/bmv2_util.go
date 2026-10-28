@@ -18,6 +18,16 @@ import (
 const (
 	DefaultBMv2ControlPlaneContainerName = "bmv2-driver"
 	DefaultBMv2DataPlaneContainerName    = "bmv2-switch"
+
+	// bmv2SignalForwardingScript starts simple_switch_grpc in the background and
+	// forwards SIGTERM/SIGINT to it. The first wait is interrupted by the trap, the
+	// second one waits for the switch to actually exit and propagates its status.
+	bmv2SignalForwardingScript = `simple_switch_grpc "$@" &
+pid=$!
+trap 'kill -TERM "$pid" 2>/dev/null' TERM INT
+wait "$pid"
+trap - TERM INT
+wait "$pid"`
 )
 
 type BMv2Config struct {
@@ -98,7 +108,11 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 		container.SecurityContext.Capabilities = &corev1.Capabilities{}
 	}
 	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
-	container.Command = []string{"simple_switch_grpc"}
+	// simple_switch_grpc installs no signal handlers, so as PID 1 it would ignore
+	// SIGTERM and only die on SIGKILL after the grace period. Run it under a shell
+	// that forwards SIGTERM/SIGINT to it. The trailing "simple_switch_grpc" is $0,
+	// and Args are passed through as "$@".
+	container.Command = []string{"/bin/sh", "-c", bmv2SignalForwardingScript, "simple_switch_grpc"}
 	container.Args = []string{
 		"--no-p4",
 		"--log-console",
