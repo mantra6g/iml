@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fw-controller-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fw-controller-role
+  namespace: default
+rules:
+  # Allow reading the source and destination Applications
+  - apiGroups:
+      - core.loom.io
+    resources:
+      - applications
+    verbs:
+      - get
+      - list
+      - watch
+  # Allow owning the firewall NetworkFunctionConfig
+  - apiGroups:
+      - core.loom.io
+    resources:
+      - networkfunctionconfigs
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fw-controller-rolebinding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: fw-controller-sa
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fw-controller-role
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fw-controller
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: fw-controller
+  template:
+    metadata:
+      labels:
+        app: fw-controller
+    spec:
+      serviceAccountName: fw-controller-sa
+      containers:
+        - name: fw-controller
+          image: mantra6g/fw-controller:latest
+          args: [
+            "--config-name", "firewall-config",
+            "--config-namespace", "default",
+            "--source-app", "web-client",
+            "--destination-app", "web-server"
+          ]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"

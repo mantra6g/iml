@@ -1,0 +1,57 @@
+# Allowed source and destination subnets for the SRv6 firewall.
+# A packet is permitted only if its inner source address hits a fw_src_* table and its inner
+# destination address hits the matching fw_dst_* table; everything else is dropped.
+# The commented addresses below are placeholders.
+# When controller.yml is deployed, the firewall controller generates this resource from the
+# source and destination Applications' status.subnets and overwrites any manual changes.
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunctionConfig
+metadata:
+  name: firewall-config
+  namespace: default
+spec:
+  tables:
+    MyIngress.fw_src_ipv4:
+      entries: []
+        # - matchFields:
+        #   - name: hdr.inner_ipv4.src_addr
+        #     type: LPM
+        #     lpm:
+        #       value:
+        #         ipv4Address: 10.123.0.0
+        #       prefixLen: "24"
+        #   action:
+        #     name: MyIngress.allow
+    MyIngress.fw_dst_ipv4:
+      entries: []
+        # - matchFields:
+        #   - name: hdr.inner_ipv4.dst_addr
+        #     type: LPM
+        #     lpm:
+        #       value:
+        #         ipv4Address: 10.124.0.0
+        #       prefixLen: "24"
+        #   action:
+        #     name: MyIngress.allow
+    MyIngress.fw_src_ipv6:
+      entries: []
+        # - matchFields:
+        #   - name: hdr.inner_ipv6.src_addr
+        #     type: LPM
+        #     lpm:
+        #       value:
+        #         ipv6Address: "fd00:123::"
+        #       prefixLen: "64"
+        #   action:
+        #     name: MyIngress.allow
+    MyIngress.fw_dst_ipv6:
+      entries: []
+        # - matchFields:
+        #   - name: hdr.inner_ipv6.dst_addr
+        #     type: LPM
+        #     lpm:
+        #       value:
+        #         ipv6Address: "fd00:124::"
+        #       prefixLen: "64"
+        #   action:
+        #     name: MyIngress.allow

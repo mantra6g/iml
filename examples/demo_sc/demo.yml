@@ -15,12 +15,14 @@ spec: {}
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
-  name: pkt-logger-1
+  name: firewall
   namespace: default
   labels:
-    nf: logger-1
+    nf: firewall
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/firewall/firewall.p4"
+  configRef:
+    name: firewall-config
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -83,7 +85,7 @@ spec:
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
 metadata:
-  name: client-server-with-logger
+  name: client-server-with-firewall
   namespace: default
 spec:
   from:
@@ -94,7 +96,7 @@ spec:
     namespace: default
   functions:
     - matchLabels:
-        nf: logger-1
+        nf: firewall
     - matchLabels:
         nf: logger-2
 ---
