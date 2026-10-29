@@ -1,0 +1,290 @@
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-client
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Application
+metadata:
+  name: web-server
+  namespace: default
+spec: {}
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: tunnel-ingress
+  namespace: default
+  labels:
+    nf: tunnel-ingress
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/feat/vxlan/examples/tunnelnf/tunnel_vxlan.p4"
+  targetName: bmv2-target-1
+  configRef:
+    name: ingress-config
+  targetSelector:
+    p4target.loom.io/arch: v1model
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: tunnel-egress
+  namespace: default
+  labels:
+    nf: tunnel-egress
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/feat/vxlan/examples/tunnelnf/tunnel_vxlan.p4"
+  targetName: bmv2-target-2
+  targetSelector:
+    p4target.loom.io/arch: v1model
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vxlan-ingress
+  namespace: loom-system
+spec:
+  config: '{
+    "cniVersion": "0.3.1",
+    "plugins": [{
+      "name": "vxlan-ingress",
+      "type": "macvlan",
+      "master": "enp1s0f1np1",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static"
+      }
+    }, {
+      "capabilities": { "mac": true },
+      "type": "tuning"
+    }]
+  }'
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vxlan-egress
+  namespace: loom-system
+spec:
+  config: '{
+    "cniVersion": "0.3.1",
+    "plugins": [{
+      "name": "vxlan-egress",
+      "type": "macvlan",
+      "master": "enp1s0f1np1",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static"
+      }
+    }, {
+      "capabilities": { "mac": true },
+      "type": "tuning"
+    }]
+  }'
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunctionConfig
+metadata:
+  name: ingress-config
+  namespace: default
+spec:
+  tables:
+    MyIngress.vtep_src:
+      entries: []
+      defaultAction:
+        name: MyIngress.set_vtep_src_ip
+        parameters:
+          - name: vtep_src_ip
+            ipv4Address: "10.0.0.51"
+    MyIngress.vtep_dst:
+      entries: []
+      defaultAction:
+        name: MyIngress.set_vtep_dst_ip
+        parameters:
+          - name: vtep_dst_ip
+            ipv4Address: "10.0.0.52"
+          - name: smac
+            macAddress: "02:f7:62:85:a4:77"
+          - name: dmac
+            macAddress: "02:f7:62:85:a4:78"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-1
+spec:
+  additionalInterfaces: ['{
+    "interface":"vxlan",
+    "name":"vxlan-ingress",
+    "mac":"02:f7:62:85:a4:77",
+    "ips":["10.0.0.51/24"]
+  }']
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: web-client
+        namespaces:
+        - default
+        topologyKey: "kubernetes.io/hostname"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-2
+spec:
+  additionalInterfaces: ['{
+    "interface":"vxlan",
+    "name":"vxlan-egress",
+    "mac":"02:f7:62:85:a4:78",
+    "ips":["10.0.0.52/24"]
+  }']
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: web-server
+        namespaces:
+        - default
+        topologyKey: "kubernetes.io/hostname"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: client-server-with-logger
+  namespace: default
+spec:
+  from:
+    name: web-client
+    namespace: default
+  to:
+    name: web-server
+    namespace: default
+  functions:
+    - matchLabels:
+        nf: tunnel-ingress
+    - matchLabels:
+        nf: tunnel-egress
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "web-server",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: epyc2
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: web-client
+            namespaces:
+            - default
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: nginx
+          image: nginx:1.31.6-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-client
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-client
+  template:
+    metadata:
+      labels:
+        app: web-client
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "loom-cni",
+              "namespace": "loom-system",
+              "cni-args": {
+                "app_type": "application",
+                "app_name": "web-client",
+                "app_namespace": "default"
+              }
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: epyc1
+      containers:
+        - name: web-client
+          image: alpine:3.20
+          command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+---
+apiVersion: core.loom.io/v1alpha1
+kind: Service
+metadata:
+  name: web-server
+  namespace: default
+spec:
+  selector:
+    app: web-server
+  ports:
+    - protocol: TCP
+      port: 80

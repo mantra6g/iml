@@ -99,11 +99,17 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	}
 	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
 	container.Command = []string{"simple_switch_grpc"}
+	addIntf := ""
+	if len(bmv2Target.Spec.AdditionalInterfaces) > 0 {
+		// TODO: fixme
+		addIntf = "-i 1@vxlan"
+	}
 	container.Args = []string{
 		"--no-p4",
 		"--log-console",
 		"-i",
 		"0@nf0",
+		addIntf,
 		"--",
 		"--grpc-server-addr=0.0.0.0:9559",
 		"--cpu-port=255",
@@ -306,8 +312,11 @@ func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 }
 
 func GetBMv2PodTemplateAnnotations(bmv2Target *infrav1alpha1.BMv2Target) map[string]string {
+
+	interfaces := strings.Join(append(bmv2Target.Spec.AdditionalInterfaces, NewCNIConfigForTarget(bmv2Target).String()), ", ")
+
 	return map[string]string{
-		"k8s.v1.cni.cncf.io/networks": "[" + NewCNIConfigForTarget(bmv2Target).String() + "]",
+		"k8s.v1.cni.cncf.io/networks": "[" + interfaces + "]",
 	}
 }
 
