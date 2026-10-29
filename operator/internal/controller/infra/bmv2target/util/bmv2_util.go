@@ -113,11 +113,17 @@ func EnsureBMv2DataPlaneContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	// that forwards SIGTERM/SIGINT to it. The trailing "simple_switch_grpc" is $0,
 	// and Args are passed through as "$@".
 	container.Command = []string{"/bin/sh", "-c", bmv2SignalForwardingScript, "simple_switch_grpc"}
+	addIntf := ""
+	if len(bmv2Target.Spec.AdditionalInterfaces) > 0 {
+		// TODO: fixme
+		addIntf = "-i 1@vxlan"
+	}
 	container.Args = []string{
 		"--no-p4",
 		"--log-console",
 		"-i",
 		"0@nf0",
+		addIntf,
 		"--",
 		"--grpc-server-addr=0.0.0.0:9559",
 		"--cpu-port=255",
@@ -157,6 +163,41 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 		"--max-nf-slots", "1",
 	}
 	container.Env = EnsureDriverEnvVars(bmv2Target, container.Env)
+	return containers
+}
+
+func EnsureBMv2InitContainer(bmv2Target *infrav1alpha1.BMv2Target,
+	containers []corev1.Container, cfg *BMv2Config) []corev1.Container {
+  cName := "init"
+	if containers == nil {
+		containers = []corev1.Container{}
+	}
+	containerIndex := -1
+	for i, container := range containers {
+		if container.Name == cName {
+			containerIndex = i
+			break
+		}
+	}
+	if containerIndex == -1 {
+		containers = append(containers, corev1.Container{})
+		containerIndex = len(containers) - 1
+	}
+	container := &containers[containerIndex]
+	container.Name = cName
+	container.Image = "busybox:1.36"
+	container.ImagePullPolicy = corev1.PullIfNotPresent
+	container.Command = []string{"/bin/sh", "-c", "--"}
+	container.Args = []string{
+		bmv2Target.Spec.InitCmd,
+  }
+	if container.SecurityContext == nil {
+		container.SecurityContext = &corev1.SecurityContext{}
+	}
+	if container.SecurityContext.Capabilities == nil {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{}
+	}
+	container.SecurityContext.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
 	return containers
 }
 
@@ -265,6 +306,9 @@ func EnsureBMv2PodSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	}
 	spec.Containers = EnsureBMv2DriverContainer(bmv2Target, spec.Containers, cfg)
 	spec.Containers = EnsureBMv2DataPlaneContainer(bmv2Target, spec.Containers, cfg)
+	if bmv2Target.Spec.InitCmd != "" {
+	  spec.InitContainers = EnsureBMv2InitContainer(bmv2Target, spec.InitContainers, cfg)
+	}
 	return spec
 }
 
@@ -320,8 +364,11 @@ func NewCNIConfigForTarget(bmv2Target *infrav1alpha1.BMv2Target) CNIConfig {
 }
 
 func GetBMv2PodTemplateAnnotations(bmv2Target *infrav1alpha1.BMv2Target) map[string]string {
+
+	interfaces := strings.Join(append(bmv2Target.Spec.AdditionalInterfaces, NewCNIConfigForTarget(bmv2Target).String()), ", ")
+
 	return map[string]string{
-		"k8s.v1.cni.cncf.io/networks": "[" + NewCNIConfigForTarget(bmv2Target).String() + "]",
+		"k8s.v1.cni.cncf.io/networks": "[" + interfaces + "]",
 	}
 }
 

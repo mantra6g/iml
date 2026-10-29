@@ -47,6 +47,14 @@ type BMv2TargetSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
+	// AdditionalInterfaces for the BMv2 deployment
+	// +optional
+	AdditionalInterfaces []string `json:"additionalInterfaces,omitempty,omitzero"`
+
+	// Init command for the BMv2 deployment
+	// +optional
+	InitCmd string `json:"initCmd,omitempty,omitzero"`
+
 	// Resources defines the compute resource requirements for the BMv2 target.
 	// +optional
 	Resources ResourceRequirements `json:"resources,omitempty,omitzero"`
