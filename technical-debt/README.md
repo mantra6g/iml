@@ -1,8 +1,6 @@
 # Technical debt
 
-This folder records known design or implementation problems that we chose **not** to fix right away. Each one is written up in enough detail that someone new to that part of the code can understand it, reproduce it and plan a fix.
-
-It is deliberately kept outside `docs/`, so it is not published on the documentation site.
+This folder records known design or implementation problems that we know of. Each one is written up in enough detail that someone new to that part of the code can understand it, reproduce it and plan a fix.
 
 ## Index
 
