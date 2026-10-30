@@ -20,7 +20,7 @@ metadata:
   labels:
     nf: firewall
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/firewall/firewall.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/36c29c9dd275ad1b660bc8ccdb2f3e4ec4d084a7/examples/demo_sc/firewall/firewall.p4"
   configRef:
     name: firewall-config
   targetSelector:
@@ -34,7 +34,7 @@ metadata:
   labels:
     nf: metrics
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/metrics/metrics.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/36c29c9dd275ad1b660bc8ccdb2f3e4ec4d084a7/examples/demo_sc/metrics/metrics.p4"
   targetSelector:
     p4target.loom.io/arch: v1model
 ---

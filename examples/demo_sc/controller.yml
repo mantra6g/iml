@@ -63,7 +63,7 @@ spec:
       serviceAccountName: fw-controller-sa
       containers:
         - name: fw-controller
-          image: demosc_firewall_controller:local
+          image: ghcr.io/mantra6g/examples/firewall-controller:0.0.1
           imagePullPolicy: IfNotPresent
           args: [
             "--config-name", "firewall-config",

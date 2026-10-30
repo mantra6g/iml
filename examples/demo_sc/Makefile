@@ -1,5 +1,5 @@
 # Image URL to use for building/pushing image targets
-IMG_FW_CONTROLLER ?= demosc_firewall_controller:local
+IMG_FW_CONTROLLER ?= ghcr.io/mantra6g/examples/firewall-controller:0.0.1
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
