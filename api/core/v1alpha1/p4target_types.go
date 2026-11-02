@@ -73,7 +73,7 @@ type SRv6Config struct {
 }
 
 // HostInterfaceStrategy defines how the host-side interfaces connecting to a P4 target are obtained.
-// +kubebuilder:validation:Enum=Create;Reuse
+// +kubebuilder:validation:Enum=Create;Reuse;ReuseMapped
 type HostInterfaceStrategy string
 
 const (
@@ -86,7 +86,9 @@ const (
 	HostInterfaceStrategyReuseMapped HostInterfaceStrategy = "ReuseMapped"
 )
 
-// +kubebuilder:validation:XValidation:rule="self.strategy == 'Reuse' ? has(self.reuse) && !has(self.create) : !has(self.reuse)",message="reuse must be set if and only if strategy is Reuse"
+// +kubebuilder:validation:XValidation:rule="self.strategy != 'Create' ? !has(self.create) : true",message="create must only be set when strategy is Create"
+// +kubebuilder:validation:XValidation:rule="(self.strategy == 'Reuse') == has(self.reuse)",message="reuse must be set if and only if strategy is Reuse"
+// +kubebuilder:validation:XValidation:rule="(self.strategy == 'ReuseMapped') == has(self.reuseMapped)",message="reuseMapped must be set if and only if strategy is ReuseMapped"
 type HostInterfaces struct {
 	// Strategy defines whether the daemon creates new host-side interfaces or reuses existing ones.
 	// +kubebuilder:default=Create
@@ -103,7 +105,7 @@ type HostInterfaces struct {
 
 	// ReuseMapped maps existing host-side interfaces to each other. Only used when Strategy is ReuseMapped.
 	// +optional
-	ReuseMapped *ReuseMappedHostInterfaces `json:"reuse_mapped,omitempty"`
+	ReuseMapped *ReuseMappedHostInterfaces `json:"reuseMapped,omitempty"`
 }
 
 type CreateHostInterfaces struct {
