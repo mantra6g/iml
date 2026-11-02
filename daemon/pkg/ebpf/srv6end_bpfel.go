@@ -8,9 +8,15 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
+
+type Srv6EndMac struct {
+	_ structs.HostLayout
+	B [6]uint8
+}
 
 // LoadSrv6End returns the embedded CollectionSpec for Srv6End.
 func LoadSrv6End() (*ebpf.CollectionSpec, error) {
@@ -61,6 +67,7 @@ type Srv6EndProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type Srv6EndMapSpecs struct {
+	BrMac *ebpf.MapSpec `ebpf:"br_mac"`
 }
 
 // Srv6EndVariableSpecs contains global variables before they are loaded into the kernel.
@@ -89,10 +96,13 @@ func (o *Srv6EndObjects) Close() error {
 //
 // It can be passed to LoadSrv6EndObjects or ebpf.CollectionSpec.LoadAndAssign.
 type Srv6EndMaps struct {
+	BrMac *ebpf.Map `ebpf:"br_mac"`
 }
 
 func (m *Srv6EndMaps) Close() error {
-	return _Srv6EndClose()
+	return _Srv6EndClose(
+		m.BrMac,
+	)
 }
 
 // Srv6EndVariables contains all global variables after they have been loaded into the kernel.
