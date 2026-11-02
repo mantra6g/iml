@@ -199,7 +199,8 @@ func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetI
 	}
 
 	// store the routing bridge's mac in the map
-	err = objs.BrMac.Put(0, bridgeMac); if err != nil {
+	key := uint32(0)
+	err = objs.BrMac.Put(key, bridgeMac); if err != nil {
 		return fmt.Errorf("failed to store Bridge mac %d: %w", bridgeMac, err)
 	}
 

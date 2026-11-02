@@ -33,7 +33,6 @@ struct mac {
 	__u8 b[ETH_ALEN];
 };
 
-/* MAC of br-2; filled from userspace (index 0). All zeros = no rewrite. */
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1);
