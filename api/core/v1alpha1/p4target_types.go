@@ -81,6 +81,9 @@ const (
 	HostInterfaceStrategyCreate HostInterfaceStrategy = "Create"
 	// HostInterfaceStrategyReuse makes the daemon attach to already existing host-side interfaces.
 	HostInterfaceStrategyReuse HostInterfaceStrategy = "Reuse"
+	// HostInterfaceStrategyReuse makes the daemon attach to already existing host-side interfaces 
+	// while honoring a specified mapping between toVNF and fromVNF ports.
+	HostInterfaceStrategyReuseMapped HostInterfaceStrategy = "ReuseMapped"
 )
 
 // +kubebuilder:validation:XValidation:rule="self.strategy == 'Reuse' ? has(self.reuse) && !has(self.create) : !has(self.reuse)",message="reuse must be set if and only if strategy is Reuse"
@@ -97,6 +100,10 @@ type HostInterfaces struct {
 	// Reuse lists the existing host-side interfaces to attach to. Only used when Strategy is Reuse.
 	// +optional
 	Reuse *ReuseHostInterfaces `json:"reuse,omitempty"`
+
+	// ReuseMapped maps existing host-side interfaces to each other. Only used when Strategy is ReuseMapped.
+	// +optional
+	ReuseMapped *ReuseMappedHostInterfaces `json:"reuse_mapped,omitempty"`
 }
 
 type CreateHostInterfaces struct {
@@ -113,6 +120,24 @@ type ReuseHostInterfaces struct {
 	// +listType=set
 	// +required
 	Names []string `json:"names"`
+}
+
+type ReuseMappedHostInterfaces struct {
+	// host-side interface pairs which represent toVNF (In) and fromVNF (Out) ports
+	// +kubebuilder:validation:MinItems=1
+	// +listType=set
+	// +required
+	IfacePairs []NfIfacePair `json:"ifacepairs"`
+}
+
+// NfIfacePairs are used to describe a mapping between host-side interfaces representing in and out ports of the NF.
+// The NF should adhere to this mapping internally.
+// e.g. if nfPair = { In: "eth0", Out: "eth1" }, the NF should return traffic received from eth0 through eth1.
+type NfIfacePair struct {
+	// In is the interface for traffic towards the network function.
+	In string `json:"in"`
+	// Out is the interface for traffic returning from the network function.
+	Out string `json:"out"`
 }
 
 type P4TargetNetwork struct {

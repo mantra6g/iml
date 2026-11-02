@@ -50,6 +50,21 @@ func newP4TargetLinks(target *corev1alpha1.P4Target) (*p4TargetLinks, error) {
 		}
 		links.Ports = append([]string(nil), reuse.Names...)
 		return links, nil
+	} 
+	if dataplane.ReusesMappedHostInterfaces(target) {
+		reuse := target.Spec.Network.HostInterfaces.ReuseMapped
+		if reuse == nil || len(reuse.IfacePairs) == 0 {
+			return nil, fmt.Errorf("hostInterfaces.reuse.names must not be empty")
+		}
+		// interface pairs are flattened in the Ports slice [In0, Out0, In1, Out1, ..., Inn, Outn]
+		ports := []string{}
+		for _, pair := range reuse.IfacePairs {
+			ports = append(ports, pair.In)
+			ports = append(ports, pair.Out)
+		}
+
+		links.Ports = ports
+		return links, nil
 	}
 	// The API defaults hostInterfaces to Create with a Count of 1, so a missing field means the same.
 	count := 1
@@ -116,7 +131,7 @@ func (d *Software) EnsureP4TargetHostWiring(target *corev1alpha1.P4Target) error
 	}
 	d.p4Targets[key] = instance
 
-	return d.wireP4Target(target.Name, instance.links, instance.TargetIPs.IPv6Net.IP, usesSRv6Proxy(target))
+	return d.wireP4Target(target.Name, instance.links, instance.TargetIPs.IPv6Net.IP, usesSRv6Proxy(target), dataplane.ReusesMappedHostInterfaces(target))
 }
 
 // wireP4Target connects the target's links to the routing bridge:
@@ -124,8 +139,9 @@ func (d *Software) EnsureP4TargetHostWiring(target *corev1alpha1.P4Target) error
 //     the ports, and a static neighbor entry resolving targetIP to the dispatcher, since nothing
 //     answers neighbor solicitations for it.
 //   - with srv6Proxy, srv6_end applies the SRv6 End behavior to the traffic coming back from the target.
-func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetIP net.IP, srv6Proxy bool) error {
+func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetIP net.IP, srv6Proxy bool, mappedInterfaces bool) error {
 	bridge, err := netlink.LinkByName(d.routingSubnet.Bridge.Name)
+	bridgeMac, _ := macArray(bridge)
 	if err != nil {
 		return fmt.Errorf("failed to get routing bridge: %w", err)
 	}
@@ -145,7 +161,7 @@ func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetI
 	if err != nil {
 		return err
 	}
-	if err = attachDispatcher(targetName, dispatcher, ports); err != nil {
+	if err = attachDispatcher(targetName, dispatcher, ports, mappedInterfaces); err != nil {
 		return err
 	}
 	err = netlink.NeighSet(&netlink.Neigh{
@@ -181,6 +197,12 @@ func (d *Software) wireP4Target(targetName string, links *p4TargetLinks, targetI
 	if err != nil {
 		return fmt.Errorf("failed to load SRv6 End eBPF program: %w", err)
 	}
+
+	// store the routing bridge's mac in the map
+	err = objs.BrMac.Put(0, bridgeMac); if err != nil {
+		return fmt.Errorf("failed to store Bridge mac %d: %w", bridgeMac, err)
+	}
+
 	defer objs.Close()
 	if err = ebpf.AttachTC(objs.Srv6End, links.BridgeVeth, ebpf.Ingress); err != nil {
 		return fmt.Errorf("failed to attach SRv6 End to %s ingress: %w", links.BridgeVeth, err)
@@ -225,7 +247,7 @@ func ensureDispatcherPair(links *p4TargetLinks, mtu int) (netlink.Link, error) {
 
 // attachDispatcher loads the target's srv6_dispatch instance, points it at the dispatcher and the
 // ports, and attaches it to all of them.
-func attachDispatcher(targetName string, dispatcher netlink.Link, ports []netlink.Link) error {
+func attachDispatcher(targetName string, dispatcher netlink.Link, ports []netlink.Link, mappedIfaces bool) error {
 	objs, err := ebpf.LoadSRv6Dispatch(ebpf.TargetPinPaths(targetName), nil)
 	if err != nil {
 		return fmt.Errorf("failed to load SRv6 Dispatch eBPF program: %w", err)
@@ -244,15 +266,35 @@ func attachDispatcher(targetName string, dispatcher netlink.Link, ports []netlin
 		return fmt.Errorf("failed to configure dispatcher %s: %w", dispatcher.Attrs().Name, err)
 	}
 	instances := make([]ebpf.Srv6DispatchInstance, 0, len(ports))
-	for _, port := range ports {
-		mac, err := macArray(port)
-		if err != nil {
-			return err
+
+	if mappedIfaces {
+		// mappedIfaces indicates that the ports belong together in pairs:
+		// assemble bucket entries to match the correct destination address to the correct out iface
+		for i := 0; i < len(ports) - 1; i =+ 2 {
+			var mac [6]byte
+			toVNF := ports[i]
+			fromVNF := ports[i+1]
+			mac, err = macArray(fromVNF)
+			if err != nil {
+				return err
+			}
+			instances = append(instances, ebpf.Srv6DispatchInstance{
+				Ifindex: uint32(toVNF.Attrs().Index),
+				Mac:     mac,
+			})
 		}
-		instances = append(instances, ebpf.Srv6DispatchInstance{
-			Ifindex: uint32(port.Attrs().Index),
-			Mac:     mac,
-		})
+	} else {
+		// use a load-balancing strategy to distribute traffic between multiple interfaces instaed of a fixed mapping
+		for _, port := range ports {
+			mac, err := macArray(port)
+			if err != nil {
+				return err
+			}
+			instances = append(instances, ebpf.Srv6DispatchInstance{
+				Ifindex: uint32(port.Attrs().Index),
+				Mac:     mac,
+			})
+		}
 	}
 	if err = ebpf.FillBuckets(objs.Buckets, instances); err != nil {
 		return fmt.Errorf("failed to fill dispatch buckets: %w", err)

@@ -48,6 +48,15 @@ func ReusesHostInterfaces(target *corev1alpha1.P4Target) bool {
 		target.Spec.Network.HostInterfaces.Strategy == corev1alpha1.HostInterfaceStrategyReuse
 }
 
+// ReusesHostInterfaces reports whether the target is reached through interfaces the device exposes
+// on the host by itself (e.g. a BlueField-3's nfX), so the CNI plugin is never involved.
+// Interfaces adhere to a strict mapping between toVNF and fromVNF interfaces.
+func ReusesMappedHostInterfaces(target *corev1alpha1.P4Target) bool {
+	return target.Spec.Network != nil &&
+		target.Spec.Network.HostInterfaces != nil &&
+		target.Spec.Network.HostInterfaces.Strategy == corev1alpha1.HostInterfaceStrategyReuseMapped
+}
+
 type Dataplane interface {
 	Shutdown(ctx context.Context) error
 
