@@ -133,10 +133,13 @@ type ReuseMappedHostInterfaces struct {
 // NfIfacePairs are used to describe a mapping between host-side interfaces representing in and out ports of the NF.
 // The NF should adhere to this mapping internally.
 // e.g. if nfPair = { In: "eth0", Out: "eth1" }, the NF should return traffic received from eth0 through eth1.
+// +mapType=atomic
 type NfIfacePair struct {
 	// In is the interface for traffic towards the network function.
+	// +required
 	In string `json:"in"`
 	// Out is the interface for traffic returning from the network function.
+	// +required
 	Out string `json:"out"`
 }
 
