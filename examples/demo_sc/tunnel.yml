@@ -40,7 +40,7 @@ spec:
     "plugins": [{
       "name": "vxlan-ingress",
       "type": "macvlan",
-      "master": "enp1s0f1np1",
+      "master": "enp3s0",
       "mode": "bridge",
       "ipam": {
         "type": "static"
@@ -62,7 +62,7 @@ spec:
     "plugins": [{
       "name": "vxlan-egress",
       "type": "macvlan",
-      "master": "enp1s0f1np1",
+      "master": "enp3s0",
       "mode": "bridge",
       "ipam": {
         "type": "static"
