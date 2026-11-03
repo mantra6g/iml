@@ -43,6 +43,11 @@ spec:
           spec:
             description: spec defines the desired state of BMv2Target
             properties:
+              additionalInterfaces:
+                description: AdditionalInterfaces for the BMv2 deployment
+                items:
+                  type: string
+                type: array
               affinity:
                 description: Affinity defines the node affinity for the BMv2 target.
                 properties:
@@ -955,6 +960,9 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              initCmd:
+                description: Init command for the BMv2 deployment
+                type: string
               resources:
                 description: Resources defines the compute resource requirements for
                   the BMv2 target.
