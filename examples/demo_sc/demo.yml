@@ -98,6 +98,10 @@ spec:
     - matchLabels:
         nf: firewall
     - matchLabels:
+        nf: tunnel-ingress
+    - matchLabels:
+        nf: tunnel-egress
+    - matchLabels:
         nf: metrics
 ---
 apiVersion: apps/v1
