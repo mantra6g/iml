@@ -7,7 +7,7 @@ metadata:
   labels:
     nf: tunnel-ingress
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/feat/vxlan/examples/tunnelnf/tunnel_vxlan.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/43f905955362734eeb0603f077688a994dd83f1a/examples/demo_sc/tunnel/tunnel_vxlan.p4"
   targetName: bmv2-target-3
   configRef:
     name: ingress-config
@@ -22,7 +22,7 @@ metadata:
   labels:
     nf: tunnel-egress
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/feat/vxlan/examples/tunnelnf/tunnel_vxlan.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/43f905955362734eeb0603f077688a994dd83f1a/examples/demo_sc/tunnel/tunnel_vxlan.p4"
   targetName: bmv2-target-4
   configRef:
     name: egress-config
