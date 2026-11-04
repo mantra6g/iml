@@ -168,7 +168,7 @@ func EnsureBMv2DriverContainer(bmv2Target *infrav1alpha1.BMv2Target,
 
 func EnsureBMv2InitContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	containers []corev1.Container, cfg *BMv2Config) []corev1.Container {
-  cName := "init"
+	cName := "init"
 	if containers == nil {
 		containers = []corev1.Container{}
 	}
@@ -190,7 +190,7 @@ func EnsureBMv2InitContainer(bmv2Target *infrav1alpha1.BMv2Target,
 	container.Command = []string{"/bin/sh", "-c", "--"}
 	container.Args = []string{
 		bmv2Target.Spec.InitCmd,
-  }
+	}
 	if container.SecurityContext == nil {
 		container.SecurityContext = &corev1.SecurityContext{}
 	}
@@ -307,7 +307,7 @@ func EnsureBMv2PodSpec(bmv2Target *infrav1alpha1.BMv2Target,
 	spec.Containers = EnsureBMv2DriverContainer(bmv2Target, spec.Containers, cfg)
 	spec.Containers = EnsureBMv2DataPlaneContainer(bmv2Target, spec.Containers, cfg)
 	if bmv2Target.Spec.InitCmd != "" {
-	  spec.InitContainers = EnsureBMv2InitContainer(bmv2Target, spec.InitContainers, cfg)
+		spec.InitContainers = EnsureBMv2InitContainer(bmv2Target, spec.InitContainers, cfg)
 	}
 	return spec
 }

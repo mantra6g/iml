@@ -24,7 +24,8 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
-	res "k8s.io/apimachinery/pkg/api/resource"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	res"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
@@ -58,6 +59,14 @@ var _ = Describe("NetworkFunction Controller", func() {
 		BeforeEach(func() {
 			_ = k8sClient.Delete(ctx, target)
 			_ = k8sClient.Delete(ctx, nf)
+
+			// k8sClient reads from the manager's informer cache. Wait until the
+			// cache has observed the deletions, otherwise a later Get may return
+			// the previous spec's (already scheduled) object.
+			Eventually(func(g Gomega) {
+				g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, nfKey, &corev1alpha1.NetworkFunction{}))).To(BeTrue())
+				g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, ctrlclient.ObjectKeyFromObject(target), &corev1alpha1.P4Target{}))).To(BeTrue())
+			}).Should(Succeed())
 		})
 
 		AfterEach(func() {})
@@ -110,7 +119,10 @@ var _ = Describe("NetworkFunction Controller", func() {
 				err := k8sClient.Get(ctx, nfKey, updatedResource)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(updatedResource.Spec.TargetName).To(Equal(target.Name))
-			}).Should(Succeed())
+				// The controller doesn't watch P4Targets: if the NF was reconciled
+				// before the target became ready, it is only retried after the
+				// 10s "Unschedulable" requeue.
+			}, "15s").Should(Succeed())
 		})
 
 		It("should handle resources with missing required fields gracefully", func() {

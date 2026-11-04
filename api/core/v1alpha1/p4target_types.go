@@ -72,6 +72,66 @@ type P4TargetSpec struct {
 	// NfCIDR is the range assigned to the network functions running on this target.
 	// +optional
 	NfCIDR string `json:"nfCIDR,omitempty"`
+
+	// Attachment describes how the target is attached to loom's dataplane on its node.
+	// +optional
+	Attachment P4TargetAttachment `json:"attachment,omitempty,omitzero"`
+}
+
+// P4TargetAttachmentType selects how the daemon steers the target's NfCIDR traffic towards it.
+// +kubebuilder:validation:Enum=Container;HostVRF
+type P4TargetAttachmentType string
+
+const (
+	// P4TargetAttachmentContainer attaches a containerized target through loom's CNI. See P4TargetAttachment.Type.
+	P4TargetAttachmentContainer P4TargetAttachmentType = "Container"
+
+	// P4TargetAttachmentHostVRF attaches the target as a daemon-owned host VRF. See P4TargetAttachment.Type.
+	P4TargetAttachmentHostVRF P4TargetAttachmentType = "HostVRF"
+)
+
+// P4TargetAttachment describes how the target is attached to loom's dataplane on its node.
+type P4TargetAttachment struct {
+	// Type is the kind of attachment.
+	//
+	// Container (default): the target is a container attached to the node's routing bridge through
+	// loom's CNI, and the daemon routes the NfCIDR towards status.targetIPs.
+	//
+	// HostVRF: the target is a VRF in the host network namespace. The daemon creates and owns the VRF,
+	// connects it to the routing VRF with a veth pair, and reports it in status.hostVRF. It routes the
+	// NfCIDR into the VRF, installs an unreachable route for the NfCIDR inside it (so unprogrammed
+	// addresses are dropped instead of looping) and a default route back to the routing VRF.
+	// Contract for the plugin: everything inside the VRF is the plugin's business, and everything wired
+	// to the VRF shares its lifetime. When the VRF is torn down (P4Target deletion or daemon restart)
+	// the daemon deletes every interface whose chain of masters leads to the VRF (e.g. the ports of a
+	// bridge inside the VRF), releasing physical ones instead, and flushes its routing table. The plugin
+	// must therefore wire every interface it creates to the VRF, need not clean them up itself, and must
+	// re-create its interfaces and routes whenever the VRF is re-created (e.g. when status.hostVRF
+	// changes). Interfaces in the VRF other than the daemon's veth must have a conntrack zone rule
+	// matching status.hostVRF.table, added by the plugin.
+	// +kubebuilder:default=Container
+	// +optional
+	Type P4TargetAttachmentType `json:"type,omitempty"`
+}
+
+// P4TargetHostVRFStatus reports the host VRF the daemon created for a HostVRF-attached target.
+type P4TargetHostVRFStatus struct {
+	// Name is the name of the VRF device.
+	Name string `json:"name"`
+
+	// Table is the routing table bound to the VRF.
+	Table uint32 `json:"table"`
+
+	// Interface is the VRF-side end of the veth pair connecting the VRF to the routing VRF.
+	Interface string `json:"interface"`
+
+	// Addresses are the IPs of Interface.
+	// +optional
+	Addresses []string `json:"addresses,omitempty"`
+
+	// Gateways are the IPs of the routing-VRF side of the veth pair, used as the VRF's default gateway.
+	// +optional
+	Gateways []string `json:"gateways,omitempty"`
 }
 
 // Taints that can be applied to P4Targets to indicate their state or
@@ -119,6 +179,10 @@ type P4TargetStatus struct {
 
 	// Allocatable represents the resources of the P4 target that are available for allocation
 	Allocatable corev1.ResourceList `json:"allocatable,omitempty"`
+
+	// HostVRF is the VRF created by the daemon for a target with a HostVRF attachment.
+	// +optional
+	HostVRF *P4TargetHostVRFStatus `json:"hostVRF,omitempty"`
 
 	Conditions []P4TargetCondition `json:"conditions,omitempty"`
 }

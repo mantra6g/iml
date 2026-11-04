@@ -60,6 +60,7 @@ type Software struct {
 	appSubnets         map[client.ObjectKey][]AppSubnet
 	appMu              sync.Mutex
 	p4Targets          map[client.ObjectKey]*P4TargetInstance
+	p4TargetVRFs       map[client.ObjectKey]*TargetVRF
 	p4Mu               sync.Mutex
 	routingSubnet      *RoutingSubnet
 	serviceChainRoutes map[client.ObjectKey][]dataplane.SRv6Route
@@ -224,6 +225,7 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 		routingSubnet:      rtrSubnet,
 		appSubnets:         make(map[client.ObjectKey][]AppSubnet),
 		p4Targets:          make(map[client.ObjectKey]*P4TargetInstance),
+		p4TargetVRFs:       make(map[client.ObjectKey]*TargetVRF),
 		serviceChainRoutes: make(map[client.ObjectKey][]dataplane.SRv6Route),
 		ipt:                ip6t,
 		ip4t:               ip4t,
@@ -239,6 +241,14 @@ func NewSoftware(logger logr.Logger, cfg *env.GlobalConfig, k8sClient client.Cli
 }
 
 func (d *Software) Shutdown(ctx context.Context) error {
+	// Delete the P4Target VRFs, along with everything their plugins enslaved to them
+	d.p4Mu.Lock()
+	for key, targetVRF := range d.p4TargetVRFs {
+		d.teardownTargetVRF(targetVRF)
+		delete(d.p4TargetVRFs, key)
+	}
+	d.p4Mu.Unlock()
+
 	// Delete the router subnet
 	d.routingSubnet.Teardown()
 
@@ -966,6 +976,137 @@ func (d *Software) UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error {
 
 func (d *Software) RemoveP4TargetRoutes(target client.ObjectKey) error {
 	return nil
+}
+
+// EnsureP4TargetVRF creates the host VRF of a HostVRF P4Target, connects it to the routing VRF through a
+// veth pair and routes the target's NfCIDR into it. If the VRF already exists for the same NfCIDR, it is
+// returned as is; if the NfCIDR changed or the VRF device disappeared, the VRF is re-created.
+func (d *Software) EnsureP4TargetVRF(target *corev1alpha1.P4Target) (_ *dataplane.P4TargetVRFInfo, err error) {
+	d.p4Mu.Lock()
+	defer d.p4Mu.Unlock()
+
+	if target.Spec.NfCIDR == "" {
+		return nil, fmt.Errorf("P4Target %s has no NF CIDR assigned yet", target.Name)
+	}
+	nfCIDR, err := vrfutil.ParseDualStackNetworkFromStrings([]string{target.Spec.NfCIDR})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse nf CIDR for P4Target %s: %w", target.Name, err)
+	}
+	key := client.ObjectKey{Name: target.Name}
+	if existing, exists := d.p4TargetVRFs[key]; exists {
+		if sameDualStackNetwork(existing.NfCIDR, nfCIDR) && linkExists(existing.Vrf.Name) {
+			return targetVRFInfo(existing), nil
+		}
+		d.log.Info("Re-creating P4Target VRF", "target", target.Name, "vrf", existing.Vrf.Name,
+			"oldNfCIDR", existing.NfCIDR, "newNfCIDR", nfCIDR)
+		d.teardownTargetVRF(existing)
+		delete(d.p4TargetVRFs, key)
+	}
+
+	tableID, err := d.tableAllocator.Allocate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate table for P4Target %s: %w", target.Name, err)
+	}
+	targetVRF, err := NewTargetVRF(d.log.WithName("target-vrf").WithValues("target", target.Name), tableID, nfCIDR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create VRF for P4Target %s: %w", target.Name, err)
+	}
+	defer func() {
+		if err != nil {
+			d.teardownTargetVRF(targetVRF)
+		}
+	}()
+
+	routerTun, vrfTun, err := d.createSubnetToSubnetTunnels(d.routingSubnet, targetVRF)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect VRF of P4Target %s to the routing VRF: %w", target.Name, err)
+	}
+	targetVRF.TunnelAddrs = vrfTun.Addrs
+	targetVRF.RouterTunnel = routerTun.InterfaceName
+	targetVRF.RouterTunnelAddrs = routerTun.Addrs
+
+	if err = targetVRF.AddDefaultRoute(); err != nil {
+		return nil, fmt.Errorf("failed to route VRF of P4Target %s to the routing VRF: %w", target.Name, err)
+	}
+	// Steering traffic into the VRF goes last, once its unreachable and default routes are in place.
+	if err = d.routingSubnet.AddRoute(nfCIDR, vrfTun.Addrs, routerTun.InterfaceName); err != nil {
+		return nil, fmt.Errorf("failed to route NF CIDR of P4Target %s into its VRF: %w", target.Name, err)
+	}
+
+	d.p4TargetVRFs[key] = targetVRF
+	d.log.Info("Created P4Target VRF", "target", target.Name, "vrf", targetVRF.Vrf.Name,
+		"table", tableID, "interface", targetVRF.Tunnel)
+	return targetVRFInfo(targetVRF), nil
+}
+
+// RemoveP4TargetVRF tears down the target's host VRF, if any.
+func (d *Software) RemoveP4TargetVRF(target client.ObjectKey) error {
+	d.p4Mu.Lock()
+	defer d.p4Mu.Unlock()
+
+	key := client.ObjectKey{Name: target.Name}
+	targetVRF, exists := d.p4TargetVRFs[key]
+	if !exists {
+		return nil
+	}
+	d.log.Info("Removing P4Target VRF", "target", target.Name, "vrf", targetVRF.Vrf.Name)
+	d.teardownTargetVRF(targetVRF)
+	delete(d.p4TargetVRFs, key)
+	return nil
+}
+
+// teardownTargetVRF stops steering the target's NfCIDR into its VRF, removes the conntrack zone rules
+// of the veth pair, and deletes the VRF along with everything enslaved to it. Errors are logged.
+func (d *Software) teardownTargetVRF(targetVRF *TargetVRF) {
+	if targetVRF.RouterTunnel != "" {
+		if err := d.routingSubnet.RemoveRoute(targetVRF.NfCIDR); err != nil {
+			d.log.Error(err, "failed to remove NF CIDR route of target VRF. Ignoring error...",
+				"vrf", targetVRF.Vrf.Name)
+		}
+		if err := d.removeCTZoneRule(targetVRF.RouterTunnel, d.routingSubnet.Vrf.Table); err != nil {
+			d.log.Error(err, "failed to remove CT zone rule. Ignoring error...", "interface", targetVRF.RouterTunnel)
+		}
+	}
+	if targetVRF.Tunnel != "" {
+		if err := d.removeCTZoneRule(targetVRF.Tunnel, targetVRF.Vrf.Table); err != nil {
+			d.log.Error(err, "failed to remove CT zone rule. Ignoring error...", "interface", targetVRF.Tunnel)
+		}
+	}
+	targetVRF.Teardown()
+	// The veth is normally deleted with the VRF, unless creating the tunnels failed before enslaving it.
+	if targetVRF.Tunnel != "" {
+		if tun, err := netlink.LinkByName(targetVRF.Tunnel); err == nil {
+			if err = netlink.LinkDel(tun); err != nil {
+				d.log.Error(err, "failed to delete target VRF tunnel. Ignoring error...", "interface", targetVRF.Tunnel)
+			}
+		}
+	}
+}
+
+func targetVRFInfo(targetVRF *TargetVRF) *dataplane.P4TargetVRFInfo {
+	return &dataplane.P4TargetVRFInfo{
+		Name:      targetVRF.Vrf.Name,
+		Table:     targetVRF.Vrf.Table,
+		Interface: targetVRF.Tunnel,
+		Addresses: targetVRF.TunnelAddrs,
+		Gateways:  targetVRF.RouterTunnelAddrs,
+	}
+}
+
+func linkExists(name string) bool {
+	_, err := netlink.LinkByName(name)
+	return err == nil
+}
+
+func sameDualStackNetwork(a, b netutils.DualStackNetwork) bool {
+	return ipNetString(a.IPv4Net) == ipNetString(b.IPv4Net) && ipNetString(a.IPv6Net) == ipNetString(b.IPv6Net)
+}
+
+func ipNetString(n *net.IPNet) string {
+	if n == nil {
+		return ""
+	}
+	return n.String()
 }
 
 func getFirstSubnetWithAvailableIPs(subnets []AppSubnet) (*AppSubnet, error) {
