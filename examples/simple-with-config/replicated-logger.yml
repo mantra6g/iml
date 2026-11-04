@@ -1,0 +1,40 @@
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-2
+spec:
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+---
+apiVersion: scheduling.loom.io/v1alpha1
+kind: NetworkFunctionReplicaSet
+metadata:
+  name: pkt-logger
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      nf: logger
+  template:
+    metadata:
+      labels:
+        nf: logger
+    spec:
+      p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple-with-config/configurable-logger.p4"
+      targetSelector:
+        p4target.loom.io/arch: v1model
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: device-map-config
+  namespace: loom-system
+data:
+  device-map.env: |
+    1=bmv2-target,bmv2-target-2
