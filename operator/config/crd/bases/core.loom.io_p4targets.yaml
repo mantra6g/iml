@@ -49,6 +49,35 @@ spec:
           spec:
             description: spec defines the desired state of P4Target
             properties:
+              attachment:
+                description: Attachment describes how the target is attached to loom's
+                  dataplane on its node.
+                properties:
+                  type:
+                    default: Container
+                    description: |-
+                      Type is the kind of attachment.
+
+                      Container (default): the target is a container attached to the node's routing bridge through
+                      loom's CNI, and the daemon routes the NfCIDR towards status.targetIPs.
+
+                      HostVRF: the target is a VRF in the host network namespace. The daemon creates and owns the VRF,
+                      connects it to the routing VRF with a veth pair, and reports it in status.hostVRF. It routes the
+                      NfCIDR into the VRF, installs an unreachable route for the NfCIDR inside it (so unprogrammed
+                      addresses are dropped instead of looping) and a default route back to the routing VRF.
+                      Contract for the plugin: everything inside the VRF is the plugin's business, and everything wired
+                      to the VRF shares its lifetime. When the VRF is torn down (P4Target deletion or daemon restart)
+                      the daemon deletes every interface whose chain of masters leads to the VRF (e.g. the ports of a
+                      bridge inside the VRF), releasing physical ones instead, and flushes its routing table. The plugin
+                      must therefore wire every interface it creates to the VRF, need not clean them up itself, and must
+                      re-create its interfaces and routes whenever the VRF is re-created (e.g. when status.hostVRF
+                      changes). Interfaces in the VRF other than the daemon's veth must have a conntrack zone rule
+                      matching status.hostVRF.table, added by the plugin.
+                    enum:
+                    - Container
+                    - HostVRF
+                    type: string
+                type: object
               nfCIDR:
                 description: NfCIDR is the range assigned to the network functions
                   running on this target.
@@ -131,6 +160,37 @@ spec:
                 items:
                   type: string
                 type: array
+              hostVRF:
+                description: HostVRF is the VRF created by the daemon for a target
+                  with a HostVRF attachment.
+                properties:
+                  addresses:
+                    description: Addresses are the IPs of Interface.
+                    items:
+                      type: string
+                    type: array
+                  gateways:
+                    description: Gateways are the IPs of the routing-VRF side of the
+                      veth pair, used as the VRF's default gateway.
+                    items:
+                      type: string
+                    type: array
+                  interface:
+                    description: Interface is the VRF-side end of the veth pair connecting
+                      the VRF to the routing VRF.
+                    type: string
+                  name:
+                    description: Name is the name of the VRF device.
+                    type: string
+                  table:
+                    description: Table is the routing table bound to the VRF.
+                    format: int32
+                    type: integer
+                required:
+                - interface
+                - name
+                - table
+                type: object
               nodeName:
                 description: NodeName is the name of the Kubernetes node that the
                   P4 target is associated with, if any.

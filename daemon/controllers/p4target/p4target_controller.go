@@ -3,15 +3,18 @@ package p4target
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/mantra6g/iml/daemon/env"
 	"github.com/mantra6g/iml/daemon/pkg/dataplane"
 	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
 	"github.com/mantra6g/iml/daemon/pkg/tunnel"
+	netutils "github.com/mantra6g/iml/daemon/pkg/utils/net"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,7 +42,7 @@ type Reconciler struct {
 }
 
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch
-// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get
+// +kubebuilder:rbac:groups=core.loom.io,resources=p4targets/status,verbs=get;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -56,6 +59,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err = r.removeRemoteRoute(req.NamespacedName); err != nil {
 			return ctrl.Result{}, err
 		}
+		if err = r.Dataplane.RemoveP4TargetVRF(req.NamespacedName); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove P4Target VRF: %w", err)
+		}
 		err = r.Dataplane.RemoveP4TargetRoutes(req.NamespacedName)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove P4Target routes: %w", err)
@@ -67,12 +73,39 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	nodeName := target.Status.NodeName
+	isLocal := nodeName != "" && nodeName == r.Config.NodeName
+	isHostVRF := target.Spec.Attachment.Type == corev1alpha1.P4TargetAttachmentHostVRF
+	if !isLocal || !isHostVRF {
+		// This node doesn't (or no longer) host a VRF for this target.
+		if err = r.Dataplane.RemoveP4TargetVRF(req.NamespacedName); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove P4Target VRF: %w", err)
+		}
+		if isLocal && target.Status.HostVRF != nil {
+			if err = r.patchHostVRFStatus(ctx, target, nil); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	if nodeName == "" || target.Spec.NfCIDR == "" {
 		// Target hasn't been scheduled on a node or allocated an NF CIDR yet.
 		return ctrl.Result{}, nil
 	}
 
-	if nodeName == r.Config.NodeName {
+	if isLocal && isHostVRF {
+		// The target lives in a host VRF on this node: steer its NF CIDR into the VRF and tell the plugin
+		// where to find it.
+		if err = r.removeRemoteRoute(req.NamespacedName); err != nil {
+			return ctrl.Result{}, err
+		}
+		info, err := r.Dataplane.EnsureP4TargetVRF(target)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to set up VRF for P4Target %s: %w", req.Name, err)
+		}
+		return ctrl.Result{}, r.patchHostVRFStatus(ctx, target, hostVRFStatus(info))
+	}
+
+	if isLocal {
 		// The target is attached to this node's routing bridge, so it can be routed to directly.
 		if err = r.removeRemoteRoute(req.NamespacedName); err != nil {
 			return ctrl.Result{}, err
@@ -105,6 +138,41 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	r.remoteRoutes[req.NamespacedName] = desired
 
 	return ctrl.Result{}, nil
+}
+
+// patchHostVRFStatus sets status.hostVRF to desired, if it differs.
+func (r *Reconciler) patchHostVRFStatus(
+	ctx context.Context, target *corev1alpha1.P4Target, desired *corev1alpha1.P4TargetHostVRFStatus,
+) error {
+	if equality.Semantic.DeepEqual(target.Status.HostVRF, desired) {
+		return nil
+	}
+	original := target.DeepCopy()
+	target.Status.HostVRF = desired
+	if err := r.Status().Patch(ctx, target, client.MergeFrom(original)); err != nil {
+		return fmt.Errorf("failed to patch host VRF status of P4Target %s: %w", target.Name, err)
+	}
+	return nil
+}
+
+func hostVRFStatus(info *dataplane.P4TargetVRFInfo) *corev1alpha1.P4TargetHostVRFStatus {
+	return &corev1alpha1.P4TargetHostVRFStatus{
+		Name:      info.Name,
+		Table:     info.Table,
+		Interface: info.Interface,
+		Addresses: dualStackAddressStrings(info.Addresses),
+		Gateways:  dualStackAddressStrings(info.Gateways),
+	}
+}
+
+func dualStackAddressStrings(addrs netutils.DualStackAddress) []string {
+	var result []string
+	for _, ip := range []net.IP{addrs.IPv6, addrs.IPv4} {
+		if ip != nil {
+			result = append(result, ip.String())
+		}
+	}
+	return result
 }
 
 // removeRemoteRoute removes the tunnel route previously installed for the target, if any.

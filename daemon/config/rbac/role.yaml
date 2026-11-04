@@ -28,6 +28,7 @@ rules:
   - core.loom.io
   resources:
   - applications/status
+  - p4targets/status
   verbs:
   - get
   - patch
@@ -36,7 +37,6 @@ rules:
   - core.loom.io
   resources:
   - networkfunctions/status
-  - p4targets/status
   - servicechains/status
   verbs:
   - get

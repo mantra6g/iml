@@ -37,6 +37,15 @@ type P4TargetConfig struct {
 	IfaceName       string
 }
 
+// P4TargetVRFInfo describes the host VRF attaching a HostVRF P4Target to the dataplane.
+type P4TargetVRFInfo struct {
+	Name      string
+	Table     uint32
+	Interface string
+	Addresses netutils.DualStackAddress
+	Gateways  netutils.DualStackAddress
+}
+
 type Dataplane interface {
 	Shutdown(ctx context.Context) error
 
@@ -51,6 +60,13 @@ type Dataplane interface {
 
 	UpdateP4TargetRoutes(target *corev1alpha1.P4Target) error
 	RemoveP4TargetRoutes(target client.ObjectKey) error
+
+	// EnsureP4TargetVRF creates (or returns the already existing) host VRF attaching a HostVRF P4Target,
+	// and steers its NfCIDR into it. It is idempotent.
+	EnsureP4TargetVRF(target *corev1alpha1.P4Target) (*P4TargetVRFInfo, error)
+	// RemoveP4TargetVRF tears down the target's host VRF, if any, along with everything enslaved to it.
+	// It is idempotent.
+	RemoveP4TargetVRF(target client.ObjectKey) error
 
 	AddServiceChainRoutes(service *corev1alpha1.ServiceChain, routes []SRv6Route) error
 	ListServiceChainRoutes(service *corev1alpha1.ServiceChain) ([]SRv6Route, error)
