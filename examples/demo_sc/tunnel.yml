@@ -86,14 +86,14 @@ spec:
         name: MyIngress.set_vtep_src_ip
         parameters:
           - name: vtep_src_ip
-            ipv4Address: "10.0.0.51"
+            ipv4Address: "192.168.0.107"
     MyIngress.vtep_dst:
       entries: []
       defaultAction:
         name: MyIngress.set_vtep_dst_ip
         parameters:
           - name: vtep_dst_ip
-            ipv4Address: "10.0.0.52"
+            ipv4Address: "192.168.0.110"
           - name: smac
             macAddress: "02:f7:62:85:a4:77"
           - name: dmac
@@ -123,7 +123,7 @@ spec:
     "interface":"vxlan",
     "name":"vxlan-ingress",
     "mac":"02:f7:62:85:a4:77",
-    "ips":["10.0.0.51/24"]
+    "ips":["192.168.0.107/24"]
   }']
   affinity:
     podAffinity:
@@ -151,7 +151,7 @@ spec:
     "interface":"vxlan",
     "name":"vxlan-egress",
     "mac":"02:f7:62:85:a4:78",
-    "ips":["10.0.0.52/24"]
+    "ips":["192.168.0.110/24"]
   }']
   initCmd: "ip link set dev nf0-pipe address 02:f7:62:85:a4:80"
   affinity:
