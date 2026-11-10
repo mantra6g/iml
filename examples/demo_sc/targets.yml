@@ -1,0 +1,22 @@
+# One Fortaegis1Target per node that has an F1NE device attached.
+# - deviceID: the device's asset ID in Fabrik.
+# - nodeName: the Kubernetes node the device is attached to (see `kubectl get nodes`).
+# Replace the nodeName placeholders before applying.
+#
+# target-1 is HOME: the node where web-client runs.
+apiVersion: plugins.loom.io/v1alpha1
+kind: Fortaegis1Target
+metadata:
+  name: target-1
+spec:
+  deviceID: "/Dd+3h+dAKzJiyhmA3F7YDLbHoD3ESQV"
+  nodeName: home-node # <- replace
+---
+# target-2 is EMBASSY: the node where web-server runs.
+apiVersion: plugins.loom.io/v1alpha1
+kind: Fortaegis1Target
+metadata:
+  name: target-2
+spec:
+  deviceID: "MDdnXOfhNXSxGfJILNH+kIxJSMLbkqSc"
+  nodeName: embassy-node # <- replace

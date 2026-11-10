@@ -97,10 +97,14 @@ spec:
   functions:
     - matchLabels:
         nf: firewall
+    # Encrypted inter-site hop, provided by the Fortaegis1 plugin (see targets.yml).
+    # The ingress and egress functions must be consecutive stages on different nodes.
     - matchLabels:
-        nf: tunnel-ingress
+        fortaegis1.plugins.loom.io/function: tunnel-ingress
+        fortaegis1target.plugins.loom.io/name: target-1
     - matchLabels:
-        nf: tunnel-egress
+        fortaegis1.plugins.loom.io/function: tunnel-egress
+        fortaegis1target.plugins.loom.io/name: target-2
     - matchLabels:
         nf: metrics
 ---
