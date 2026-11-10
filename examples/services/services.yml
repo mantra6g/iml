@@ -12,6 +12,92 @@ metadata:
   namespace: default
 spec: {}
 ---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: logger-1
+  namespace: default
+  labels:
+    nf: logger-1
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/36c29c9dd275ad1b660bc8ccdb2f3e4ec4d084a7/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model
+---
+apiVersion: core.loom.io/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: logger-2
+  namespace: default
+  labels:
+    nf: logger-2
+spec:
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/36c29c9dd275ad1b660bc8ccdb2f3e4ec4d084a7/examples/simple/logger.p4"
+  targetSelector:
+    p4target.loom.io/arch: v1model
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-1
+spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: web-client
+        namespaces:
+        - default
+        topologyKey: "kubernetes.io/hostname"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+---
+apiVersion: infra.loom.io/v1alpha1
+kind: BMv2Target
+metadata:
+  name: bmv2-target-2
+spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: web-server
+        namespaces:
+        - default
+        topologyKey: "kubernetes.io/hostname"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+---
+apiVersion: core.loom.io/v1alpha1
+kind: ServiceChain
+metadata:
+  name: client-server-with-firewall
+  namespace: default
+spec:
+  from:
+    name: web-client
+    namespace: default
+  to:
+    name: web-server
+    namespace: default
+  functions:
+  - matchLabels:
+      nf: logger-1
+  - matchLabels:
+      nf: logger-2
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,18 +126,35 @@ spec:
             }
           ]
     spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: web-server
+            namespaces:
+            - default
+            topologyKey: "kubernetes.io/hostname"
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: web-client
+            namespaces:
+            - default
+            topologyKey: "kubernetes.io/hostname"
       containers:
         - name: nginx
-          image: nginx:latest
+          image: nginx:1.31.6-alpine
           ports:
             - containerPort: 80
           resources:
-            limits:
-              memory: "128Mi"
-              cpu: "500m"
             requests:
               memory: "64Mi"
               cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -80,30 +183,17 @@ spec:
             }
           ]
     spec:
-      affinity:
-        podAntiAffinity:
-          # This changed from 'required' to 'preferred'
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - web-server
-                topologyKey: "kubernetes.io/hostname"
       containers:
         - name: web-client
           image: alpine:3.20
           command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
           resources:
-            limits:
-              memory: "128Mi"
-              cpu: "500m"
             requests:
               memory: "64Mi"
               cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: Service

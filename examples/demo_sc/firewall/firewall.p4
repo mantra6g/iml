@@ -10,7 +10,7 @@ const bit<8> IPPROTO_IPV4 = 4;
 const bit<8> IPPROTO_IPV6 = 41;
 const bit<8> IPPROTO_SRH  = 43;
 
-const bit<32> MAX_TRACKED_FLOWS = 512;
+const bit<32> FIREWALL_TABLE_SIZE = 256;
 
 header ethernet_h {
 	bit<48> dst_addr;
@@ -58,19 +58,7 @@ header segment_h {
 	bit<128> segment;
 }
 
-struct metadata_t {
-  // Flag to indicate if the traffic is destined for source pods (will remove the NAT translation and send to
-  // the source pods)
-  bit<1> return_traffic;
-
-  // Flag to indicate if the traffic is destined for load balanced pods (will perform the NAT translation and send to
-  // the load balanced pods)
-  bit<1> inbound_traffic;
-
-  bit<32> ecmp_select; // Metadata field to hold the ECMP selection value for load balancing
-	bit<32> hash_result; // Metadata field to hold the result of the hash calculation for ECMP selection
-	bit<32> flow_index; // Metadata field to hold the index for tracking flows in the register
-}
+struct metadata_t { }
 
 struct headers {
 	ethernet_h ethernet;
@@ -107,6 +95,7 @@ parser MyParser(packet_in packet,
 	}
 
 	state parse_srh_segments {
+		// Extracting more than MAX_SEGMENTS SIDs sets stdmeta.parser_error (StackOutOfBounds)
 		packet.extract(hdr.segment_list.next);
 		transition select(hdr.segment_list.lastIndex < (bit<32>)hdr.srh.first_segment) {
 			true: parse_srh_segments; // Loop to extract all segments
@@ -144,14 +133,11 @@ control MyIngress(inout headers hdr,
     mark_to_drop(stdmeta);
   }
 
-  action srv6_forward() {
-    // Apply the "End" SRv6 behavior
-    if (hdr.srh.segments_left > 0) {
-      hdr.srh.segments_left = hdr.srh.segments_left - 1;
-      hdr.outer_ipv6.dst_addr = hdr.segment_list[hdr.srh.segments_left].segment;
-    } else {
-      drop();
-    }
+  action srv6_end() {
+    // Apply the "End" SRv6 behavior (segments_left > 0 is checked before the tables are applied)
+    hdr.srh.segments_left = hdr.srh.segments_left - 1;
+    hdr.outer_ipv6.dst_addr = hdr.segment_list[hdr.srh.segments_left].segment;
+    hdr.outer_ipv6.hop_limit = hdr.outer_ipv6.hop_limit - 1;
 
     // Change the source and destination MAC addresses
     bit<48> original_src  = hdr.ethernet.src_addr;
@@ -162,16 +148,101 @@ control MyIngress(inout headers hdr,
     stdmeta.egress_spec = stdmeta.ingress_port;
   }
 
-  action log() {
-    log_msg("Function applied!");
+  // Marks an address as belonging to an allowed subnet
+  action allow() { }
+
+  // BMv2 supports a single LPM key per table, so the allowed source and destination subnets
+  // live in separate tables. A packet is permitted only if both of its addresses hit.
+
+  // Allowed source subnets for inner IPv4 traffic
+  table fw_src_ipv4 {
+    key = {
+      hdr.inner_ipv4.src_addr: lpm;
+    }
+    actions = {
+      allow;
+      @defaultonly NoAction;
+    }
+    size = FIREWALL_TABLE_SIZE;
+    default_action = NoAction();
+  }
+
+  // Allowed destination subnets for inner IPv4 traffic
+  table fw_dst_ipv4 {
+    key = {
+      hdr.inner_ipv4.dst_addr: lpm;
+    }
+    actions = {
+      allow;
+      @defaultonly NoAction;
+    }
+    size = FIREWALL_TABLE_SIZE;
+    default_action = NoAction();
+  }
+
+  // Allowed source subnets for inner IPv6 traffic
+  table fw_src_ipv6 {
+    key = {
+      hdr.inner_ipv6.src_addr: lpm;
+    }
+    actions = {
+      allow;
+      @defaultonly NoAction;
+    }
+    size = FIREWALL_TABLE_SIZE;
+    default_action = NoAction();
+  }
+
+  // Allowed destination subnets for inner IPv6 traffic
+  table fw_dst_ipv6 {
+    key = {
+      hdr.inner_ipv6.dst_addr: lpm;
+    }
+    actions = {
+      allow;
+      @defaultonly NoAction;
+    }
+    size = FIREWALL_TABLE_SIZE;
+    default_action = NoAction();
   }
 
   apply {
-    if (!hdr.srh.isValid()) {
+    // Too many SIDs or a truncated packet
+    if (stdmeta.parser_error != error.NoError) {
+      drop();
       return;
     }
-    log();
-    srv6_forward();
+    // Only SRv6 traffic is allowed through
+    if (!hdr.srh.isValid()) {
+      drop();
+      return;
+    }
+    // End needs a next segment, and it must be one of the parsed SIDs
+    if (hdr.srh.segments_left == 0 || hdr.srh.segments_left > hdr.srh.first_segment) {
+      drop();
+      return;
+    }
+    if (hdr.outer_ipv6.hop_limit <= 1) {
+      drop();
+      return;
+    }
+
+    bool permitted = false;
+    if (hdr.inner_ipv4.isValid()) {
+      if (fw_src_ipv4.apply().hit) {
+        permitted = fw_dst_ipv4.apply().hit;
+      }
+    } else if (hdr.inner_ipv6.isValid()) {
+      if (fw_src_ipv6.apply().hit) {
+        permitted = fw_dst_ipv6.apply().hit;
+      }
+    }
+
+    if (permitted) {
+      srv6_end();
+    } else {
+      drop();
+    }
   }
 }
 

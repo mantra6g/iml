@@ -15,24 +15,26 @@ spec: {}
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
-  name: pkt-logger-1
+  name: firewall
   namespace: default
   labels:
-    nf: logger-1
+    nf: firewall
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/36c29c9dd275ad1b660bc8ccdb2f3e4ec4d084a7/examples/demo_sc/firewall/firewall.p4"
+  configRef:
+    name: firewall-config
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: NetworkFunction
 metadata:
-  name: pkt-logger-2
+  name: metrics
   namespace: default
   labels:
-    nf: logger-2
+    nf: metrics
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/demo_sc/logger.p4"
+  p4File: "https://raw.githubusercontent.com/mantra6g/iml/36c29c9dd275ad1b660bc8ccdb2f3e4ec4d084a7/examples/demo_sc/metrics/metrics.p4"
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -83,7 +85,7 @@ spec:
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
 metadata:
-  name: client-server-with-logger
+  name: client-server-with-firewall
   namespace: default
 spec:
   from:
@@ -94,9 +96,13 @@ spec:
     namespace: default
   functions:
     - matchLabels:
-        nf: logger-1
+        nf: firewall
     - matchLabels:
-        nf: logger-2
+        nf: tunnel-ingress
+    - matchLabels:
+        nf: tunnel-egress
+    - matchLabels:
+        nf: metrics
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -127,6 +133,14 @@ spec:
           ]
     spec:
       affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: web-server
+            namespaces:
+            - default
+            topologyKey: "kubernetes.io/hostname"
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:

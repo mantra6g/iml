@@ -19,12 +19,14 @@ package bmv2target
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
 	infrav1alpha1 "github.com/mantra6g/iml/api/infra/v1alpha1"
 	p4targetutil "github.com/mantra6g/iml/operator/internal/controller/core/p4target/util"
 	bmv2utils "github.com/mantra6g/iml/operator/internal/controller/infra/bmv2target/util"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +37,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
+
+const bmv2TargetFinalizer = "bmv2targets.infra.loom.io/finalizer"
 
 // Reconciler reconciles a BMv2Target object
 type Reconciler struct {
@@ -49,6 +53,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=core.loom.io,resources=p4targets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -68,6 +73,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		logger.Error(err, "unable to fetch BMv2Target")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !bmv2Target.DeletionTimestamp.IsZero() {
+		return r.finalize(ctx, bmv2Target)
+	}
+	if controllerutil.AddFinalizer(bmv2Target, bmv2TargetFinalizer) {
+		if err := r.Update(ctx, bmv2Target); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
+		}
 	}
 
 	dep, err := r.ensureDeployment(ctx, bmv2Target)
@@ -96,6 +110,35 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *Reconciler) finalize(ctx context.Context, bmv2Target *infrav1alpha1.BMv2Target) (ctrl.Result, error) {
+	if !controllerutil.ContainsFinalizer(bmv2Target, bmv2TargetFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: bmv2Target.Name, Namespace: r.Config.PodNamespace}}
+	if err := r.Delete(ctx, dep); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to delete Deployment: %w", err)
+	}
+	pods := &corev1.PodList{}
+	if err := r.List(ctx, pods, client.InNamespace(r.Config.PodNamespace),
+		client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: bmv2Target.Name}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list BMv2 pods: %w", err)
+	}
+	if len(pods.Items) > 0 {
+		logf.FromContext(ctx).Info("waiting for the BMv2 pods to terminate before deleting the P4Target",
+			"pods", len(pods.Items))
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	p4target := &corev1alpha1.P4Target{ObjectMeta: metav1.ObjectMeta{Name: bmv2Target.Name}}
+	if err := r.Delete(ctx, p4target); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to delete P4Target: %w", err)
+	}
+
+	controllerutil.RemoveFinalizer(bmv2Target, bmv2TargetFinalizer)
+	return ctrl.Result{}, r.Update(ctx, bmv2Target)
 }
 
 // SetupWithManager sets up the controller with the Manager.

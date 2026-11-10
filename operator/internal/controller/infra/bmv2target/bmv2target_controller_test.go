@@ -109,6 +109,11 @@ var _ = Describe("BMv2Target Controller", func() {
 		})
 
 		AfterEach(func() {
+			Expect(k8sClient.DeleteAllOf(ctx, &corev1.Pod{},
+				client.InNamespace(infraNamespace.Name),
+				client.MatchingLabels{infrav1alpha1.BMv2TargetLabel: resourceName},
+			)).To(Succeed())
+
 			resource := &infrav1alpha1.BMv2Target{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if err != nil && errors.IsNotFound(err) {
@@ -118,6 +123,9 @@ var _ = Describe("BMv2Target Controller", func() {
 
 			By("Cleanup the specific resource instance BMv2Target")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = (&Reconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Config: bmv2Cfg}).Reconcile(ctx,
+				reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleaning up the replicas Deployments and P4Targets")
 			err = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{},
@@ -164,6 +172,90 @@ var _ = Describe("BMv2Target Controller", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploymentList.Items).To(HaveLen(1))
+		})
+
+		It("should delete the P4Target and the Deployment when the BMv2Target is deleted", func() {
+			resource := &infrav1alpha1.BMv2Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			controllerReconciler := &Reconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Registering the P4Target the way the driver does, without an owner reference")
+			p4target := &corev1alpha1.P4Target{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, p4target)).To(Succeed())
+
+			By("Deleting the BMv2Target and reconciling the deletion")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(resource.Finalizers).To(ContainElement(bmv2TargetFinalizer))
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that the P4Target, the Deployment and the BMv2Target are gone")
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: resourceName}, &corev1alpha1.P4Target{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "P4Target still exists: %v", err)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: resourceName, Namespace: infraNamespace.Name}, &appsv1.Deployment{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "Deployment still exists: %v", err)
+			err = k8sClient.Get(ctx, typeNamespacedName, &infrav1alpha1.BMv2Target{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "BMv2Target still exists: %v", err)
+		})
+
+		It("should wait for the BMv2 pods to terminate before deleting the P4Target", func() {
+			resource := &infrav1alpha1.BMv2Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			controllerReconciler := &Reconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: bmv2Cfg,
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Creating a BMv2 pod and the P4Target the way the Deployment and the driver would")
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName + "-pod",
+					Namespace: infraNamespace.Name,
+					Labels:    map[string]string{infrav1alpha1.BMv2TargetLabel: resourceName},
+				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "bmv2", Image: "test-dataplane:latest"}}},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			p4target := &corev1alpha1.P4Target{ObjectMeta: metav1.ObjectMeta{Name: resourceName}}
+			Expect(k8sClient.Create(ctx, p4target)).To(Succeed())
+
+			By("Deleting the BMv2Target while its pod is still running")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: resourceName}, &corev1alpha1.P4Target{})).To(Succeed())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, &infrav1alpha1.BMv2Target{})).To(Succeed())
+
+			By("Reconciling again once the pod is gone")
+			Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: resourceName}, &corev1alpha1.P4Target{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "P4Target still exists: %v", err)
+			err = k8sClient.Get(ctx, typeNamespacedName, &infrav1alpha1.BMv2Target{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "BMv2Target still exists: %v", err)
 		})
 
 		It("should handle reconciliation when the resource is not found", func() {
