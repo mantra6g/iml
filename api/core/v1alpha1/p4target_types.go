@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -70,7 +71,39 @@ type SRv6Config struct {
 	// +kubebuilder:default=Native
 	// +optional
 	Mode SRv6Mode `json:"mode,omitempty"`
+
+	// ProxyConfig only applies if Mode == Proxy
+	// +optional
+	ProxyConfig ProxyConfig `json:"proxy_config"`
 }
+
+// +kubebuilder:validation:Enum=Dynamic;LaneBased;FieldBased
+type ProxyStrategy string
+
+const (
+	// requires ReuseMappedHostInterfaces with at least one interface pair
+	DynamicProxy ProxyStrategy = "Dynamic"
+	// requires ReuseMappedHostInterfaces with at least 2 * LaneCount interfaces
+	LaneBasedProxy ProxyStrategy = "LaneBased"
+	FieldBasedProxy ProxyStrategy = "FieldBased"
+)
+
+// for strategies
+type ProxyConfig struct {
+	// +required
+	Strategy ProxyStrategy `json:"proxyStrategy"`
+
+	// indicates how many interface pairs to use: expects ReuseMappedHostInterfaces 
+	// with at least LaneCount * 2 ifaces
+	// +optional
+	LaneCount int `json:"laneCount"`
+
+	// only applies if Strategy FieldBased
+	// +optional
+	Fields []vrfutil.ImmutableHeaderField `json:"fields"`
+}
+
+
 
 // HostInterfaceStrategy defines how the host-side interfaces connecting to a P4 target are obtained.
 // +kubebuilder:validation:Enum=Create;Reuse;ReuseMapped

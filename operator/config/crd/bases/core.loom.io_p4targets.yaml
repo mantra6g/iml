@@ -91,6 +91,37 @@ spec:
                         required:
                         - names
                         type: object
+                      reuseMapped:
+                        description: ReuseMapped maps existing host-side interfaces
+                          to each other. Only used when Strategy is ReuseMapped.
+                        properties:
+                          ifacepairs:
+                            description: host-side interface pairs which represent
+                              toVNF (In) and fromVNF (Out) ports
+                            items:
+                              description: |-
+                                NfIfacePairs are used to describe a mapping between host-side interfaces representing in and out ports of the NF.
+                                The NF should adhere to this mapping internally.
+                                e.g. if nfPair = { In: "eth0", Out: "eth1" }, the NF should return traffic received from eth0 through eth1.
+                              properties:
+                                in:
+                                  description: In is the interface for traffic towards
+                                    the network function.
+                                  type: string
+                                out:
+                                  description: Out is the interface for traffic returning
+                                    from the network function.
+                                  type: string
+                              required:
+                              - in
+                              - out
+                              type: object
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                        - ifacepairs
+                        type: object
                       strategy:
                         default: Create
                         description: Strategy defines whether the daemon creates new
@@ -98,14 +129,19 @@ spec:
                         enum:
                         - Create
                         - Reuse
+                        - ReuseMapped
                         type: string
                     type: object
                     x-kubernetes-validations:
                     - message: hostInterfaces is immutable
                       rule: self == oldSelf
+                    - message: create must only be set when strategy is Create
+                      rule: 'self.strategy != ''Create'' ? !has(self.create) : true'
                     - message: reuse must be set if and only if strategy is Reuse
-                      rule: 'self.strategy == ''Reuse'' ? has(self.reuse) && !has(self.create)
-                        : !has(self.reuse)'
+                      rule: (self.strategy == 'Reuse') == has(self.reuse)
+                    - message: reuseMapped must be set if and only if strategy is
+                        ReuseMapped
+                      rule: (self.strategy == 'ReuseMapped') == has(self.reuseMapped)
                   srv6:
                     description: SRv6 configures how SRv6 is handled for the network
                       functions running on the target.
@@ -119,6 +155,50 @@ spec:
                         - Native
                         - Proxy
                         type: string
+                      proxy_config:
+                        description: ProxyConfig only applies if Mode == Proxy
+                        properties:
+                          fields:
+                            description: only applies if Strategy FieldBased
+                            items:
+                              properties:
+                                field:
+                                  description: valid fieldnames are the canonical
+                                    header field names defined in the RFCs mentioned
+                                    below.
+                                  type: string
+                                match:
+                                  properties:
+                                    bitmask:
+                                      type: string
+                                    name:
+                                      type: string
+                                  required:
+                                  - bitmask
+                                  - name
+                                  type: object
+                                proto:
+                                  type: string
+                              required:
+                              - field
+                              - match
+                              - proto
+                              type: object
+                            type: array
+                          laneCount:
+                            description: |-
+                              indicates how many interface pairs to use: expects ReuseMappedHostInterfaces
+                              with at least LaneCount * 2 ifaces
+                            type: integer
+                          proxyStrategy:
+                            enum:
+                            - Dynamic
+                            - LaneBased
+                            - FieldBased
+                            type: string
+                        required:
+                        - proxyStrategy
+                        type: object
                     type: object
                 type: object
               nfCIDR:
