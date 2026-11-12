@@ -63,12 +63,12 @@ help: ## Display this help.
 ##@ Test
 
 # COVERAGE_MODULES are the components whose test coverage is merged into a single profile.
-COVERAGE_MODULES ?= cni daemon dpcs dns operator
+COVERAGE_MODULES ?= cni daemon dpcs dns dpcsclient operator
 COVERAGE_DIR ?= artifacts
 GO_MODULE_PREFIX ?= github.com/mantra6g/iml/
 
 .PHONY: test-coverage
-test-coverage: ## Run the cni, daemon, dpcs, dns and operator tests in docker and merge their coverage into artifacts/coverage.out.
+test-coverage: ## Run the cni, daemon, dpcs, dns, dpcsclient and operator tests in docker and merge their coverage into artifacts/coverage.out.
 	$(CONTAINER_TOOL) buildx bake --set '*.cache-from=' --set '*.cache-to=' $(addprefix test-,$(COVERAGE_MODULES))
 	$(MAKE) coverage-merge
 
