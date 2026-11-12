@@ -49,8 +49,9 @@ func init() {
 
 func main() {
 	var cfg reconcilers.Config
-	flag.StringVar(&cfg.NetworkFunctionConfigName, "config-name", "", "Name of the NetworkFunctionConfig resource")
 	flag.StringVar(&cfg.NetworkFunctionConfigNamespace, "config-namespace", "", "Namespace of the NetworkFunctionConfig resource")
+	flag.StringVar(&cfg.DPCSAddress, "dpcs-address", "", "Address of the DPCS P4Runtime server")
+	flag.Uint64Var(&cfg.DeviceID, "device-id", 0, "P4Runtime device ID of the target in DPCS")
 	flag.StringVar(&cfg.AppLabel, "app-label", "", "Dummy App label")
 	flag.StringVar(&cfg.DummyAppLabelValue, "dummy-app-label-value", "", "Dummy App label value")
 	flag.StringVar(&cfg.LoadBalancedAppLabelValue, "lb-app-label-value", "", "Load-Balanced App label value")
@@ -63,11 +64,14 @@ func main() {
 	// Set up structured logging with zap
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	if cfg.NetworkFunctionConfigName == "" {
-		setupLog.Error(fmt.Errorf("must provide --config-name"), "Missing NetworkFunctionConfig name")
-	}
 	if cfg.NetworkFunctionConfigNamespace == "" {
 		setupLog.Error(fmt.Errorf("must provide --config-namespace"), "Missing NetworkFunctionConfig namespace")
+	}
+	if cfg.DPCSAddress == "" {
+		setupLog.Error(fmt.Errorf("must provide --dpcs-address"), "Missing DPCS address")
+	}
+	if cfg.DeviceID == 0 {
+		setupLog.Error(fmt.Errorf("must provide --device-id"), "Missing device ID")
 	}
 	if cfg.AppLabel == "" {
 		setupLog.Error(fmt.Errorf("must provide --app-label"), "Missing dummy App label")
