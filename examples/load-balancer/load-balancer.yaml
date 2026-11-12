@@ -28,8 +28,6 @@ metadata:
     nf: load-balancer
 spec:
   p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/demo_pl2days/examples/load-balancer/lb.p4"
-  configRef:
-    name: lb-config
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
@@ -45,6 +43,15 @@ spec:
     limits:
       cpu: "1000m"
       memory: "1Gi"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: device-map-config
+  namespace: loom-system
+data:
+  device-map.env: |
+    1=bmv2-target
 ---
 apiVersion: core.loom.io/v1alpha1
 kind: ServiceChain
@@ -98,18 +105,6 @@ rules:
       - get
       - list
       - watch
-  - apiGroups:
-      - core.loom.io
-    resources:
-      - networkfunctionconfigs
-    verbs:
-      - get
-      - list
-      - watch
-      - update
-      - patch
-      - create
-      - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -158,8 +153,9 @@ spec:
           image: tomasagata/lb-controller:latest
           imagePullPolicy: Never
           args: [
-            "--config-name", "lb-config",
             "--config-namespace", "default",
+            "--dpcs-address", "loom-dpcs.loom-system:50051",
+            "--device-id", "1",
             "--app-label", "app",
             "--dummy-app-label-value", "dummy-web-server",
             "--lb-app-label-value", "web-server"
@@ -326,10 +322,3 @@ spec:
             requests:
               memory: "64Mi"
               cpu: "250m"
----
-apiVersion: core.loom.io/v1alpha1
-kind: NetworkFunctionConfig
-metadata:
-  name: lb-config
-  namespace: default
-spec: {}

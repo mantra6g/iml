@@ -18,14 +18,15 @@ package reconcilers
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
-	"strconv"
+	"sort"
+	"time"
 
 	"lb-control/utils"
 
-	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	"github.com/mantra6g/iml/dpcsclient"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -57,8 +58,9 @@ const (
 )
 
 type Config struct {
-	NetworkFunctionConfigName      string
 	NetworkFunctionConfigNamespace string
+	DPCSAddress                    string
+	DeviceID                       uint64
 	AppLabel                       string
 	DummyAppLabelValue             string
 	LoadBalancedAppLabelValue      string
@@ -94,7 +96,7 @@ func (r *NetworkFunctionConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 				if _, ok := object.(*v1.Pod); !ok {
 					return nil
 				}
-				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: r.Config.NetworkFunctionConfigName, Namespace: r.Config.NetworkFunctionConfigNamespace}}}
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: r.Config.NetworkFunctionConfigNamespace}}}
 			}),
 			builder.WithPredicates(predicate.Funcs{
 				CreateFunc: func(e event.CreateEvent) bool {
@@ -133,15 +135,15 @@ func (r *NetworkFunctionConfigReconciler) Reconcile(ctx context.Context, req ctr
 	logger := logf.FromContext(ctx)
 	logger.Info("Reconciling NetworkFunctionConfig", "request", req)
 
-	var nfConfig = &corev1alpha1.NetworkFunctionConfig{}
-	if err := r.Get(ctx, req.NamespacedName, nfConfig); err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("NetworkFunctionConfig resource not found. Ignoring since object must be deleted.")
-			return ctrl.Result{}, err
-		}
-		logger.Error(err, "Failed to get NetworkFunctionConfig")
+	dpcsClient, err := dpcsclient.Connect(ctx, dpcsclient.Config{
+		Address:  r.Config.DPCSAddress,
+		DeviceID: r.Config.DeviceID,
+	})
+	if err != nil {
+		logger.Error(err, "Failed to connect to DPCS")
 		return ctrl.Result{}, err
 	}
+	defer dpcsClient.Close()
 
 	var dummyPodLabels = map[string]string{
 		r.Config.AppLabel: r.Config.DummyAppLabelValue,
@@ -173,189 +175,112 @@ func (r *NetworkFunctionConfigReconciler) Reconcile(ctx context.Context, req ctr
 	}
 	logger.V(1).Info("Found load-balanced pods", "loadBalancedPodLabels", loadBalancedPodLabels, "count", len(loadBalancedPodList.Items))
 
-	if err := r.updateNetworkFunctionConfig(ctx, nfConfig, dummyPodList, loadBalancedPodList); err != nil {
+	if err := r.updateNetworkFunctionConfig(ctx, dpcsClient, dummyPodList, loadBalancedPodList); err != nil {
 		logger.Error(err, "Failed to update NetworkFunctionConfig with new pod information")
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
 func (r *NetworkFunctionConfigReconciler) updateNetworkFunctionConfig(ctx context.Context,
-	nfConfig *corev1alpha1.NetworkFunctionConfig,
+	dpcsClient *dpcsclient.Client,
 	dummyPodList *v1.PodList,
 	loadBalancedPodList *v1.PodList) error {
-	original := nfConfig.DeepCopy()
-	err := r.updateDummyPodConfig(nfConfig, dummyPodList)
+	err := r.updateDummyPodConfig(ctx, dpcsClient, dummyPodList)
 	if err != nil {
 		return fmt.Errorf("failed to update Dummy Pod Config: %w", err)
 	}
-	err = r.updateLoadBalancedPodConfig(nfConfig, loadBalancedPodList)
+	err = r.updateLoadBalancedPodConfig(ctx, dpcsClient, loadBalancedPodList)
 	if err != nil {
 		return fmt.Errorf("failed to update Load-Balanced Pod Config: %w", err)
 	}
-	return r.Patch(ctx, nfConfig, client.MergeFrom(original))
+	return nil
 }
 
-func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(
-	nfConfig *corev1alpha1.NetworkFunctionConfig, dummyPodList *v1.PodList) error {
-	if nfConfig.Spec.Tables == nil {
-		nfConfig.Spec.Tables = make(map[string]corev1alpha1.TableConfig)
-	}
-	var ipv4Entries = make([]corev1alpha1.TableEntry, 0, len(dummyPodList.Items))
-	var ipv6Entries = make([]corev1alpha1.TableEntry, 0, len(dummyPodList.Items))
+func (r *NetworkFunctionConfigReconciler) updateDummyPodConfig(ctx context.Context,
+	dpcsClient *dpcsclient.Client, dummyPodList *v1.PodList) error {
+	var ipv4Entries = make([]dpcsclient.Entry, 0, len(dummyPodList.Items))
+	var ipv6Entries = make([]dpcsclient.Entry, 0, len(dummyPodList.Items))
 	for i := range dummyPodList.Items {
 		pod := &dummyPodList.Items[i]
 		podIPv4 := utils.GetPodIMLIPv4Addr(pod)
 		podIPv6 := utils.GetPodIMLIPv6Addr(pod)
 		if podIPv4 != nil {
-			ipv4Entries = append(ipv4Entries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.MatchField{{
-					Name: "hdr.inner_ipv4.dst_addr",
-					Type: corev1alpha1.ExactMatch,
-					Exact: &corev1alpha1.ParametrizedValue{
-						IPv4Address: new(podIPv4.String()),
-					},
-				}},
-				Action: corev1alpha1.ActionConfig{
-					Name: MarkAsInboundTrafficAction,
-				},
+			ipv4Entries = append(ipv4Entries, dpcsclient.Entry{
+				Match:  map[string]dpcsclient.FieldMatch{"hdr.inner_ipv4.dst_addr": dpcsclient.ExactIP(podIPv4)},
+				Action: MarkAsInboundTrafficAction,
 			})
 		}
 		if podIPv6 != nil {
-			ipv6Entries = append(ipv6Entries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.MatchField{{
-					Name: "hdr.inner_ipv6.dst_addr",
-					Type: corev1alpha1.ExactMatch,
-					Exact: &corev1alpha1.ParametrizedValue{
-						IPv6Address: new(podIPv6.String()),
-					},
-				}},
-				Action: corev1alpha1.ActionConfig{
-					Name: MarkAsInboundTrafficAction,
-				},
+			ipv6Entries = append(ipv6Entries, dpcsclient.Entry{
+				Match:  map[string]dpcsclient.FieldMatch{"hdr.inner_ipv6.dst_addr": dpcsclient.ExactIP(podIPv6)},
+				Action: MarkAsInboundTrafficAction,
 			})
 		}
 	}
-	nfConfig.Spec.Tables[DummyPodIPv4Table] = corev1alpha1.TableConfig{
-		Entries: ipv4Entries,
+	if _, err := dpcsClient.SyncTable(ctx, DummyPodIPv4Table, ipv4Entries); err != nil {
+		return err
 	}
-	nfConfig.Spec.Tables[DummyPodIPv6Table] = corev1alpha1.TableConfig{
-		Entries: ipv6Entries,
+	if _, err := dpcsClient.SyncTable(ctx, DummyPodIPv6Table, ipv6Entries); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(
-	nfConfig *corev1alpha1.NetworkFunctionConfig, lbPodList *v1.PodList) error {
-	if nfConfig.Spec.Tables == nil {
-		nfConfig.Spec.Tables = make(map[string]corev1alpha1.TableConfig)
-	}
-	var ipv4LbTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
-	var ipv6LbTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
-	var ipv4EcmpNhTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
-	var ipv6EcmpNhTableEntries = make([]corev1alpha1.TableEntry, 0, len(lbPodList.Items))
+func (r *NetworkFunctionConfigReconciler) updateLoadBalancedPodConfig(ctx context.Context,
+	dpcsClient *dpcsclient.Client, lbPodList *v1.PodList) error {
+	var ipv4LbTableEntries = make([]dpcsclient.Entry, 0, len(lbPodList.Items))
+	var ipv6LbTableEntries = make([]dpcsclient.Entry, 0, len(lbPodList.Items))
+	var ipv4EcmpNhTableEntries = make([]dpcsclient.Entry, 0, len(lbPodList.Items))
+	var ipv6EcmpNhTableEntries = make([]dpcsclient.Entry, 0, len(lbPodList.Items))
+	sort.Slice(lbPodList.Items, func(i, j int) bool { return lbPodList.Items[i].Name < lbPodList.Items[j].Name })
 	for i := range lbPodList.Items {
 		pod := &lbPodList.Items[i]
 		podIPv4 := utils.GetPodIMLIPv4Addr(pod)
 		podIPv6 := utils.GetPodIMLIPv6Addr(pod)
+		ecmpSelect := dpcsclient.Exact(binary.BigEndian.AppendUint32(nil, uint32(i)))
 		if podIPv4 != nil {
-			ipv4LbTableEntries = append(ipv4LbTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.MatchField{{
-					Name: "hdr.inner_ipv4.src_addr",
-					Type: corev1alpha1.ExactMatch,
-					Exact: &corev1alpha1.ParametrizedValue{
-						IPv4Address: new(podIPv4.String()),
-					},
-				}},
-				Action: corev1alpha1.ActionConfig{
-					Name: MarkAsReturnTrafficAction,
-				},
+			ipv4LbTableEntries = append(ipv4LbTableEntries, dpcsclient.Entry{
+				Match:  map[string]dpcsclient.FieldMatch{"hdr.inner_ipv4.src_addr": dpcsclient.ExactIP(podIPv4)},
+				Action: MarkAsReturnTrafficAction,
 			})
-			ipv4EcmpNhTableEntries = append(ipv4EcmpNhTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.MatchField{{
-					Name: "meta.ecmp_select",
-					Type: corev1alpha1.ExactMatch,
-					Exact: &corev1alpha1.ParametrizedValue{
-						Int: new(strconv.Itoa(i)),
-					},
-				}},
-				Action: corev1alpha1.ActionConfig{
-					Name: SetIPv4NextHopAction,
-					Parameters: []corev1alpha1.NamedParameter{{
-						Name: "nhop_ipv4",
-						ParametrizedValue: corev1alpha1.ParametrizedValue{
-							IPv4Address: new(podIPv4.String()),
-						},
-					}},
-				},
+			ipv4EcmpNhTableEntries = append(ipv4EcmpNhTableEntries, dpcsclient.Entry{
+				Match:  map[string]dpcsclient.FieldMatch{"meta.ecmp_select": ecmpSelect},
+				Action: SetIPv4NextHopAction,
+				Params: [][]byte{podIPv4},
 			})
 		}
 		if podIPv6 != nil {
-			ipv6LbTableEntries = append(ipv6LbTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.MatchField{{
-					Name: "hdr.inner_ipv6.src_addr",
-					Type: corev1alpha1.ExactMatch,
-					Exact: &corev1alpha1.ParametrizedValue{
-						IPv6Address: new(podIPv6.String()),
-					},
-				}},
-				Action: corev1alpha1.ActionConfig{
-					Name: MarkAsReturnTrafficAction,
-				},
+			ipv6LbTableEntries = append(ipv6LbTableEntries, dpcsclient.Entry{
+				Match:  map[string]dpcsclient.FieldMatch{"hdr.inner_ipv6.src_addr": dpcsclient.ExactIP(podIPv6)},
+				Action: MarkAsReturnTrafficAction,
 			})
-			ipv6EcmpNhTableEntries = append(ipv6EcmpNhTableEntries, corev1alpha1.TableEntry{
-				MatchFields: []corev1alpha1.MatchField{{
-					Name: "meta.ecmp_select",
-					Type: corev1alpha1.ExactMatch,
-					Exact: &corev1alpha1.ParametrizedValue{
-						Int: new(strconv.Itoa(i)),
-					},
-				}},
-				Action: corev1alpha1.ActionConfig{
-					Name: SetIPv6NextHopAction,
-					Parameters: []corev1alpha1.NamedParameter{{
-						Name: "nhop_ipv6",
-						ParametrizedValue: corev1alpha1.ParametrizedValue{
-							IPv6Address: new(podIPv6.String()),
-						},
-					}},
-				},
+			ipv6EcmpNhTableEntries = append(ipv6EcmpNhTableEntries, dpcsclient.Entry{
+				Match:  map[string]dpcsclient.FieldMatch{"meta.ecmp_select": ecmpSelect},
+				Action: SetIPv6NextHopAction,
+				Params: [][]byte{podIPv6},
 			})
 		}
 	}
-	nfConfig.Spec.Tables[LoadBalancedPodIPv4Table] = corev1alpha1.TableConfig{
-		Entries: ipv4LbTableEntries,
+	if _, err := dpcsClient.SyncTable(ctx, LoadBalancedPodIPv4Table, ipv4LbTableEntries); err != nil {
+		return err
 	}
-	nfConfig.Spec.Tables[LoadBalancedPodIPv6Table] = corev1alpha1.TableConfig{
-		Entries: ipv6LbTableEntries,
+	if _, err := dpcsClient.SyncTable(ctx, LoadBalancedPodIPv6Table, ipv6LbTableEntries); err != nil {
+		return err
 	}
-	nfConfig.Spec.Tables[ECMPGroupIPv4Table] = corev1alpha1.TableConfig{
-		DefaultAction: &corev1alpha1.ActionConfig{
-			Name: SetECMPSelectIPv4Action,
-			Parameters: []corev1alpha1.NamedParameter{{
-				Name: "ecmp_count",
-				ParametrizedValue: corev1alpha1.ParametrizedValue{
-					Int: new(strconv.Itoa(len(ipv4LbTableEntries))),
-				},
-			}},
-		},
+	ipv4EcmpCount := binary.BigEndian.AppendUint32(nil, uint32(len(ipv4LbTableEntries)))
+	if err := dpcsClient.SetDefaultAction(ctx, ECMPGroupIPv4Table, SetECMPSelectIPv4Action, [][]byte{ipv4EcmpCount}); err != nil {
+		return err
 	}
-	nfConfig.Spec.Tables[ECMPGroupIPv6Table] = corev1alpha1.TableConfig{
-		DefaultAction: &corev1alpha1.ActionConfig{
-			Name: SetECMPSelectIPv6Action,
-			Parameters: []corev1alpha1.NamedParameter{{
-				Name: "ecmp_count",
-				ParametrizedValue: corev1alpha1.ParametrizedValue{
-					Int: new(strconv.Itoa(len(ipv6LbTableEntries))),
-				},
-			}},
-		},
+	ipv6EcmpCount := binary.BigEndian.AppendUint32(nil, uint32(len(ipv6LbTableEntries)))
+	if err := dpcsClient.SetDefaultAction(ctx, ECMPGroupIPv6Table, SetECMPSelectIPv6Action, [][]byte{ipv6EcmpCount}); err != nil {
+		return err
 	}
-	nfConfig.Spec.Tables[ECMPNextHopIPv4Table] = corev1alpha1.TableConfig{
-		Entries: ipv4EcmpNhTableEntries,
+	if _, err := dpcsClient.SyncTable(ctx, ECMPNextHopIPv4Table, ipv4EcmpNhTableEntries); err != nil {
+		return err
 	}
-	nfConfig.Spec.Tables[ECMPNextHopIPv6Table] = corev1alpha1.TableConfig{
-		Entries: ipv6EcmpNhTableEntries,
+	if _, err := dpcsClient.SyncTable(ctx, ECMPNextHopIPv6Table, ipv6EcmpNhTableEntries); err != nil {
+		return err
 	}
 	return nil
 }
