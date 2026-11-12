@@ -129,6 +129,79 @@ func LoadSRv6Cap(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6CapObjects, 
 	}
 	return objs, nil
 }
+func LoadSRv6Dynamic(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6DynamicObjects, error) {
+	spec, err := LoadSrv6Dynamic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+	}
+	objs := &Srv6DynamicObjects{}
+	if err := load(spec, pins, opts, objs); err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+	}
+	if err := pinOrReuse(&objs.Decap, pins.Programs, "decap_dynamic"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	if err := pinOrReuse(&objs.Encap, pins.Programs, "encap_dynamic"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	return objs, nil
+}
+
+func LoadSRv6LaneBased(pins PinPaths, opts *ebpf.CollectionOptions, n int) (*Srv6LaneBasedObjects, error) {
+	spec, err := LoadSrv6LaneBased()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+	}
+
+	spec.Maps["srh_table"].MaxEntries = uint32(n)
+    spec.Maps["mac_addr_table"].MaxEntries = uint32(2*n + 2)
+    spec.Maps["link_index_table"].MaxEntries = uint32(2*n + 2)
+    spec.Maps["lane_table"].MaxEntries = uint32(n)
+    spec.Maps["sfc_lane_map"].MaxEntries = uint32(n)
+
+	if err := spec.Variables["n"].Set(uint32(n)); err != nil {
+		return nil, fmt.Errorf("set n: %w", err)
+	}
+
+	objs := &Srv6LaneBasedObjects{}
+	if err := load(spec, pins, opts, objs); err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+	}
+	if err := pinOrReuse(&objs.ClassifySfc, pins.Programs, "classify_lane_based"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	if err := pinOrReuse(&objs.Decap, pins.Programs, "decap_lane_based"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	if err := pinOrReuse(&objs.Encap, pins.Programs, "encap_lane_based"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	return objs, nil
+}
+func LoadSRv6FieldBased(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6FieldBasedObjects, error) {
+	spec, err := LoadSrv6Cap() // LoadSrv6FieldBased()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+	}
+	objs := &Srv6FieldBasedObjects{}
+	if err := load(spec, pins, opts, objs); err != nil {
+		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+	}
+	if err := pinOrReuse(&objs.ProxyIngress, pins.Programs, "decap_field_based"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	if err := pinOrReuse(&objs.ProxyEgress, pins.Programs, "encap_field_based"); err != nil {
+		objs.Close()
+		return nil, err
+	}
+	return objs, nil
+}
 
 // load loads spec into objs, pinning its maps by name under pins.Maps (or reusing the ones
 // already pinned there).
