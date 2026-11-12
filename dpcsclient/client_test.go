@@ -27,6 +27,7 @@ type fakeP4Runtime struct {
 	breakStream     chan struct{}
 	mutex           sync.Mutex
 	tableEntries    []*p4v1.TableEntry
+	updates         []*p4v1.Update
 }
 
 func (s *fakeP4Runtime) StreamChannel(stream p4v1.P4Runtime_StreamChannelServer) error {
@@ -67,6 +68,7 @@ func (s *fakeP4Runtime) GetForwardingPipelineConfig(
 func (s *fakeP4Runtime) Write(_ context.Context, request *p4v1.WriteRequest) (*p4v1.WriteResponse, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	s.updates = append(s.updates, request.GetUpdates()...)
 	for _, update := range request.GetUpdates() {
 		if update.GetType() == p4v1.Update_INSERT {
 			s.tableEntries = append(s.tableEntries, update.GetEntity().GetTableEntry())
@@ -335,6 +337,42 @@ func TestDefaultRouteRoundTrip(t *testing.T) {
 	result, err := client.SyncTable(ctx, "MyIngress.ipv4_lpm", []Entry{defaultRoute})
 	if err != nil || result != (SyncResult{}) {
 		t.Errorf("sync of an unchanged default route should be a no-op, got %+v (err %v)", result, err)
+	}
+}
+
+func TestSetDefaultActionSendsModifyWithoutMatch(t *testing.T) {
+	server := &fakeP4Runtime{}
+	client := connectFake(t, server)
+	err := client.SetDefaultAction(context.Background(), "MyIngress.keyless", "MyIngress.set_tunnel", [][]byte{{1}, {2}})
+	if err != nil {
+		t.Fatalf("set default action failed: %v", err)
+	}
+	server.mutex.Lock()
+	updates := server.updates
+	server.mutex.Unlock()
+	if len(updates) != 1 || updates[0].GetType() != p4v1.Update_MODIFY {
+		t.Fatalf("expected one MODIFY update, got %v", updates)
+	}
+	tableEntry := updates[0].GetEntity().GetTableEntry()
+	if tableEntry.GetTableId() != 103 || !tableEntry.GetIsDefaultAction() || len(tableEntry.GetMatch()) != 0 {
+		t.Errorf("expected a default entry of table 103 without match, got %v", tableEntry)
+	}
+	action := tableEntry.GetAction().GetAction()
+	params := action.GetParams()
+	if action.GetActionId() != 203 || len(params) != 2 || params[0].GetParamId() != 4 || params[1].GetParamId() != 9 ||
+		!bytes.Equal(params[0].GetValue(), []byte{1}) || !bytes.Equal(params[1].GetValue(), []byte{2}) {
+		t.Errorf("action and params should be resolved from P4Info, got %v", action)
+	}
+
+	invalid := map[string][]string{
+		"unknown table":  {"nope", "MyIngress.log"},
+		"unknown action": {"MyIngress.keyless", "nope"},
+		"missing params": {"MyIngress.keyless", "MyIngress.set_nhop"},
+	}
+	for name, names := range invalid {
+		if err := client.SetDefaultAction(context.Background(), names[0], names[1], nil); err == nil {
+			t.Errorf("default action with %s should be rejected", name)
+		}
 	}
 }
 

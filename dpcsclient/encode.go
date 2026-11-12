@@ -34,23 +34,47 @@ func (c *Client) p4rtTableEntry(entry Entry) (*p4v1.TableEntry, error) {
 		return nil, fmt.Errorf("entry for table %q must match at least one field other than a zero-length LPM prefix",
 			entry.Table)
 	}
-	actionInfo := findActionInfo(c.p4Info, entry.Action)
-	if actionInfo == nil {
-		return nil, fmt.Errorf("action %q not found in P4Info", entry.Action)
+	p4rtAction, err := c.p4rtTableAction(entry.Action, entry.Params)
+	if err != nil {
+		return nil, err
 	}
-	if len(actionInfo.GetParams()) != len(entry.Params) {
+	p4rtEntry.Action = p4rtAction
+	return p4rtEntry, nil
+}
+
+func (c *Client) p4rtDefaultEntry(table, action string, params [][]byte) (*p4v1.TableEntry, error) {
+	tableInfo := findTableInfo(c.p4Info, table)
+	if tableInfo == nil {
+		return nil, fmt.Errorf("table %q not found in P4Info", table)
+	}
+	p4rtAction, err := c.p4rtTableAction(action, params)
+	if err != nil {
+		return nil, err
+	}
+	return &p4v1.TableEntry{
+		TableId:         tableInfo.GetPreamble().GetId(),
+		Action:          p4rtAction,
+		IsDefaultAction: true,
+	}, nil
+}
+
+func (c *Client) p4rtTableAction(action string, params [][]byte) (*p4v1.TableAction, error) {
+	actionInfo := findActionInfo(c.p4Info, action)
+	if actionInfo == nil {
+		return nil, fmt.Errorf("action %q not found in P4Info", action)
+	}
+	if len(actionInfo.GetParams()) != len(params) {
 		return nil, fmt.Errorf("action %q expects %d params, got %d",
-			entry.Action, len(actionInfo.GetParams()), len(entry.Params))
+			action, len(actionInfo.GetParams()), len(params))
 	}
 	p4rtAction := &p4v1.Action{ActionId: actionInfo.GetPreamble().GetId()}
 	for index, paramInfo := range actionInfo.GetParams() {
 		p4rtAction.Params = append(p4rtAction.Params, &p4v1.Action_Param{
 			ParamId: paramInfo.GetId(),
-			Value:   entry.Params[index],
+			Value:   params[index],
 		})
 	}
-	p4rtEntry.Action = &p4v1.TableAction{Type: &p4v1.TableAction_Action{Action: p4rtAction}}
-	return p4rtEntry, nil
+	return &p4v1.TableAction{Type: &p4v1.TableAction_Action{Action: p4rtAction}}, nil
 }
 
 func p4rtFieldMatch(matchFieldInfo *p4configv1.MatchField, fieldMatch FieldMatch) (*p4v1.FieldMatch, error) {

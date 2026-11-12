@@ -115,6 +115,19 @@ func (c *Client) Delete(ctx context.Context, entries ...Entry) error {
 	return c.writeEntries(ctx, p4v1.Update_DELETE, entries)
 }
 
+func (c *Client) SetDefaultAction(ctx context.Context, table, action string, params [][]byte) error {
+	if err := c.checkSession(); err != nil {
+		return err
+	}
+	c.p4InfoMutex.RLock()
+	defer c.p4InfoMutex.RUnlock()
+	tableEntry, err := c.p4rtDefaultEntry(table, action, params)
+	if err != nil {
+		return err
+	}
+	return c.write(ctx, []*p4v1.Update{newUpdate(p4v1.Update_MODIFY, tableEntry)})
+}
+
 func (c *Client) ReadTable(ctx context.Context, table string) ([]Entry, error) {
 	if err := c.checkSession(); err != nil {
 		return nil, err
