@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
@@ -129,14 +130,15 @@ func LoadSRv6Cap(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6CapObjects, 
 	}
 	return objs, nil
 }
+
 func LoadSRv6Dynamic(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6DynamicObjects, error) {
 	spec, err := LoadSrv6Dynamic()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+		return nil, fmt.Errorf("failed to load srv6_proxy_dynamic spec: %w", err)
 	}
 	objs := &Srv6DynamicObjects{}
 	if err := load(spec, pins, opts, objs); err != nil {
-		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+		return nil, fmt.Errorf("failed to load srv6_proxy_dynamic: %w", err)
 	}
 	if err := pinOrReuse(&objs.Decap, pins.Programs, "decap_dynamic"); err != nil {
 		objs.Close()
@@ -152,7 +154,7 @@ func LoadSRv6Dynamic(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6DynamicO
 func LoadSRv6LaneBased(pins PinPaths, opts *ebpf.CollectionOptions, n int) (*Srv6LaneBasedObjects, error) {
 	spec, err := LoadSrv6LaneBased()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+		return nil, fmt.Errorf("failed to load srv6_proxy_lane spec: %w", err)
 	}
 
 	spec.Maps["srh_table"].MaxEntries = uint32(n)
@@ -167,7 +169,7 @@ func LoadSRv6LaneBased(pins PinPaths, opts *ebpf.CollectionOptions, n int) (*Srv
 
 	objs := &Srv6LaneBasedObjects{}
 	if err := load(spec, pins, opts, objs); err != nil {
-		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+		return nil, fmt.Errorf("failed to load srv6_proxy_lane: %w", err)
 	}
 	if err := pinOrReuse(&objs.ClassifySfc, pins.Programs, "classify_lane_based"); err != nil {
 		objs.Close()
@@ -183,14 +185,15 @@ func LoadSRv6LaneBased(pins PinPaths, opts *ebpf.CollectionOptions, n int) (*Srv
 	}
 	return objs, nil
 }
+
 func LoadSRv6FieldBased(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6FieldBasedObjects, error) {
 	spec, err := LoadSrv6Cap() // LoadSrv6FieldBased()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load srv6_cap spec: %w", err)
+		return nil, fmt.Errorf("failed to load srv6_proxy_field spec: %w", err)
 	}
 	objs := &Srv6FieldBasedObjects{}
 	if err := load(spec, pins, opts, objs); err != nil {
-		return nil, fmt.Errorf("failed to load srv6_cap: %w", err)
+		return nil, fmt.Errorf("failed to load srv6_proxy_field: %w", err)
 	}
 	if err := pinOrReuse(&objs.ProxyIngress, pins.Programs, "decap_field_based"); err != nil {
 		objs.Close()
@@ -216,7 +219,7 @@ func load(spec *ebpf.CollectionSpec, pins PinPaths, opts *ebpf.CollectionOptions
 	// The C sources don't mark maps for pinning, so where they go is decided here.
 	for _, m := range spec.Maps {
 		m.Pinning = ebpf.PinNone
-		if pins.Maps != "" {
+		if pins.Maps != "" && !strings.HasPrefix(m.Name, ".") { // ignore .rodata maps when pinning
 			m.Pinning = ebpf.PinByName
 		}
 	}
