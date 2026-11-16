@@ -155,7 +155,7 @@ spec:
                         - Native
                         - Proxy
                         type: string
-                      proxy_config:
+                      proxyConfig:
                         description: ProxyConfig only applies if Mode == Proxy
                         properties:
                           fields:
@@ -163,9 +163,6 @@ spec:
                             items:
                               properties:
                                 field:
-                                  description: valid fieldnames are the canonical
-                                    header field names defined in the RFCs mentioned
-                                    below.
                                   type: string
                                 match:
                                   properties:
