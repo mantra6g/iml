@@ -73,7 +73,7 @@ type SRv6Config struct {
 
 	// ProxyConfig only applies if Mode == Proxy
 	// +optional
-	ProxyConfig ProxyConfig `json:"proxy_config"`
+	ProxyConfig ProxyConfig `json:"proxyConfig"`
 }
 
 // +kubebuilder:validation:Enum=Dynamic;LaneBased;FieldBased
@@ -83,7 +83,7 @@ const (
 	// requires ReuseMappedHostInterfaces with at least one interface pair
 	DynamicProxy ProxyStrategy = "Dynamic"
 	// requires ReuseMappedHostInterfaces with at least 2 * LaneCount interfaces
-	LaneBasedProxy ProxyStrategy = "LaneBased"
+	LaneBasedProxy  ProxyStrategy = "LaneBased"
 	FieldBasedProxy ProxyStrategy = "FieldBased"
 )
 
@@ -91,12 +91,12 @@ type MatchTypeName string
 
 const (
 	BITMASK_MATCH MatchTypeName = "bitmask"
-	EXACT_MATCH MatchTypeName = "exact"
+	EXACT_MATCH   MatchTypeName = "exact"
 )
 
 type MatchType struct {
-	Type MatchTypeName `json:"name"`
-	BitMask string `json:"bitmask"`// bitmask is used = 0xfff for exact match and 
+	Type    MatchTypeName `json:"name"`
+	BitMask string        `json:"bitmask"` // bitmask is used = 0xfff for exact match and
 }
 
 type ProtocolName string
@@ -104,9 +104,9 @@ type ProtocolName string
 const (
 	PROTO_IPv4 ProtocolName = "ipv4"
 	PROTO_IPv6 ProtocolName = "ipv6"
-	PROTO_TCP ProtocolName = "tcp"
-	PROTO_UDP ProtocolName = "udp"
-	PROTO_NIL ProtocolName = ""
+	PROTO_TCP  ProtocolName = "tcp"
+	PROTO_UDP  ProtocolName = "udp"
+	PROTO_NIL  ProtocolName = ""
 )
 
 type FieldName string
@@ -158,11 +158,10 @@ const (
 	UDP_CHECKSUM FieldName = "Checksum"
 )
 
-
 type ImmutableHeaderField struct {
 	Proto ProtocolName `json:"proto"`
-	Match MatchType `json:"match"`
-	Field FieldName `json:"field"`
+	Match MatchType    `json:"match"`
+	Field FieldName    `json:"field"`
 }
 
 // for strategies
@@ -170,7 +169,7 @@ type ProxyConfig struct {
 	// +required
 	Strategy ProxyStrategy `json:"proxyStrategy"`
 
-	// indicates how many interface pairs to use: expects ReuseMappedHostInterfaces 
+	// indicates how many interface pairs to use: expects ReuseMappedHostInterfaces
 	// with at least LaneCount * 2 ifaces
 	// +optional
 	LaneCount int `json:"laneCount"`
@@ -179,8 +178,6 @@ type ProxyConfig struct {
 	// +optional
 	Fields []ImmutableHeaderField `json:"fields"`
 }
-
-
 
 // HostInterfaceStrategy defines how the host-side interfaces connecting to a P4 target are obtained.
 // +kubebuilder:validation:Enum=Create;Reuse;ReuseMapped
@@ -191,7 +188,7 @@ const (
 	HostInterfaceStrategyCreate HostInterfaceStrategy = "Create"
 	// HostInterfaceStrategyReuse makes the daemon attach to already existing host-side interfaces.
 	HostInterfaceStrategyReuse HostInterfaceStrategy = "Reuse"
-	// HostInterfaceStrategyReuse makes the daemon attach to already existing host-side interfaces 
+	// HostInterfaceStrategyReuse makes the daemon attach to already existing host-side interfaces
 	// while honoring a specified mapping between toVNF and fromVNF ports.
 	HostInterfaceStrategyReuseMapped HostInterfaceStrategy = "ReuseMapped"
 )

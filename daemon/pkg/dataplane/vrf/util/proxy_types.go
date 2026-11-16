@@ -1,22 +1,21 @@
 package util
 
-import(
+import (
 	api "github.com/mantra6g/iml/api/core/v1alpha1"
 )
 
 const (
 	IPv4_HDR_LEN_BYTES = 20 // excluding 40 bytes of options
 	IPv6_HDR_LEN_BYTES = 40
-	UDP_HDR_LEN_BYTES = 8
-	TCP_HDR_LEN_BYTES = 20 // excluding 40 bytes of options
-	MAX_L3_HDR_LEN = 40
-	MAX_L4_HDR_LEN = 20
-	PROTO_NUM_IPv4 = 4
-	PROTO_NUM_IPv6 = 6
-	PROTO_NUM_TCP = 6
-	PROTO_NUM_UDP = 17
+	UDP_HDR_LEN_BYTES  = 8
+	TCP_HDR_LEN_BYTES  = 20 // excluding 40 bytes of options
+	MAX_L3_HDR_LEN     = 40
+	MAX_L4_HDR_LEN     = 20
+	PROTO_NUM_IPv4     = 4
+	PROTO_NUM_IPv6     = 6
+	PROTO_NUM_TCP      = 6
+	PROTO_NUM_UDP      = 17
 )
-
 
 type FieldLayout struct {
 	Offset int // bit offset from the start of the header (bit 0 = MSB of first byte)
@@ -75,7 +74,7 @@ var layoutUDP = map[api.FieldName]FieldLayout{
 	api.UDP_CHECKSUM: {Offset: 48, Width: 16},
 }
 
-// fields that are excluded from matching: 
+// fields that are excluded from matching:
 // disallowed fields MUST include variable length fields (e.g. IP Options)
 // SHOULD include fields changing hop-by-hop (e.g. TTL)
 var disallowedUnmutableFields = []api.FieldName{

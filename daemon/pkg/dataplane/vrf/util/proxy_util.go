@@ -2,12 +2,12 @@ package util
 
 import (
 	"cmp"
+	"encoding/hex"
 	"fmt"
+	api "github.com/mantra6g/iml/api/core/v1alpha1"
+	"net"
 	"slices"
 	"strings"
-	"encoding/hex"
-	"net"
-	api "github.com/mantra6g/iml/api/core/v1alpha1"
 )
 
 /*
@@ -16,17 +16,17 @@ Central is: getKeyMask(fields), which returns a bit mask for a
 */
 
 func PaddedMAC(mac net.HardwareAddr) []byte {
-    if len(mac) != 6 {
-        fmt.Printf("expected a 6-byte MAC address, got %d bytes", len(mac))
+	if len(mac) != 6 {
+		fmt.Printf("expected a 6-byte MAC address, got %d bytes", len(mac))
 		return []byte{}
-    }
+	}
 
-    value := make([]byte, 8)
-    copy(value[:6], mac)
-    return value
+	value := make([]byte, 8)
+	copy(value[:6], mac)
+	return value
 }
 
-func FilterFieldsByProto(fields []api.ImmutableHeaderField, proto api.ProtocolName) ([]api.ImmutableHeaderField) {
+func FilterFieldsByProto(fields []api.ImmutableHeaderField, proto api.ProtocolName) []api.ImmutableHeaderField {
 	filtered := []api.ImmutableHeaderField{}
 	copy(filtered, fields)
 	return slices.DeleteFunc(filtered, func(f api.ImmutableHeaderField) bool {
@@ -48,14 +48,15 @@ func GetKeyMaskForProto(fields []api.ImmutableHeaderField) ([]byte, error) {
 		return slices.Contains(disallowedUnmutableFields, f.Field)
 	})
 
-	mask_len, err := getMaskLen(fields[0].Proto); if err != nil {
+	mask_len, err := getMaskLen(fields[0].Proto)
+	if err != nil {
 		return nil, fmt.Errorf("getting the mask length: %s", err)
 	}
 	mask := make([]byte, mask_len)
 	layout := FieldLayout{}
 
 	for _, field := range fields {
-		switch(field.Proto){
+		switch field.Proto {
 		case api.PROTO_IPv4:
 			layout = layoutIPv4[field.Field]
 		case api.PROTO_IPv6:
@@ -66,25 +67,26 @@ func GetKeyMaskForProto(fields []api.ImmutableHeaderField) ([]byte, error) {
 			layout = layoutTCP[field.Field]
 		}
 
-		if(layout == FieldLayout{}){
+		if (layout == FieldLayout{}) {
 			fmt.Printf("Could not find field: %s for %s\n. Mismatched Protocols?", field.Field, field.Proto)
 			continue
 		}
 
-		switch(field.Match.Type) {
+		switch field.Match.Type {
 		case api.EXACT_MATCH:
 			setBits(mask, layout.Offset, layout.Width)
 		case api.BITMASK_MATCH:
-			bytes, err := parseMaskString(field.Match.BitMask); if err != nil {
+			bytes, err := parseMaskString(field.Match.BitMask)
+			if err != nil {
 				return nil, fmt.Errorf("couldn't parse the bitmask (%s) provided.", field.Match.BitMask)
 			}
-			if len(bytes) * 8 < layout.Width {
-				return nil, 
-				fmt.Errorf("The byte slice parsed from the provided mask (%s) is shorter (len=%dbits) than the matching field (len=%dbits)", 
-					field.Match.BitMask, len(bytes)*8, layout.Width)
+			if len(bytes)*8 < layout.Width {
+				return nil,
+					fmt.Errorf("The byte slice parsed from the provided mask (%s) is shorter (len=%dbits) than the matching field (len=%dbits)",
+						field.Match.BitMask, len(bytes)*8, layout.Width)
 			}
 			orBits(mask, layout.Offset, bytes, layout.Width)
-		} 
+		}
 	}
 	return mask, nil
 }
@@ -154,10 +156,10 @@ func orBits(dst []byte, off int, src []byte, width int) {
 
 /* PARSING */
 
-func parseMaskString(s string)([]byte, error){
+func parseMaskString(s string) ([]byte, error) {
 	if strings.HasPrefix(s, "0x") {
 		return parseBytes(s)
-	} else if (strings.HasPrefix(s, "0b")){
+	} else if strings.HasPrefix(s, "0b") {
 		return parseBits(s)
 	} else {
 		return nil, fmt.Errorf("Please specify the bitmask as hex (0x) or bits (0b).")
@@ -166,7 +168,7 @@ func parseMaskString(s string)([]byte, error){
 
 func ensureFieldsBelongToOneHeader(fields *[]api.ImmutableHeaderField) error {
 	proto := api.PROTO_NIL
-	
+
 	for _, field := range *fields {
 		if proto == api.PROTO_NIL {
 			proto = field.Proto
@@ -179,7 +181,7 @@ func ensureFieldsBelongToOneHeader(fields *[]api.ImmutableHeaderField) error {
 	return nil
 }
 
- func sortFieldsInHdrOrder(fields *[]api.ImmutableHeaderField,) {
+func sortFieldsInHdrOrder(fields *[]api.ImmutableHeaderField) {
 	switch (*fields)[0].Proto {
 	case api.PROTO_IPv4:
 		slices.SortFunc(*fields, sortIPv4HeaderFields)
@@ -194,7 +196,7 @@ func ensureFieldsBelongToOneHeader(fields *[]api.ImmutableHeaderField) error {
 
 func getMaskLenL3(L3 api.ProtocolName) (int, error) {
 	len := 0
-	switch(L3){
+	switch L3 {
 	case api.PROTO_IPv4:
 		len += IPv4_HDR_LEN_BYTES
 	case api.PROTO_IPv6:
@@ -208,7 +210,7 @@ func getMaskLenL3(L3 api.ProtocolName) (int, error) {
 
 func getMaskLenL4(L4 api.ProtocolName) (int, error) {
 	len := 0
-	switch(L4){
+	switch L4 {
 	case api.PROTO_UDP:
 		len = UDP_HDR_LEN_BYTES
 	case api.PROTO_TCP:
@@ -221,7 +223,7 @@ func getMaskLenL4(L4 api.ProtocolName) (int, error) {
 }
 
 func getMaskLen(proto api.ProtocolName) (int, error) {
-	if isL3(proto){
+	if isL3(proto) {
 		return MAX_L3_HDR_LEN, nil // getMaskLenL3(proto)
 	}
 
@@ -315,5 +317,3 @@ var sortUDPHeaderFields = newHeaderFieldSorter(api.PROTO_UDP,
 	api.UDP_LENGTH,
 	api.UDP_CHECKSUM,
 )
-
-
