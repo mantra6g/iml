@@ -156,9 +156,9 @@ func (t *Tunnel) installEgressRoutes(dsts ...*net.IPNet) error {
 	}
 	var encap netlink.Encap
 	if t.endpoint.To4() == nil {
-		encap = &netlink.IP6tnlEncap{Dst: t.endpoint, Src: net.IPv6zero}
+		encap = &netlink.IP6tnlEncap{Dst: t.endpoint, Src: net.IPv6zero, Hoplimit: DefaultTunnelTTL}
 	} else {
-		encap = &ipTunnelEncap{dst: t.endpoint}
+		encap = &ipTunnelEncap{dst: t.endpoint, ttl: DefaultTunnelTTL}
 	}
 	for _, dst := range dsts {
 		if err = t.replaceEgressRoute(link, table, dst, encap); err != nil {
@@ -278,13 +278,20 @@ const (
 const (
 	lwtunnelIPID  = nl.LWTUNNEL_IP6_ID
 	lwtunnelIPDst = nl.LWTUNNEL_IP6_DST
+	lwtunnelIPTTL = LWTUNNEL_IP_TTL
 )
 
+// DefaultTunnelTTL is the outer IPv4 TTL / IPv6 hop limit for encapsulated packets. The tunnel
+// device is FlowBased (collect_md), so the kernel uses the TTL from the route's lwtunnel metadata
+// as-is with no default fallback: leaving it unset sends packets out with TTL 0.
+const DefaultTunnelTTL uint8 = 64
+
 // ipTunnelEncap implements netlink.Encap for the kernel's IPv4 lightweight tunnel
-// (LWTUNNEL_ENCAP_IP, i.e. `ip route ... encap ip id 0 dst <addr>`). vishvananda/netlink only
-// ships the IPv6 variant (netlink.IP6tnlEncap).
+// (LWTUNNEL_ENCAP_IP, i.e. `ip route ... encap ip id 0 dst <addr> ttl <ttl>`). vishvananda/netlink
+// only ships the IPv6 variant (netlink.IP6tnlEncap).
 type ipTunnelEncap struct {
 	dst net.IP
+	ttl uint8
 }
 
 func (e *ipTunnelEncap) Type() int {
@@ -312,11 +319,18 @@ func (e *ipTunnelEncap) Encode() ([]byte, error) {
 	native.PutUint16(dstAttr[2:], uint16(lwtunnelIPDst))
 	dstAttr = append(dstAttr, dst...)
 
-	return append(id, dstAttr...), nil
+	// u8 attribute: nla_len covers header + 1 byte payload, padded to the 4-byte NLA alignment.
+	ttlAttr := make([]byte, 8)
+	native.PutUint16(ttlAttr, 5)
+	native.PutUint16(ttlAttr[2:], uint16(lwtunnelIPTTL))
+	ttlAttr[4] = e.ttl
+
+	res := append(id, dstAttr...)
+	return append(res, ttlAttr...), nil
 }
 
 func (e *ipTunnelEncap) String() string {
-	return fmt.Sprintf("id 0 dst %s", e.dst)
+	return fmt.Sprintf("id 0 dst %s ttl %d", e.dst, e.ttl)
 }
 
 func (e *ipTunnelEncap) Equal(x netlink.Encap) bool {
@@ -324,7 +338,7 @@ func (e *ipTunnelEncap) Equal(x netlink.Encap) bool {
 	if !ok {
 		return false
 	}
-	return e.dst.Equal(o.dst)
+	return e.dst.Equal(o.dst) && e.ttl == o.ttl
 }
 
 func (t *Tunnel) Teardown() error {

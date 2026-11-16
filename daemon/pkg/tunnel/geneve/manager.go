@@ -161,7 +161,7 @@ func createTunnel(name string, port uint16, vrf netlink.Link) (netlink.Link, err
 		Dport: port,
 		// FlowBased makes this a single "external"/metadata-driven device shared by every remote
 		// node, instead of one device per fixed remote endpoint: the actual per-packet destination
-		// and VNI are attached by the tc rules in Tunnel.AddEgressRoute.
+		// and TTL are attached by the lwtunnel route encap in Tunnel.AddEgressRoute.
 		FlowBased: true,
 		// InnerProtoInherit makes this an L3-only tunnel (no inner Ethernet header, the Geneve
 		// protocol-type field is taken from the inner packet itself). Without it, the device would
