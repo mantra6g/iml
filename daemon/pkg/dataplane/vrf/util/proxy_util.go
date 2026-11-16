@@ -7,6 +7,7 @@ import (
 	"strings"
 	"encoding/hex"
 	"net"
+	api "github.com/mantra6g/iml/api/core/v1alpha1"
 )
 
 /*
@@ -25,15 +26,15 @@ func PaddedMAC(mac net.HardwareAddr) []byte {
     return value
 }
 
-func FilterFieldsByProto(fields []ImmutableHeaderField, proto ProtocolName) ([]ImmutableHeaderField) {
-	filtered := []ImmutableHeaderField{}
+func FilterFieldsByProto(fields []api.ImmutableHeaderField, proto api.ProtocolName) ([]api.ImmutableHeaderField) {
+	filtered := []api.ImmutableHeaderField{}
 	copy(filtered, fields)
-	return slices.DeleteFunc(filtered, func(f ImmutableHeaderField) bool {
+	return slices.DeleteFunc(filtered, func(f api.ImmutableHeaderField) bool {
 		return f.Proto != proto
 	})
 }
 
-func GetKeyMaskForProto(fields []ImmutableHeaderField) ([]byte, error) {
+func GetKeyMaskForProto(fields []api.ImmutableHeaderField) ([]byte, error) {
 	if len(fields) == 0 {
 		return []byte{}, nil
 	}
@@ -43,7 +44,7 @@ func GetKeyMaskForProto(fields []ImmutableHeaderField) ([]byte, error) {
 	sortFieldsInHdrOrder(&fields)
 
 	// pop unallowed fields
-	fields = slices.DeleteFunc(fields, func(f ImmutableHeaderField) bool {
+	fields = slices.DeleteFunc(fields, func(f api.ImmutableHeaderField) bool {
 		return slices.Contains(disallowedUnmutableFields, f.Field)
 	})
 
@@ -55,13 +56,13 @@ func GetKeyMaskForProto(fields []ImmutableHeaderField) ([]byte, error) {
 
 	for _, field := range fields {
 		switch(field.Proto){
-		case PROTO_IPv4:
+		case api.PROTO_IPv4:
 			layout = layoutIPv4[field.Field]
-		case PROTO_IPv6:
+		case api.PROTO_IPv6:
 			layout = layoutIPv6[field.Field]
-		case PROTO_UDP:
+		case api.PROTO_UDP:
 			layout = layoutUDP[field.Field]
-		case PROTO_TCP:
+		case api.PROTO_TCP:
 			layout = layoutTCP[field.Field]
 		}
 
@@ -71,9 +72,9 @@ func GetKeyMaskForProto(fields []ImmutableHeaderField) ([]byte, error) {
 		}
 
 		switch(field.Match.Type) {
-		case EXACT_MATCH:
+		case api.EXACT_MATCH:
 			setBits(mask, layout.Offset, layout.Width)
-		case BITMASK_MATCH:
+		case api.BITMASK_MATCH:
 			bytes, err := parseMaskString(field.Match.BitMask); if err != nil {
 				return nil, fmt.Errorf("couldn't parse the bitmask (%s) provided.", field.Match.BitMask)
 			}
@@ -163,11 +164,11 @@ func parseMaskString(s string)([]byte, error){
 	}
 }
 
-func ensureFieldsBelongToOneHeader(fields *[]ImmutableHeaderField) error {
-	proto := PROTO_NIL
+func ensureFieldsBelongToOneHeader(fields *[]api.ImmutableHeaderField) error {
+	proto := api.PROTO_NIL
 	
 	for _, field := range *fields {
-		if proto == PROTO_NIL {
+		if proto == api.PROTO_NIL {
 			proto = field.Proto
 		}
 		if field.Proto != proto {
@@ -178,25 +179,25 @@ func ensureFieldsBelongToOneHeader(fields *[]ImmutableHeaderField) error {
 	return nil
 }
 
- func sortFieldsInHdrOrder(fields *[]ImmutableHeaderField,) {
+ func sortFieldsInHdrOrder(fields *[]api.ImmutableHeaderField,) {
 	switch (*fields)[0].Proto {
-	case PROTO_IPv4:
+	case api.PROTO_IPv4:
 		slices.SortFunc(*fields, sortIPv4HeaderFields)
-	case PROTO_IPv6:
+	case api.PROTO_IPv6:
 		slices.SortFunc(*fields, sortIPv6HeaderFields)
-	case PROTO_UDP:
+	case api.PROTO_UDP:
 		slices.SortFunc(*fields, sortUDPHeaderFields)
-	case PROTO_TCP:
+	case api.PROTO_TCP:
 		slices.SortFunc(*fields, sortTCPHeaderFields)
 	}
 }
 
-func getMaskLenL3(L3 ProtocolName) (int, error) {
+func getMaskLenL3(L3 api.ProtocolName) (int, error) {
 	len := 0
 	switch(L3){
-	case PROTO_IPv4:
+	case api.PROTO_IPv4:
 		len += IPv4_HDR_LEN_BYTES
-	case PROTO_IPv6:
+	case api.PROTO_IPv6:
 		len += IPv6_HDR_LEN_BYTES
 	default:
 		return 0, fmt.Errorf("Did not find supported L3 protocol: %s", L3)
@@ -205,12 +206,12 @@ func getMaskLenL3(L3 ProtocolName) (int, error) {
 	return len, nil
 }
 
-func getMaskLenL4(L4 ProtocolName) (int, error) {
+func getMaskLenL4(L4 api.ProtocolName) (int, error) {
 	len := 0
 	switch(L4){
-	case PROTO_UDP:
+	case api.PROTO_UDP:
 		len = UDP_HDR_LEN_BYTES
-	case PROTO_TCP:
+	case api.PROTO_TCP:
 		len = TCP_HDR_LEN_BYTES
 	default:
 		return 0, fmt.Errorf("Did not find supported L4 protocol: %s", L4)
@@ -219,7 +220,7 @@ func getMaskLenL4(L4 ProtocolName) (int, error) {
 	return len, nil
 }
 
-func getMaskLen(proto ProtocolName) (int, error) {
+func getMaskLen(proto api.ProtocolName) (int, error) {
 	if isL3(proto){
 		return MAX_L3_HDR_LEN, nil // getMaskLenL3(proto)
 	}
@@ -231,22 +232,22 @@ func getMaskLen(proto ProtocolName) (int, error) {
 	return -1, fmt.Errorf("Unsupported Protocol: %s", proto)
 }
 
-func isL3(proto ProtocolName) bool {
-	return proto == PROTO_IPv4 || proto == PROTO_IPv6
+func isL3(proto api.ProtocolName) bool {
+	return proto == api.PROTO_IPv4 || proto == api.PROTO_IPv6
 }
 
-func isL4(proto ProtocolName) bool {
-	return proto == PROTO_UDP || proto == PROTO_TCP
+func isL4(proto api.ProtocolName) bool {
+	return proto == api.PROTO_UDP || proto == api.PROTO_TCP
 }
 
 // newFieldIndex returns a lookup giving each field's position in the header.
 // Unknown fields sort last.
-func newFieldIndex(order ...FieldName) func(FieldName) int {
-	m := make(map[FieldName]int, len(order))
+func newFieldIndex(order ...api.FieldName) func(api.FieldName) int {
+	m := make(map[api.FieldName]int, len(order))
 	for i, f := range order {
 		m[f] = i
 	}
-	return func(f FieldName) int {
+	return func(f api.FieldName) int {
 		if i, ok := m[f]; ok {
 			return i
 		}
@@ -256,9 +257,9 @@ func newFieldIndex(order ...FieldName) func(FieldName) int {
 
 // newHeaderFieldSorter builds a comparison func for slices.SortFunc /
 // slices.SortStableFunc that orders fields of one protocol by header position.
-func newHeaderFieldSorter(proto ProtocolName, order ...FieldName) func(a, b ImmutableHeaderField) int {
+func newHeaderFieldSorter(proto api.ProtocolName, order ...api.FieldName) func(a, b api.ImmutableHeaderField) int {
 	index := newFieldIndex(order...)
-	return func(a, b ImmutableHeaderField) int {
+	return func(a, b api.ImmutableHeaderField) int {
 		if a.Proto != proto || b.Proto != proto {
 			return 0
 		}
@@ -266,53 +267,53 @@ func newHeaderFieldSorter(proto ProtocolName, order ...FieldName) func(a, b Immu
 	}
 }
 
-var sortIPv4HeaderFields = newHeaderFieldSorter(PROTO_IPv4,
-	IPv4_VERSION,
-	IPv4_IHL,
-	IPv4_DSCP,
-	IPv4_ECN,
-	IPv4_TOTAL_LENGTH,
-	IPv4_IDENTIFICATION,
-	IPv4_FLAGS,
-	IPv4_FRAGMENT_OFFSET,
-	IPv4_TTL,
-	IPv4_PROTOCOL,
-	IPv4_HEADER_CHECKSUM,
-	IPv4_SRC_ADDR,
-	IPv4_DST_ADDR,
-	IPv4_OPTIONS,
+var sortIPv4HeaderFields = newHeaderFieldSorter(api.PROTO_IPv4,
+	api.IPv4_VERSION,
+	api.IPv4_IHL,
+	api.IPv4_DSCP,
+	api.IPv4_ECN,
+	api.IPv4_TOTAL_LENGTH,
+	api.IPv4_IDENTIFICATION,
+	api.IPv4_FLAGS,
+	api.IPv4_FRAGMENT_OFFSET,
+	api.IPv4_TTL,
+	api.IPv4_PROTOCOL,
+	api.IPv4_HEADER_CHECKSUM,
+	api.IPv4_SRC_ADDR,
+	api.IPv4_DST_ADDR,
+	api.IPv4_OPTIONS,
 )
 
-var sortIPv6HeaderFields = newHeaderFieldSorter(PROTO_IPv6,
-	IPv6_VERSION,
-	IPv6_TRAFFIC_CLASS,
-	IPv6_FLOW_LABEL,
-	IPv6_PAYLOAD_LENGTH,
-	IPv6_NEXT_HEADER,
-	IPv6_HOP_LIMIT,
-	IPv6_SRC_ADDR,
-	IPv6_DST_ADDR,
+var sortIPv6HeaderFields = newHeaderFieldSorter(api.PROTO_IPv6,
+	api.IPv6_VERSION,
+	api.IPv6_TRAFFIC_CLASS,
+	api.IPv6_FLOW_LABEL,
+	api.IPv6_PAYLOAD_LENGTH,
+	api.IPv6_NEXT_HEADER,
+	api.IPv6_HOP_LIMIT,
+	api.IPv6_SRC_ADDR,
+	api.IPv6_DST_ADDR,
 )
 
-var sortTCPHeaderFields = newHeaderFieldSorter(PROTO_TCP,
-	TCP_SRC_PORT,
-	TCP_DST_PORT,
-	TCP_SEQ_NUM,
-	TCP_ACK_NUM,
-	TCP_DATA_OFFSET,
-	TCP_RESERVED,
-	TCP_FLAGS,
-	TCP_WINDOW,
-	TCP_CHECKSUM,
-	TCP_URGENT_POINTER,
-	TCP_OPTIONS,
+var sortTCPHeaderFields = newHeaderFieldSorter(api.PROTO_TCP,
+	api.TCP_SRC_PORT,
+	api.TCP_DST_PORT,
+	api.TCP_SEQ_NUM,
+	api.TCP_ACK_NUM,
+	api.TCP_DATA_OFFSET,
+	api.TCP_RESERVED,
+	api.TCP_FLAGS,
+	api.TCP_WINDOW,
+	api.TCP_CHECKSUM,
+	api.TCP_URGENT_POINTER,
+	api.TCP_OPTIONS,
 )
 
-var sortUDPHeaderFields = newHeaderFieldSorter(PROTO_UDP,
-	UDP_SRC_PORT,
-	UDP_DST_PORT,
-	UDP_LENGTH,
-	UDP_CHECKSUM,
+var sortUDPHeaderFields = newHeaderFieldSorter(api.PROTO_UDP,
+	api.UDP_SRC_PORT,
+	api.UDP_DST_PORT,
+	api.UDP_LENGTH,
+	api.UDP_CHECKSUM,
 )
 
 

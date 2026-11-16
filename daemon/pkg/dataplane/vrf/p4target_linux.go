@@ -372,7 +372,7 @@ func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatche
     }
 	// key_mask_tables: get immutable fields from proxyConfig and calculate masks
 	// IPv4
-	ipv4_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, vrfutil.PROTO_IPv4)
+	ipv4_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_IPv4)
 	mask, err := vrfutil.GetKeyMaskForProto(ipv4_fields); if err != nil {
 		fmt.Printf("Could not get key mask for IPv4: %s", err)
 	}
@@ -382,7 +382,7 @@ func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatche
 		return fmt.Errorf("Could not insert key mask for proto IPv4.\n: %w", err)
 	}
 	// IPv6
-	ipv6_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, vrfutil.PROTO_IPv6)
+	ipv6_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_IPv6)
 	mask, err = vrfutil.GetKeyMaskForProto(ipv6_fields); if err != nil {
 		fmt.Printf("Could not get key mask for IPv6: %s", err)
 	}
@@ -392,7 +392,7 @@ func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatche
 		return fmt.Errorf("Could not insert key mask for proto IPv6.\n: %w", err)
 	}
 	// TCP
-	tcp_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, vrfutil.PROTO_TCP)
+	tcp_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_TCP)
 	mask, err = vrfutil.GetKeyMaskForProto(tcp_fields); if err != nil {
 		fmt.Printf("Could not get key mask for TCP: %s", err)
 	}
@@ -402,7 +402,7 @@ func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatche
 		return fmt.Errorf("Could not insert key mask for proto TCP.\n: %w", err)
 	}
 	// UDP
-	udp_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, vrfutil.PROTO_UDP)
+	udp_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_UDP)
 	mask, err = vrfutil.GetKeyMaskForProto(udp_fields); if err != nil {
 		fmt.Printf("Could not get key mask for UDP: %s", err)
 	}

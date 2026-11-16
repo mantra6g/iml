@@ -19,7 +19,6 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	vrfutil "github.com/mantra6g/iml/daemon/pkg/dataplane/vrf/util"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -88,6 +87,84 @@ const (
 	FieldBasedProxy ProxyStrategy = "FieldBased"
 )
 
+type MatchTypeName string
+
+const (
+	BITMASK_MATCH MatchTypeName = "bitmask"
+	EXACT_MATCH MatchTypeName = "exact"
+)
+
+type MatchType struct {
+	Type MatchTypeName `json:"name"`
+	BitMask string `json:"bitmask"`// bitmask is used = 0xfff for exact match and 
+}
+
+type ProtocolName string
+
+const (
+	PROTO_IPv4 ProtocolName = "ipv4"
+	PROTO_IPv6 ProtocolName = "ipv6"
+	PROTO_TCP ProtocolName = "tcp"
+	PROTO_UDP ProtocolName = "udp"
+	PROTO_NIL ProtocolName = ""
+)
+
+type FieldName string
+
+const (
+	// IPv4 (RFC 791)
+	IPv4_VERSION         FieldName = "Version"
+	IPv4_IHL             FieldName = "IHL"
+	IPv4_DSCP            FieldName = "DSCP"
+	IPv4_ECN             FieldName = "ECN"
+	IPv4_TOTAL_LENGTH    FieldName = "TotalLength"
+	IPv4_IDENTIFICATION  FieldName = "Identification"
+	IPv4_FLAGS           FieldName = "Flags"
+	IPv4_FRAGMENT_OFFSET FieldName = "FragmentOffset"
+	IPv4_TTL             FieldName = "TTL"
+	IPv4_PROTOCOL        FieldName = "Protocol"
+	IPv4_HEADER_CHECKSUM FieldName = "HeaderChecksum"
+	IPv4_SRC_ADDR        FieldName = "SrcAddr"
+	IPv4_DST_ADDR        FieldName = "DstAddr"
+	IPv4_OPTIONS         FieldName = "Options"
+
+	// IPv6 (RFC 8200)
+	IPv6_VERSION        FieldName = "Version"
+	IPv6_TRAFFIC_CLASS  FieldName = "TrafficClass"
+	IPv6_FLOW_LABEL     FieldName = "FlowLabel"
+	IPv6_PAYLOAD_LENGTH FieldName = "PayloadLength"
+	IPv6_NEXT_HEADER    FieldName = "NextHeader"
+	IPv6_HOP_LIMIT      FieldName = "HopLimit"
+	IPv6_SRC_ADDR       FieldName = "SrcAddr"
+	IPv6_DST_ADDR       FieldName = "DstAddr"
+
+	// TCP (RFC 9293)
+	TCP_SRC_PORT       FieldName = "SrcPort"
+	TCP_DST_PORT       FieldName = "DstPort"
+	TCP_SEQ_NUM        FieldName = "SeqNum"
+	TCP_ACK_NUM        FieldName = "AckNum"
+	TCP_DATA_OFFSET    FieldName = "DataOffset"
+	TCP_RESERVED       FieldName = "Reserved"
+	TCP_FLAGS          FieldName = "Flags"
+	TCP_WINDOW         FieldName = "Window"
+	TCP_CHECKSUM       FieldName = "Checksum"
+	TCP_URGENT_POINTER FieldName = "UrgentPointer"
+	TCP_OPTIONS        FieldName = "Options"
+
+	// UDP (RFC 768)
+	UDP_SRC_PORT FieldName = "SrcPort"
+	UDP_DST_PORT FieldName = "DstPort"
+	UDP_LENGTH   FieldName = "Length"
+	UDP_CHECKSUM FieldName = "Checksum"
+)
+
+
+type ImmutableHeaderField struct {
+	Proto ProtocolName `json:"proto"`
+	Match MatchType `json:"match"`
+	Field FieldName `json:"field"`
+}
+
 // for strategies
 type ProxyConfig struct {
 	// +required
@@ -100,7 +177,7 @@ type ProxyConfig struct {
 
 	// only applies if Strategy FieldBased
 	// +optional
-	Fields []vrfutil.ImmutableHeaderField `json:"fields"`
+	Fields []ImmutableHeaderField `json:"fields"`
 }
 
 
