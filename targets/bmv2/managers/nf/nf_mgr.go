@@ -207,7 +207,7 @@ func (m *RealManager) compile(ctx context.Context, nf *corev1alpha1.NetworkFunct
 	var program *api.P4Program
 	var err error
 
-	if strings.HasPrefix(p4File, "http://") || strings.HasPrefix(p4File, "https://") || strings.HasPrefix(p4File, "s3://") {
+	if strings.HasPrefix(p4File, "http://") || strings.HasPrefix(p4File, "https://") || strings.HasPrefix(p4File, "s3://") || strings.HasPrefix(p4File, "oci://") {
 		result, compileErr := p4compile.CompileFromURL(ctx, p4File)
 		if compileErr != nil {
 			err = compileErr
