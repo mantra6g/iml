@@ -66,6 +66,14 @@ struct cached_outer {
     __u8 bytes[MAX_CACHED_HDR];
 };
 
+struct cached_outer_seq {
+    __u32 seq;
+    __u16 len;
+    __u16 pad;
+    __u8 bytes[MAX_CACHED_HDR];
+    __u64 last_seen;
+};
+
 struct parsed_srh {
     struct ethhdr *eth;
     struct ipv6hdr *ip6;

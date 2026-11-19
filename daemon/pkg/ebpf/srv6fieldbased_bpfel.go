@@ -13,20 +13,13 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type Srv6FieldBasedCachedOuter struct {
-	_    structs.HostLayout
-	Lock struct {
-		_   structs.HostLayout
-		Val uint32
-	}
-	Len   uint16
-	Pad   uint16
-	Bytes [2096]uint8
-}
-
-type Srv6FieldBasedCachedOuterMock struct {
-	_     structs.HostLayout
-	Bytes [2104]uint8
+type Srv6FieldBasedCachedOuterSeq struct {
+	_        structs.HostLayout
+	Seq      uint32
+	Len      uint16
+	Pad      uint16
+	Bytes    [2096]uint8
+	LastSeen uint64
 }
 
 type Srv6FieldBasedL3MaskT struct {

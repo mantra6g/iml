@@ -358,7 +358,7 @@ func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatche
 	* init maps: scratch map, mac/link_index tables, key masks
 	 */
 	// scratch table
-	zeroValue := make([]byte, 2104)
+	zeroValue := make([]byte, 2112)
 	if err := objs.ScratchTable.Put(uint32(0), zeroValue); err != nil {
 		return fmt.Errorf("initialize SRH scratch table entry: %w", err)
 	}
