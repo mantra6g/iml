@@ -168,12 +168,18 @@ spec:
                                   properties:
                                     bitmask:
                                       type: string
-                                    name:
+                                    type:
+                                      enum:
+                                      - bitmask
+                                      - exact
                                       type: string
                                   required:
-                                  - bitmask
-                                  - name
+                                  - type
                                   type: object
+                                  x-kubernetes-validations:
+                                  - message: bitmask must be set when type is 'bitmask'
+                                    rule: self.type != 'bitmask' || (has(self.bitmask)
+                                      && size(self.bitmask) > 0)
                                 proto:
                                   type: string
                               required:
@@ -181,11 +187,21 @@ spec:
                               - match
                               - proto
                               type: object
+                              x-kubernetes-validations:
+                              - message: field is not valid for IPv4
+                                rule: self.proto != 'IPv4' || self.field in ['Version','IHL','DSCP','ECN','TotalLength','Identification','Flags','FragmentOffset','TTL','Protocol','HeaderChecksum','SrcAddr','DstAddr','Options']
+                              - message: field is not valid for IPv6
+                                rule: self.proto != 'IPv6' || self.field in ['Version','TrafficClass','FlowLabel','PayloadLength','NextHeader','HopLimit','SrcAddr','DstAddr']
+                              - message: field is not valid for TCP
+                                rule: self.proto != 'TCP' || self.field in ['SrcPort','DstPort','SeqNum','AckNum','DataOffset','Reserved','Flags','Window','Checksum','UrgentPointer','Options']
+                              - message: field is not valid for UDP
+                                rule: self.proto != 'UDP' || self.field in ['SrcPort','DstPort','Length','Checksum']
                             type: array
                           laneCount:
                             description: |-
                               indicates how many interface pairs to use: expects ReuseMappedHostInterfaces
                               with at least LaneCount * 2 ifaces
+                            minimum: 0
                             type: integer
                           proxyStrategy:
                             enum:
@@ -196,6 +212,15 @@ spec:
                         required:
                         - proxyStrategy
                         type: object
+                        x-kubernetes-validations:
+                        - message: fields must be set and non-empty when proxyStrategy
+                            is 'FieldBased'
+                          rule: self.proxyStrategy != 'FieldBased' || (has(self.fields)
+                            && size(self.fields) > 0)
+                        - message: laneCount must be greater than 0 when proxyStrategy
+                            is 'LaneBased'
+                          rule: self.proxyStrategy != 'LaneBased' || (has(self.laneCount)
+                            && self.laneCount > 0)
                     type: object
                 type: object
               nfCIDR:

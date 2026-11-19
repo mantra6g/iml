@@ -30,6 +30,12 @@ type Srv6DynamicMacEntry struct {
 	Pad  [2]uint8
 }
 
+type Srv6DynamicScratchOuter struct {
+	_     structs.HostLayout
+	Len   uint16
+	Bytes [2096]uint8
+}
+
 // LoadSrv6Dynamic returns the embedded CollectionSpec for Srv6Dynamic.
 func LoadSrv6Dynamic() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_Srv6DynamicBytes)
@@ -72,17 +78,20 @@ type Srv6DynamicSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type Srv6DynamicProgramSpecs struct {
-	Decap *ebpf.ProgramSpec `ebpf:"decap"`
-	Encap *ebpf.ProgramSpec `ebpf:"encap"`
+	Decap   *ebpf.ProgramSpec `ebpf:"decap"`
+	Encap   *ebpf.ProgramSpec `ebpf:"encap"`
+	TcDecap *ebpf.ProgramSpec `ebpf:"tc_decap"`
+	TcEncap *ebpf.ProgramSpec `ebpf:"tc_encap"`
 }
 
 // Srv6DynamicMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type Srv6DynamicMapSpecs struct {
-	LinkIndexTable *ebpf.MapSpec `ebpf:"link_index_table"`
-	MacAddrTable   *ebpf.MapSpec `ebpf:"mac_addr_table"`
-	SrhTable       *ebpf.MapSpec `ebpf:"srh_table"`
+	EncapScratchTable *ebpf.MapSpec `ebpf:"encap_scratch_table"`
+	LinkIndexTable    *ebpf.MapSpec `ebpf:"link_index_table"`
+	MacAddrTable      *ebpf.MapSpec `ebpf:"mac_addr_table"`
+	SrhTable          *ebpf.MapSpec `ebpf:"srh_table"`
 }
 
 // Srv6DynamicVariableSpecs contains global variables before they are loaded into the kernel.
@@ -112,13 +121,15 @@ func (o *Srv6DynamicObjects) Close() error {
 //
 // It can be passed to LoadSrv6DynamicObjects or ebpf.CollectionSpec.LoadAndAssign.
 type Srv6DynamicMaps struct {
-	LinkIndexTable *ebpf.Map `ebpf:"link_index_table"`
-	MacAddrTable   *ebpf.Map `ebpf:"mac_addr_table"`
-	SrhTable       *ebpf.Map `ebpf:"srh_table"`
+	EncapScratchTable *ebpf.Map `ebpf:"encap_scratch_table"`
+	LinkIndexTable    *ebpf.Map `ebpf:"link_index_table"`
+	MacAddrTable      *ebpf.Map `ebpf:"mac_addr_table"`
+	SrhTable          *ebpf.Map `ebpf:"srh_table"`
 }
 
 func (m *Srv6DynamicMaps) Close() error {
 	return _Srv6DynamicClose(
+		m.EncapScratchTable,
 		m.LinkIndexTable,
 		m.MacAddrTable,
 		m.SrhTable,
@@ -136,14 +147,18 @@ type Srv6DynamicVariables struct {
 //
 // It can be passed to LoadSrv6DynamicObjects or ebpf.CollectionSpec.LoadAndAssign.
 type Srv6DynamicPrograms struct {
-	Decap *ebpf.Program `ebpf:"decap"`
-	Encap *ebpf.Program `ebpf:"encap"`
+	Decap   *ebpf.Program `ebpf:"decap"`
+	Encap   *ebpf.Program `ebpf:"encap"`
+	TcDecap *ebpf.Program `ebpf:"tc_decap"`
+	TcEncap *ebpf.Program `ebpf:"tc_encap"`
 }
 
 func (p *Srv6DynamicPrograms) Close() error {
 	return _Srv6DynamicClose(
 		p.Decap,
 		p.Encap,
+		p.TcDecap,
+		p.TcEncap,
 	)
 }
 

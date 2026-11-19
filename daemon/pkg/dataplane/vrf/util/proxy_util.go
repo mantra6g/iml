@@ -27,32 +27,34 @@ func PaddedMAC(mac net.HardwareAddr) []byte {
 }
 
 func FilterFieldsByProto(fields []api.ImmutableHeaderField, proto api.ProtocolName) []api.ImmutableHeaderField {
-	filtered := []api.ImmutableHeaderField{}
-	copy(filtered, fields)
+	filtered := slices.Clone(fields)
 	return slices.DeleteFunc(filtered, func(f api.ImmutableHeaderField) bool {
 		return f.Proto != proto
 	})
 }
 
 func GetKeyMaskForProto(fields []api.ImmutableHeaderField) ([]byte, error) {
-	if len(fields) == 0 {
-		return []byte{}, nil
-	}
 	if err := ensureFieldsBelongToOneHeader(&fields); err != nil {
 		return nil, err
 	}
-	sortFieldsInHdrOrder(&fields)
 
-	// pop unallowed fields
-	fields = slices.DeleteFunc(fields, func(f api.ImmutableHeaderField) bool {
-		return slices.Contains(disallowedUnmutableFields, f.Field)
-	})
+	if len(fields) == 0 {
+		return make([]byte, max(MAX_L3_HDR_LEN, MAX_L4_HDR_LEN)), nil
+	}
+
+	sortFieldsInHdrOrder(&fields)
 
 	mask_len, err := getMaskLen(fields[0].Proto)
 	if err != nil {
 		return nil, fmt.Errorf("getting the mask length: %s", err)
 	}
 	mask := make([]byte, mask_len)
+
+	// pop unallowed fields
+	fields = slices.DeleteFunc(fields, func(f api.ImmutableHeaderField) bool {
+		return slices.Contains(disallowedUnmutableFields, f.Field)
+	})
+
 	layout := FieldLayout{}
 
 	for _, field := range fields {

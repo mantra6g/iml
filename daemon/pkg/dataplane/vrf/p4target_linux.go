@@ -12,6 +12,7 @@ import (
 	"github.com/mantra6g/iml/daemon/pkg/ebpf"
 
 	corev1alpha1 "github.com/mantra6g/iml/api/core/v1alpha1"
+	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,7 +51,7 @@ func newP4TargetLinks(target *corev1alpha1.P4Target) (*p4TargetLinks, error) {
 		}
 		links.Ports = append([]string(nil), reuse.Names...)
 		return links, nil
-	} 
+	}
 	if dataplane.ReusesMappedHostInterfaces(target) {
 		reuse := target.Spec.Network.HostInterfaces.ReuseMapped
 		if reuse == nil || len(reuse.IfacePairs) == 0 {
@@ -213,43 +214,46 @@ func configureDynamicProxy(targetName string, links *p4TargetLinks, mappedInterf
 		fmt.Printf("Enough interfaces available for dynamic proxying, but no mapping specified. Selecting %s as In (toVNF) and %s as Out (fromVNF).\n",
 			links.Ports[0], links.Ports[1])
 	}
-	objs, err := ebpf.LoadSRv6Dynamic(ebpf.TargetPinPaths(targetName), nil); if err != nil {
+	objs, err := ebpf.LoadSRv6Dynamic(ebpf.TargetPinPaths(targetName), nil)
+	if err != nil {
 		return fmt.Errorf("Loading SRv6DynamicProxy: %w", err)
 	}
-	
-	initSrhValue := make([]byte, 2104) // the size of cached_outer 
+
+	initSrhValue := make([]byte, 2104) // the size of cached_outer
 	if err := objs.SrhTable.Put(uint32(0), initSrhValue); err != nil {
 		return fmt.Errorf("initializing SRH table: %w", err)
 	}
 
-	// maintaining ordering [In, Out, Dispatcher, BridgeVeth] is crucial here
+	// maintaining ordering [(In, Out),  Dispatcher, BridgeVeth] is crucial here -> only using first iface pair
 	ifaces := []netlink.Link{}
-	for _, portName := range links.Ports {
-		l, err := netlink.LinkByName(portName); if err != nil {
-			return fmt.Errorf("Couldnt get link: %s", portName)
+	for i, portName := range links.Ports {
+		if i < 2 {
+			l, err := netlink.LinkByName(portName)
+			if err != nil {
+				return fmt.Errorf("Couldnt get link: %s", portName)
+			}
+			ifaces = append(ifaces, l)
 		}
-		ifaces = append(ifaces, l)
 	}
 	ifaces = append(ifaces, dispatcher)
 	ifaces = append(ifaces, bridge_port)
-	
+
 	for i, iface := range ifaces {
-        // inIfaces..., OutIfaces..., DispatchVeth, RoutingBridge
-        if err := objs.LinkIndexTable.Put(uint32(i), uint32(iface.Attrs().Index)); err != nil {
-            return fmt.Errorf("populate lane LinkIndex: %w", err)
-        }
+		if err := objs.LinkIndexTable.Put(uint32(i), uint32(iface.Attrs().Index)); err != nil {
+			return fmt.Errorf("populate lane LinkIndex: %w", err)
+		}
 		mac := vrfutil.PaddedMAC(iface.Attrs().HardwareAddr)
-        if err := objs.MacAddrTable.Put(uint32(i), mac); err != nil {
-            return fmt.Errorf("populate lane MAC: %w", err)
-        }
-    }
+		if err := objs.MacAddrTable.Put(uint32(i), mac); err != nil {
+			return fmt.Errorf("populate lane MAC: %w", err)
+		}
+	}
 
 	defer objs.Close()
-	if err = ebpf.AttachXDP(objs.Decap, links.Dispatcher); err != nil {
-		return fmt.Errorf("failed to attach dynamic decap to %s XDP: %w", links.Dispatcher, err)
+	if err = ebpf.AttachTC(objs.TcDecap, links.Dispatcher, ebpf.Ingress); err != nil {
+		return fmt.Errorf("failed to attach dynamic decap to %s TC: %w", links.Dispatcher, err)
 	}
-	if err = ebpf.AttachXDP(objs.Encap, links.Ports[1]); err != nil {
-		return fmt.Errorf("failed to attach dynamic encap to %s XDP: %w", links.Ports[1], err)
+	if err = ebpf.AttachTC(objs.TcEncap, links.Ports[1], ebpf.Ingress); err != nil {
+		return fmt.Errorf("failed to attach dynamic encap to %s TC: %w", links.Ports[1], err)
 	}
 	return nil
 }
@@ -259,20 +263,21 @@ func configureLaneBasedProxy(targetName string, links *p4TargetLinks, mappedInte
 		return fmt.Errorf("Lane-based Proxying requires at least two mapped interfaces. Got: ifaces mapped? %b, Interfaces: %d",
 			mappedInterfaces, len(links.Ports))
 	}
-	if(len(links.Ports) % 2 != 0){
+	if len(links.Ports)%2 != 0 {
 		return fmt.Errorf("Interface peer missing, proxying requires a multiple of two interfaces.")
 	}
-	if(proxyConfig.LaneCount > len(links.Ports)/2){
+	if proxyConfig.LaneCount > len(links.Ports)/2 {
 		return fmt.Errorf("Target ports do not suffice to satisfy the LaneCount (one Lane requires two interfaces) requested. LaneCount: %d, Ports:%d.",
 			proxyConfig.LaneCount, len(links.Ports))
 	}
 	n := proxyConfig.LaneCount
 	// LoadSrv6LaneBased
-	objs, err := ebpf.LoadSRv6LaneBased(ebpf.TargetPinPaths(targetName), nil, n); if err != nil {
+	objs, err := ebpf.LoadSRv6LaneBased(ebpf.TargetPinPaths(targetName), nil, n)
+	if err != nil {
 		return fmt.Errorf("reading SRv6 lane-based proxy to spec: %w", err)
 	}
 
-	initSrhValue := make([]byte, 2104) // the size of cached_outer 
+	initSrhValue := make([]byte, 2104) // the size of cached_outer
 	for i := range n {
 		if err := objs.SrhTable.Put(uint32(i), initSrhValue); err != nil {
 			return fmt.Errorf("initializing SRH table: %w", err)
@@ -281,146 +286,166 @@ func configureLaneBasedProxy(targetName string, links *p4TargetLinks, mappedInte
 	// maintaining ordering [In, Out, Dispatcher, BridgeVeth] is crucial here
 	ifaces := []netlink.Link{}
 	for _, portName := range links.Ports {
-		l, err := netlink.LinkByName(portName); if err != nil {
+		l, err := netlink.LinkByName(portName)
+		if err != nil {
 			return fmt.Errorf("Couldnt get link: %s", portName)
 		}
 		ifaces = append(ifaces, l)
 	}
 	ifaces = append(ifaces, dispatcher)
 	ifaces = append(ifaces, bridge_port)
-	
+
 	for i, iface := range ifaces {
-        // inIfaces..., OutIfaces..., DispatchVeth, RoutingBridge
-        if err := objs.LinkIndexTable.Put(uint32(i), uint32(iface.Attrs().Index)); err != nil {
-            return fmt.Errorf("populate lane LinkIndex: %w", err)
-        }
+		// InIface0, OutIface0, InIface1, OutIface1, ..., DispatchVeth, RoutingBridge
+		if err := objs.LinkIndexTable.Put(uint32(i), uint32(iface.Attrs().Index)); err != nil {
+			return fmt.Errorf("populate lane LinkIndex: %w", err)
+		}
 		mac := vrfutil.PaddedMAC(iface.Attrs().HardwareAddr)
-        if err := objs.MacAddrTable.Put(uint32(i), mac); err != nil {
-            return fmt.Errorf("populate lane MAC: %w", err)
-        }
-		if(i >= n && i < 2*n){ // indices n -> 2n-1 are outgoing interfaces
-            err := objs.LaneTable.Put(uint32(iface.Attrs().Index), uint32(i - n)); if err != nil {
-                return fmt.Errorf("populating lane map (link_index of return iface -> lane): %w", err)
-            }
-        }
-    }
-	    
-    zeroValue := make([]byte, 2072) // sizeof(sfc_t)
-    for i := range n {
-        if err := objs.SfcLaneMap.Put(uint32(i), zeroValue); err != nil {
-            return fmt.Errorf("populating sfc lane map: %w", err)
-        }
-    }
-	
+		if err := objs.MacAddrTable.Put(uint32(i), mac); err != nil {
+			return fmt.Errorf("populate lane MAC: %w", err)
+		}
+		// if(i >= n && i < 2*n){
+		if i < 2*n && i%2 == 1 {
+			err := objs.LaneTable.Put(uint32(iface.Attrs().Index), uint32((i-1)/2))
+			if err != nil {
+				return fmt.Errorf("populating lane map (link_index of return iface -> lane): %w", err)
+			}
+		}
+	}
+
+	zeroValue := make([]byte, 2072) // sizeof(sfc_t)
+	for i := range n {
+		if err := objs.SfcLaneMap.Put(uint32(i), zeroValue); err != nil {
+			return fmt.Errorf("populating sfc lane map: %w", err)
+		}
+	}
+
 	decapProg := objs.Decap
-    err = objs.Progs.Put(uint32(0), decapProg); if err != nil {
-        return fmt.Errorf("populating tailcall map: %w", err)
-    }
+	err = objs.Progs.Put(uint32(0), decapProg)
+	if err != nil {
+		return fmt.Errorf("populating tailcall map: %w", err)
+	}
 
 	defer objs.Close()
 	if err = ebpf.AttachXDP(objs.ClassifySfc, links.Dispatcher); err != nil {
-		return fmt.Errorf("failed to attach dynamic decap to %s XDP: %w", links.Dispatcher, err)
+		return fmt.Errorf("failed to attach lane-based decap to %s XDP: %w", links.Dispatcher, err)
 	}
-	// links.Ports = [in1, in2, ..., out1, out2..., outN] -> attach encap to all return ifaces
-	for i := n; i < 2*n; i++ {
+	// links.Ports = [in1, out1, in2, out2, ...] -> attach encap to all return ifaces
+	for i := 1; i < 2*n; i += 2 {
 		if err = ebpf.AttachXDP(objs.Encap, links.Ports[i]); err != nil {
-			return fmt.Errorf("failed to attach dynamic encap to %s XDP: %w", links.Ports[1], err)
+			return fmt.Errorf("failed to attach lane-based encap to %s XDP: %w", links.Ports[i], err)
 		}
 	}
+	// enable gro on veth peer to make xdp_redirect work
+	if err = EnableGRO(links.BridgeVeth); err != nil {
+		return fmt.Errorf("failed to enable GRO on veth %s: %w", links.BridgeVeth, err)
+	}
+
 	return nil
 }
 
 func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatcher netlink.Link, bridge_port netlink.Link, proxyConfig *corev1alpha1.ProxyConfig) error {
-	if(len(links.Ports) < 2){
+	if len(links.Ports) < 2 {
 		return fmt.Errorf("Field-based proxying requires at least two interfaces, got: %d", len(links.Ports))
 	}
 
-	objs, err := ebpf.LoadSRv6FieldBased(ebpf.TargetPinPaths(targetName), nil); if err != nil {
+	objs, err := ebpf.LoadSRv6FieldBased(ebpf.TargetPinPaths(targetName), nil)
+	if err != nil {
 		return fmt.Errorf("loading srv6 field-based proxy: %w", err)
 	}
 
 	/*
 	* init maps: scratch map, mac/link_index tables, key masks
-	*/
+	 */
 	// scratch table
 	zeroValue := make([]byte, 2104)
-    if err := objs.ScratchTable.Put(uint32(0), zeroValue); err != nil {
-       return fmt.Errorf("initialize SRH scratch table entry: %w", err)
-    }
+	if err := objs.ScratchTable.Put(uint32(0), zeroValue); err != nil {
+		return fmt.Errorf("initialize SRH scratch table entry: %w", err)
+	}
 
 	// maintaining ordering [In, Out, Dispatcher, BridgeVeth] is crucial here
 	ifaces := []netlink.Link{}
 	for _, portName := range links.Ports {
-		l, err := netlink.LinkByName(portName); if err != nil {
+		l, err := netlink.LinkByName(portName)
+		if err != nil {
 			return fmt.Errorf("Couldnt get link: %s", portName)
 		}
 		ifaces = append(ifaces, l)
 	}
 	ifaces = append(ifaces, dispatcher)
 	ifaces = append(ifaces, bridge_port)
-	
+
 	// mac_addr_table + link_index_table
 	for i, iface := range ifaces {
-        // inIface, OutIface, DispatchVeth, RoutingBridge
-        if err := objs.LinkIndexTable.Put(uint32(i), uint32(iface.Attrs().Index)); err != nil {
-            return fmt.Errorf("populate lane LinkIndex: %w", err)
-        }
+		// inIface, OutIface, DispatchVeth, RoutingBridge
+		if err := objs.LinkIndexTable.Put(uint32(i), uint32(iface.Attrs().Index)); err != nil {
+			return fmt.Errorf("populate lane LinkIndex: %w", err)
+		}
 		mac := vrfutil.PaddedMAC(iface.Attrs().HardwareAddr)
-        if err := objs.MacAddrTable.Put(uint32(i), mac); err != nil {
-            return fmt.Errorf("populate lane MAC: %w", err)
-        }
-    }
+		if err := objs.MacAddrTable.Put(uint32(i), mac); err != nil {
+			return fmt.Errorf("populate lane MAC: %w", err)
+		}
+	}
 	// key_mask_tables: get immutable fields from proxyConfig and calculate masks
 	// IPv4
 	ipv4_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_IPv4)
-	mask, err := vrfutil.GetKeyMaskForProto(ipv4_fields); if err != nil {
-		fmt.Printf("Could not get key mask for IPv4: %s", err)
+	mask, err := vrfutil.GetKeyMaskForProto(ipv4_fields)
+	if err != nil {
+		return fmt.Errorf("Could not get key mask for IPv4: %s, len: %d", err, len(ipv4_fields))
 	}
-	err = objs.MaskTableL3.Put(uint32(vrfutil.PROTO_NUM_IPv4), 
-		ebpf.Srv6FieldBasedL3MaskT{ Bytes: [vrfutil.MAX_L3_HDR_LEN]byte(mask) }); 
+
+	err = objs.MaskTableL3.Put(uint32(vrfutil.PROTO_NUM_IPv4),
+		ebpf.Srv6FieldBasedL3MaskT{Bytes: [vrfutil.MAX_L3_HDR_LEN]byte(mask)})
 	if err != nil {
 		return fmt.Errorf("Could not insert key mask for proto IPv4.\n: %w", err)
 	}
 	// IPv6
 	ipv6_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_IPv6)
-	mask, err = vrfutil.GetKeyMaskForProto(ipv6_fields); if err != nil {
-		fmt.Printf("Could not get key mask for IPv6: %s", err)
+	mask, err = vrfutil.GetKeyMaskForProto(ipv6_fields)
+	if err != nil {
+		return fmt.Errorf("Could not get key mask for IPv6: %s", err)
 	}
-	err = objs.MaskTableL3.Put(uint32(vrfutil.PROTO_NUM_IPv6), 
-		ebpf.Srv6FieldBasedL3MaskT{ Bytes: [vrfutil.MAX_L3_HDR_LEN]byte(mask) }); 
+	err = objs.MaskTableL3.Put(uint32(vrfutil.PROTO_NUM_IPv6),
+		ebpf.Srv6FieldBasedL3MaskT{Bytes: [vrfutil.MAX_L3_HDR_LEN]byte(mask)})
 	if err != nil {
 		return fmt.Errorf("Could not insert key mask for proto IPv6.\n: %w", err)
 	}
 	// TCP
 	tcp_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_TCP)
-	mask, err = vrfutil.GetKeyMaskForProto(tcp_fields); if err != nil {
-		fmt.Printf("Could not get key mask for TCP: %s", err)
+	mask, err = vrfutil.GetKeyMaskForProto(tcp_fields)
+	if err != nil {
+		return fmt.Errorf("Could not get key mask for TCP: %s", err)
 	}
-	err = objs.MaskTableL4.Put(uint32(vrfutil.PROTO_NUM_TCP), 
-		ebpf.Srv6FieldBasedL4MaskT{ Bytes: [vrfutil.MAX_L4_HDR_LEN]byte(mask) }); 
+	err = objs.MaskTableL4.Put(uint32(vrfutil.PROTO_NUM_TCP),
+		ebpf.Srv6FieldBasedL4MaskT{Bytes: [vrfutil.MAX_L4_HDR_LEN]byte(mask)})
 	if err != nil {
 		return fmt.Errorf("Could not insert key mask for proto TCP.\n: %w", err)
 	}
 	// UDP
 	udp_fields := vrfutil.FilterFieldsByProto(proxyConfig.Fields, corev1alpha1.PROTO_UDP)
-	mask, err = vrfutil.GetKeyMaskForProto(udp_fields); if err != nil {
-		fmt.Printf("Could not get key mask for UDP: %s", err)
+	mask, err = vrfutil.GetKeyMaskForProto(udp_fields)
+	if err != nil {
+		return fmt.Errorf("Could not get key mask for UDP: %s", err)
 	}
-	err = objs.MaskTableL4.Put(uint32(vrfutil.PROTO_NUM_UDP), 
-		ebpf.Srv6FieldBasedL4MaskT{ Bytes: [vrfutil.MAX_L4_HDR_LEN]byte(mask) }); 
+	err = objs.MaskTableL4.Put(uint32(vrfutil.PROTO_NUM_UDP),
+		ebpf.Srv6FieldBasedL4MaskT{Bytes: [vrfutil.MAX_L4_HDR_LEN]byte(mask)})
 	if err != nil {
 		return fmt.Errorf("Could not insert key mask for proto UDP.\n: %w", err)
 	}
 
 	/*
 	* ATTACH programs to dispatcher and Out
-	*/
+	 */
 	defer objs.Close()
 	if err = ebpf.AttachXDP(objs.ProxyIngress, links.Dispatcher); err != nil {
 		return fmt.Errorf("failed to attach field-based decap to %s XDP: %w", links.Dispatcher, err)
 	}
 	if err = ebpf.AttachXDP(objs.ProxyEgress, links.Ports[1]); err != nil {
 		return fmt.Errorf("failed to attach field-based decap to %s XDP: %w", links.Ports[1], err)
+	}
+	// enable gro on veth peer to make xdp_redirect work
+	if err = EnableGRO(links.BridgeVeth); err != nil {
+		return fmt.Errorf("failed to enable GRO on veth %s: %w", links.BridgeVeth, err)
 	}
 	return nil
 }
@@ -485,7 +510,7 @@ func attachDispatcher(targetName string, dispatcher netlink.Link, ports []netlin
 	if mappedIfaces {
 		// mappedIfaces indicates that the ports belong together in pairs:
 		// assemble bucket entries to match the correct destination address to the correct out iface
-		for i := 0; i < len(ports) - 1; i =+ 2 {
+		for i := 0; i < len(ports)-1; i = +2 {
 			var mac [6]byte
 			toVNF := ports[i]
 			fromVNF := ports[i+1]
@@ -557,6 +582,9 @@ func (d *Software) unwireP4Target(target client.ObjectKey) error {
 		if err := ebpf.DetachXDP(port); err != nil {
 			return fmt.Errorf("failed to detach SRv6 Dispatch from %s: %w", port, err)
 		}
+		if err := ebpf.DetachTC(port, ebpf.Ingress); err != nil {
+			return fmt.Errorf("failed to detach SRv6 Dispatch from %s: %w", port, err)
+		}
 	}
 	if targetIP != nil {
 		bridge, err := netlink.LinkByName(d.routingSubnet.Bridge.Name)
@@ -606,4 +634,20 @@ func macArray(link netlink.Link) ([6]byte, error) {
 	}
 	copy(mac[:], link.Attrs().HardwareAddr)
 	return mac, nil
+}
+
+// enable gro on a veth peer, whose peer needs to receive XDP redirects
+// equivalent to ethtool -K <iface> gro on
+func EnableGRO(iface string) error {
+	e, err := ethtool.NewEthtool()
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+
+	if err := e.Change(iface, map[string]bool{"rx-gro": true}); err != nil {
+		return fmt.Errorf("set rx-gro on %s: %w", iface, err)
+	}
+
+	return nil
 }

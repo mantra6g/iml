@@ -87,6 +87,7 @@ const (
 	FieldBasedProxy ProxyStrategy = "FieldBased"
 )
 
+// +kubebuilder:validation:Enum=bitmask;exact
 type MatchTypeName string
 
 const (
@@ -94,9 +95,13 @@ const (
 	EXACT_MATCH   MatchTypeName = "exact"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.type != 'bitmask' || (has(self.bitmask) && size(self.bitmask) > 0)",message="bitmask must be set when type is 'bitmask'"
 type MatchType struct {
-	Type    MatchTypeName `json:"name"`
-	BitMask string        `json:"bitmask"` // bitmask is used = 0xfff for exact match and
+	// +required
+	Type MatchTypeName `json:"type"`
+
+	// +optional
+	BitMask string `json:"bitmask,ommitempty"`
 }
 
 type ProtocolName string
@@ -158,13 +163,18 @@ const (
 	UDP_CHECKSUM FieldName = "Checksum"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.proto != 'IPv4' || self.field in ['Version','IHL','DSCP','ECN','TotalLength','Identification','Flags','FragmentOffset','TTL','Protocol','HeaderChecksum','SrcAddr','DstAddr','Options']",message="field is not valid for IPv4"
+// +kubebuilder:validation:XValidation:rule="self.proto != 'IPv6' || self.field in ['Version','TrafficClass','FlowLabel','PayloadLength','NextHeader','HopLimit','SrcAddr','DstAddr']",message="field is not valid for IPv6"
+// +kubebuilder:validation:XValidation:rule="self.proto != 'TCP' || self.field in ['SrcPort','DstPort','SeqNum','AckNum','DataOffset','Reserved','Flags','Window','Checksum','UrgentPointer','Options']",message="field is not valid for TCP"
+// +kubebuilder:validation:XValidation:rule="self.proto != 'UDP' || self.field in ['SrcPort','DstPort','Length','Checksum']",message="field is not valid for UDP"
 type ImmutableHeaderField struct {
 	Proto ProtocolName `json:"proto"`
 	Match MatchType    `json:"match"`
 	Field FieldName    `json:"field"`
 }
 
-// for strategies
+// +kubebuilder:validation:XValidation:rule="self.proxyStrategy != 'FieldBased' || (has(self.fields) && size(self.fields) > 0)",message="fields must be set and non-empty when proxyStrategy is 'FieldBased'"
+// +kubebuilder:validation:XValidation:rule="self.proxyStrategy != 'LaneBased' || (has(self.laneCount) && self.laneCount > 0)",message="laneCount must be greater than 0 when proxyStrategy is 'LaneBased'"
 type ProxyConfig struct {
 	// +required
 	Strategy ProxyStrategy `json:"proxyStrategy"`
@@ -172,7 +182,8 @@ type ProxyConfig struct {
 	// indicates how many interface pairs to use: expects ReuseMappedHostInterfaces
 	// with at least LaneCount * 2 ifaces
 	// +optional
-	LaneCount int `json:"laneCount"`
+	// +kubebuilder:validation:Minimum=0
+	LaneCount int `json:"laneCount,omitempty"`
 
 	// only applies if Strategy FieldBased
 	// +optional

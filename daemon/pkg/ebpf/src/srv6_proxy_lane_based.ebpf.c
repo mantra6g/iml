@@ -2,7 +2,7 @@
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, N);
+    __uint(max_entries, MAX_LANES);
     __type(key, __u32); // the lane (id'ing the SRv6 context) of the cached header
     __type(value, struct cached_outer); // the cached header structure (lock + len + IPv6 + SRH)
 } srh_table SEC(".maps");
@@ -10,7 +10,7 @@ struct {
 // not modified by xdp programs
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 2 * N + 2);
+    __uint(max_entries, 2 * MAX_LANES + 2);
     __type(key, __u32); // lane-dependent key associated with the fromVNF
     __type(value, struct mac_entry); // the mac addresses fromVNF interface belonging to this lane 
 } mac_addr_table SEC(".maps");
@@ -18,7 +18,7 @@ struct {
 // not modified by xdp programs
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 2 * N + 2);
+    __uint(max_entries, 2 * MAX_LANES + 2);
     __type(key, __u32); // the lane picked in decap
     __type(value, __u32); // the associated toVNF interface to put out decapsulated traffic
 } link_index_table SEC(".maps");
@@ -26,7 +26,7 @@ struct {
 // not modified by xdp programs
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, N);
+    __uint(max_entries, MAX_LANES);
     __type(key, __u32); // the interface index return traffic is received on
     __type(value, __u32); // the lane associated with this fromVNF interface
 } lane_table SEC(".maps");
@@ -34,7 +34,7 @@ struct {
 // per cpu map to store the sfc's momentarily occupying the lanes: { lane_index -> sfc }
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, N);
+    __uint(max_entries, MAX_LANES);
     __type(key, __u32); // lane idx
     __type(value, struct sfc_t); // age and content information on recently seen
 } sfc_lane_map SEC(".maps");
@@ -116,7 +116,7 @@ int update_srh(struct parsed_srh *p, void *end)
         return -1;
     
     if(p->srh->segments_left < 1)
-        return XDP_PASS; // pass on, seems to be last segment which we can't handle
+        return -1;
     p->srh->segments_left--;
     __u8 index = p->srh->segments_left;
 
@@ -273,13 +273,6 @@ int update_cached_header(struct cached_outer *cached, char *hdr, __u32 *lane, __
 }
 
 static __always_inline
-int cp_ethhdr_in_front_of_inner(struct parsed_srh *p)
-{
-    __builtin_memcpy((void *)((char *)p->eth + p->outer_len), (void *)p->eth, sizeof(struct ethhdr));
-    return 0;
-}
-
-static __always_inline
 int update_eth_hdr(void *start, void *end, __u32 lane)
 {
     struct ethhdr *eth = start;
@@ -325,11 +318,9 @@ int filter_srv6_traffic(struct parsed_srh *p)
 {
     __u8 version = *((__u8 *)(p->ip6)) >> 4;
     if(version != 6){
-        bpf_printk("Filtered non-ipv6 traffic");
         return -1;
     }
     if(p->ip6->nexthdr != 43){
-        bpf_printk("Filtered non-SRv6 ipv6 traffic");
         return -1;
     }
     if(p->ip6->hop_limit < 2)
@@ -340,51 +331,58 @@ int filter_srv6_traffic(struct parsed_srh *p)
 /*
 ENCAP FUNCTIONS
 */
-
 static __always_inline
-int copy_cached_to_buffer(struct ethhdr *eth, struct cached_outer *cached, void *end)
+int copy_cached_to_buffer(struct ethhdr *eth, struct cached_outer *cached, void *end, __u32 len)
 {
     if((void *)(eth + 1) > end)
         return -1;
-    __u64 *dst = (__u64 *)(eth + 1);
-    if((void *)((char *)dst + cached->len) > end)
-        return -1;
 
-    __u32 len = cached->len;
+    __u64 *dst = (__u64 *)(eth + 1);
+
     if(len > MAX_CACHED_HDR)
         len = MAX_CACHED_HDR;
-    
-    __u32 len_64 = len/8;
-    __u32 rest = len%8;
+
+    __u32 len_64 = len / 8;
+    __u32 rest = len % 8;
+
+    if((void *)((char *)dst + len) > end)
+        return -1;
 
     bpf_spin_lock(&cached->lock);
-    // MAX_CACHED_HEADER = 2104 (sizeof(ipv6hdr) + sizeof(ipv6_sr_hdr) + max(segList)) bytes
-    // copy cached header in 8-byte blocks fore efficiency
+
     for(__u32 i = 0; i < MAX_CACHED_HDR / 8; i++){
         if(i >= len_64) break;
         if((void *)(dst + i + 1) > end){
             bpf_spin_unlock(&cached->lock);
             return -1;
         }
-
         __builtin_memcpy((void *)(dst + i), (void *)((__u64 *)cached->bytes + i), 8);
     }
 
-    // copy the leftover bytes indiviudally
-    #pragma unroll
-    for(__u32 i = 0; i < 8; i++){
-        if(i >= rest) break;
-        char *dst_bytes = (char *) (dst + len_64); 
-        char *cached_bytes = (char *) (dst + len_64); 
-        if((void *)(dst_bytes + i + 1) > end){
+    // copy the leftover bytes individually
+    if(rest){
+        __u32 base = len_64 * 8;
+        barrier_var(base);                  // keeps clang from proving the check below redundant
+        if(base > MAX_CACHED_HDR - 8){      // never true for a valid len; bounds idx for the verifier
             bpf_spin_unlock(&cached->lock);
             return -1;
         }
-        dst_bytes[i] = cached_bytes[i];
-        //__builtin_memcpy((void *)((char *)dst + len_64*8 + i), (void *)((char *)cached->bytes + len_64*8 + i), 1);
-    }
-    bpf_spin_unlock(&cached->lock);
 
+        // #pragma unroll
+        for(__u32 i = 0; i < 8; i++){
+            if(i >= rest) break;
+            __u32 idx = base + i;           // idx <= MAX_CACHED_HDR - 1
+            __u8 *d = (__u8 *)dst + idx;
+            barrier_var(d);
+            if((void *)d >= end){
+                bpf_spin_unlock(&cached->lock);
+                return -1;
+            }
+            *d = cached->bytes[idx];
+        }
+    }
+
+    bpf_spin_unlock(&cached->lock);
     return 0;
 }
 
@@ -394,8 +392,8 @@ int update_ethhdr_encap(struct ethhdr *eth, void *end)
     if((void *)(eth + 1) > end)
         return -1;
     
-    __u32 src_key = 2*N;
-    __u32 dst_key = 2*N + 1;
+    __u32 src_key = 2*n;
+    __u32 dst_key = 2*n + 1;
 
     struct mac_entry *src = bpf_map_lookup_elem(&mac_addr_table, &src_key);
     struct mac_entry *dst = bpf_map_lookup_elem(&mac_addr_table, &dst_key);
@@ -425,17 +423,29 @@ int update_nxthdr(struct ethhdr *eth, void *end, __u8 version)
         return -1;
     
     struct ipv6_sr_hdr *srh = (struct ipv6_sr_hdr *)(ip6 + 1);
-    if((void *)((char *)srh + 1) > end)
+    if((void *)(srh + 1) > end)
         return -1;
     
-    srh->nexthdr = version;
-    switch (version)
-    {
-    case 4:
+    __u32 srh_len = ((__u32)srh->hdrlen + 1) * 8;
+    if((void *) ((char *)srh + srh_len) > end)
+        return -1;
+    void *inner = (void *)srh + srh_len;
+
+    switch (version) {
+    case 4: {
+        struct iphdr *ip4 = inner;
+        if ((void *)(ip4 + 1) > end) return -1;
+        ip6->payload_len = bpf_htons(srh_len + bpf_ntohs(ip4->tot_len));
         srh->nexthdr = IPPROTO_IPIP;
         break;
-    case 6:
+    }
+    case 6: {
+        struct ipv6hdr *ip6i = inner;
+        if ((void *)(ip6i + 1) > end) return -1;
+        ip6->payload_len = bpf_htons(srh_len + 40 + bpf_ntohs(ip6i->payload_len));
         srh->nexthdr = IPPROTO_IPV6;
+        break;
+    }
     default:
         break;
     }
@@ -518,9 +528,13 @@ int decap(struct xdp_md *ctx)
     if(update_cached_header(cached, (char *)p->ip6, &lane, p->outer_len, end) < 0)
         return XDP_DROP;
 
-    if(cp_ethhdr_in_front_of_inner(p))
-
-    if(update_eth_hdr(p->eth, end, lane) < 0)
+    struct ethhdr *new_eth = (struct ethhdr *)((char *)p->eth + p->outer_len);
+    if((void *)(new_eth + 1) > end)
+        return XDP_DROP;
+    if((void *)(p->eth + 1) > end)
+        return XDP_DROP;
+    __builtin_memcpy((void *)new_eth, (void *)p->eth, sizeof(struct ethhdr));    
+    if(update_eth_hdr(new_eth, end, lane) < 0)
         return XDP_DROP;
 
     if(bpf_xdp_adjust_head(ctx, p->outer_len) < 0)
@@ -530,7 +544,6 @@ int decap(struct xdp_md *ctx)
     
     if(!link_index || !*link_index)
         return XDP_DROP;
-
     return bpf_redirect(*link_index, 0);
 }
 
@@ -550,6 +563,18 @@ int encap(struct xdp_md *ctx)
     
     __u8 version = *((__u8 *)(eth + 1)) >> 4;
 
+    if(version != 4 && version != 6)
+        return XDP_PASS;
+    
+    if(version == 4){
+        if(eth->h_proto != bpf_htons(ETH_P_IP)){
+            return XDP_PASS;
+        }
+    } else {
+        if(eth->h_proto != bpf_htons(ETH_P_IPV6))
+            return XDP_PASS;
+    }
+
     __u32 key = ctx->ingress_ifindex;
 
     // get lane from lane table (based on xdp_md->ingress_ifindex)
@@ -557,7 +582,6 @@ int encap(struct xdp_md *ctx)
     
     if(!lane)
         return XDP_DROP;
-
     struct cached_outer *cached = bpf_map_lookup_elem(&srh_table, lane);
     if(!cached)
         return XDP_DROP;
@@ -582,20 +606,19 @@ int encap(struct xdp_md *ctx)
         return XDP_DROP;
 
     __builtin_memcpy(start, eth, sizeof(struct ethhdr));
-
     eth = (struct ethhdr *)start;
 
     if(update_ethhdr_encap(eth, end) < 0)
         return XDP_DROP;
     
-    if(copy_cached_to_buffer(eth, cached, end) < 0)
+    if(copy_cached_to_buffer(eth, cached, end, len) < 0)
         return XDP_DROP;
-    
+
     if(update_nxthdr(eth, end, version) < 0)
         return XDP_DROP;
 
     // lookup index of dispatcher veth
-    key = 2*N; // per convention the dispatcher veths idx is at index <2N>
+    key = 2*n; // per convention the dispatcher veths idx is at index <2N>
     __u32 *link_index = bpf_map_lookup_elem(&link_index_table, &key);
     if(!link_index)
         return XDP_DROP;

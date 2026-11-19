@@ -10,6 +10,7 @@ require (
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/gorilla/mux v1.8.1
 	github.com/mantra6g/iml/api v0.0.0-20260510012752-d8421319d17b
+	github.com/safchain/ethtool v0.7.0
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/sys v0.43.0
 	k8s.io/api v0.35.3

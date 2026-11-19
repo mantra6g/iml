@@ -6,6 +6,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/in.h>
+#include <linux/pkt_cls.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
@@ -13,13 +14,12 @@
 CONSTANTS
 */
 
-#ifndef N
-#define N MAX_LANES
-#endif
-
-#ifndef barrier_var
-#define barrier_var(var) asm volatile("" : "+r"(var))
-#endif
+/* Values from include/uapi/linux/bpf.h (enum of BPF_F_ADJ_ROOM_*). */
+#define PROXY_ADJ_ROOM_FIXED_GSO       (1ULL << 0)
+#define PROXY_ADJ_ROOM_ENCAP_L3_IPV6   (1ULL << 2)
+#define PROXY_ADJ_ROOM_NO_CSUM_RESET   (1ULL << 5)
+#define PROXY_ADJ_ROOM_DECAP_L3_IPV4   (1ULL << 7)   /* kernel >= 6.3 */
+#define PROXY_ADJ_ROOM_DECAP_L3_IPV6   (1ULL << 8)   /* kernel >= 6.3 */
 
 #define MAX_LANES 8
 #define MAX_SEGMENTS 128
@@ -39,6 +39,8 @@ CONSTANTS
 #define MAX_FIXED_HDR_LEN_GLOBAL 40 // max(MAX_L3_HDR_BYTES, MAX_L4_HDR_BYTES)
 #define L3_KEY_SIZE MAX_L3_HDR_BYTES
 #define L4_KEY_SIZE MAX_L4_HDR_BYTES
+#define MAX_ETH_L3_LEN_ENCAP (sizeof(struct ethhdr) + 40) // inner header is at most ETH plus 40 for IPv6 (ignoring IPv4 options)
+#define MAX_ETH_L3_LEN_DECAP (sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + sizeof(struct ipv6_sr_hdr) + MAX_SEGLIST_BYTES + 40)
 
 /*
 CONSTANTS TO BE OVERWRITTEN AT LOAD TIME
@@ -46,6 +48,12 @@ CONSTANTS TO BE OVERWRITTEN AT LOAD TIME
 const volatile __u32 n = MAX_LANES;
 
 
+/*
+DEFINE BARRIER_VAR in case libbpf helpers are not available
+*/
+#ifndef barrier_var
+#define barrier_var(var) asm volatile("" : "+r"(var))
+#endif
 
 /*
 STRUCTS
@@ -112,4 +120,9 @@ struct inner_l3_hdr {
 
 struct cached_outer_mock {
     __u8 bytes[sizeof(struct cached_outer)];
+};
+
+struct scratch_outer {
+    __u16 len;
+    __u8 bytes[MAX_CACHED_HDR];
 };

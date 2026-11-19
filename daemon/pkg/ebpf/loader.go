@@ -187,7 +187,7 @@ func LoadSRv6LaneBased(pins PinPaths, opts *ebpf.CollectionOptions, n int) (*Srv
 }
 
 func LoadSRv6FieldBased(pins PinPaths, opts *ebpf.CollectionOptions) (*Srv6FieldBasedObjects, error) {
-	spec, err := LoadSrv6Cap() // LoadSrv6FieldBased()
+	spec, err := LoadSrv6FieldBased()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load srv6_proxy_field spec: %w", err)
 	}
