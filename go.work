@@ -6,6 +6,7 @@ use (
 	daemon
 	dpcs
 	dns
+	dpcsclient
 	operator
 	targets/bmv2
 	tools

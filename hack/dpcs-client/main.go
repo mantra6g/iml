@@ -4,18 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
-	p4configv1 "github.com/p4lang/p4runtime/go/p4/config/v1"
-	p4v1 "github.com/p4lang/p4runtime/go/p4/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
+	"github.com/mantra6g/iml/dpcsclient"
 )
 
 // cd hack/dpcs-client
@@ -23,265 +18,120 @@ import (
 // ./dpcs-client -dpcs-addr 172.18.0.2:30500 -insert 10.123.0.19
 // ./dpcs-client -dpcs-addr 172.18.0.2:30500 -delete 10.123.0.19
 
-type p4Identifiers struct {
-	tableID  uint32
-	fieldID  uint32
-	actionID uint32
-}
-
-func dial(address string) *grpc.ClientConn {
-	connection, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		fmt.Println("dial error:", err)
-		os.Exit(1)
-	}
-	return connection
-}
-
-func ipBytes(ipAddress string) []byte {
-	parsed := net.ParseIP(ipAddress).To4()
-	if parsed == nil {
-		fmt.Println("invalid IPv4:", ipAddress)
-		os.Exit(1)
-	}
-	return parsed
-}
-
-func fetchP4Info(ctx context.Context, infoClient p4v1.P4RuntimeClient, deviceID uint64) (*p4configv1.P4Info, error) {
-	configResponse, err := infoClient.GetForwardingPipelineConfig(ctx, &p4v1.GetForwardingPipelineConfigRequest{
-		DeviceId:     deviceID,
-		ResponseType: p4v1.GetForwardingPipelineConfigRequest_P4INFO_AND_COOKIE,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("GetForwardingPipelineConfig: %w", err)
-	}
-	return configResponse.GetConfig().GetP4Info(), nil
-}
-
-func resolveTableID(p4Info *p4configv1.P4Info, tableName string) (*p4configv1.Table, error) {
-	for _, table := range p4Info.GetTables() {
-		if table.GetPreamble().GetName() == tableName {
-			return table, nil
-		}
-	}
-	return nil, fmt.Errorf("table %q not found in P4Info", tableName)
-}
-
-func resolveFieldID(table *p4configv1.Table, fieldName string) (uint32, error) {
-	for _, matchField := range table.GetMatchFields() {
-		if matchField.GetName() == fieldName {
-			return matchField.GetId(), nil
-		}
-	}
-	return 0, fmt.Errorf("match field %q not found in table %q", fieldName, table.GetPreamble().GetName())
-}
-
-func resolveActionID(p4Info *p4configv1.P4Info, actionName string) (uint32, error) {
-	for _, action := range p4Info.GetActions() {
-		if action.GetPreamble().GetName() == actionName {
-			return action.GetPreamble().GetId(), nil
-		}
-	}
-	return 0, fmt.Errorf("action %q not found in P4Info", actionName)
-}
-
-func resolveP4Identifiers(p4Info *p4configv1.P4Info, tableName, fieldName, actionName string) (p4Identifiers, error) {
-	table, err := resolveTableID(p4Info, tableName)
-	if err != nil {
-		return p4Identifiers{}, err
-	}
-	fieldID, err := resolveFieldID(table, fieldName)
-	if err != nil {
-		return p4Identifiers{}, err
-	}
-	actionID, err := resolveActionID(p4Info, actionName)
-	if err != nil {
-		return p4Identifiers{}, err
-	}
-	return p4Identifiers{
-		tableID:  table.GetPreamble().GetId(),
-		fieldID:  fieldID,
-		actionID: actionID,
-	}, nil
-}
-
-func performArbitration(ctx context.Context, dpcsClient p4v1.P4RuntimeClient, deviceID uint64) error {
-	stream, err := dpcsClient.StreamChannel(ctx)
-	if err != nil {
-		return fmt.Errorf("StreamChannel: %w", err)
-	}
-	err = stream.Send(&p4v1.StreamMessageRequest{
-		Update: &p4v1.StreamMessageRequest_Arbitration{
-			Arbitration: &p4v1.MasterArbitrationUpdate{
-				DeviceId:   deviceID,
-				ElectionId: &p4v1.Uint128{Low: 1},
-			},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("arbitration send: %w", err)
-	}
-	response, err := stream.Recv()
-	if err != nil {
-		return fmt.Errorf("arbitration receive: %w", err)
-	}
-	fmt.Printf("arbitration ACK: device=%d status=%d\n",
-		response.GetArbitration().GetDeviceId(), response.GetArbitration().GetStatus().GetCode())
-	return nil
-}
-
-func buildTableEntry(identifiers p4Identifiers, ipAddress string) *p4v1.TableEntry {
-	return &p4v1.TableEntry{
-		TableId: identifiers.tableID,
-		Match: []*p4v1.FieldMatch{{
-			FieldId: identifiers.fieldID,
-			FieldMatchType: &p4v1.FieldMatch_Exact_{
-				Exact: &p4v1.FieldMatch_Exact{Value: ipBytes(ipAddress)},
-			},
-		}},
-		Action: &p4v1.TableAction{
-			Type: &p4v1.TableAction_Action{Action: &p4v1.Action{ActionId: identifiers.actionID}},
-		},
-	}
-}
-
-func buildUpdates(identifiers p4Identifiers, updateType p4v1.Update_Type, ipList string) []*p4v1.Update {
-	var updates []*p4v1.Update
+func buildEntries(tableName, fieldName, actionName, ipList string) []dpcsclient.Entry {
+	var entries []dpcsclient.Entry
 	for _, ipAddress := range strings.Split(ipList, ",") {
 		if ipAddress = strings.TrimSpace(ipAddress); ipAddress != "" {
-			updates = append(updates, &p4v1.Update{Type: updateType,
-				Entity: &p4v1.Entity{Entity: &p4v1.Entity_TableEntry{TableEntry: buildTableEntry(identifiers, ipAddress)}}})
-		}
-	}
-	return updates
-}
-
-func readTableEntries(ctx context.Context, dpcsClient p4v1.P4RuntimeClient, deviceID uint64, tableID uint32) error {
-	stream, err := dpcsClient.Read(ctx, &p4v1.ReadRequest{
-		DeviceId: deviceID,
-		Entities: []*p4v1.Entity{{
-			Entity: &p4v1.Entity_TableEntry{TableEntry: &p4v1.TableEntry{TableId: tableID}},
-		}},
-	})
-	if err != nil {
-		return fmt.Errorf("Read: %w", err)
-	}
-	numEntries := 0
-	for {
-		response, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("Read recv: %w", err)
-		}
-		for _, entity := range response.GetEntities() {
-			tableEntry := entity.GetTableEntry()
-			if tableEntry == nil {
-				continue
+			ip := net.ParseIP(ipAddress)
+			if ip == nil {
+				fmt.Printf("invalid IP address %q\n", ipAddress)
+				os.Exit(1)
 			}
-			numEntries++
-			for _, match := range tableEntry.GetMatch() {
-				fmt.Printf("  entry: field=%d exact=%x action=%d\n",
-					match.GetFieldId(), match.GetExact().GetValue(),
-					tableEntry.GetAction().GetAction().GetActionId())
-			}
+			entries = append(entries, dpcsclient.Entry{
+				Table:  tableName,
+				Match:  map[string]dpcsclient.FieldMatch{fieldName: dpcsclient.ExactIP(ip)},
+				Action: actionName,
+			})
 		}
 	}
-	fmt.Printf("Read OK: %d entries in table %d (device_id=%d)\n", numEntries, tableID, deviceID)
-	return nil
-}
-
-func printP4Errors(err error) {
-	grpcStatus, ok := status.FromError(err)
-	if !ok {
-		return
-	}
-	for index, detail := range grpcStatus.Details() {
-		p4Error, ok := detail.(*p4v1.Error)
-		if !ok || codes.Code(p4Error.GetCanonicalCode()) == codes.OK {
-			continue
-		}
-		fmt.Printf("  update[%d]: %s: %s\n",
-			index,
-			codes.Code(p4Error.GetCanonicalCode()).String(),
-			p4Error.GetMessage())
-	}
+	return entries
 }
 
 func main() {
-	var p4infoAddress, dpcsAddress, tableName, actionName, fieldName, insertList, deleteList string
+	var dpcsAddress, tableName, actionName, fieldName, insertList, deleteList, syncList string
 	var deviceID uint64
-	var arbitrate, readTable bool
-	flag.StringVar(&p4infoAddress, "p4info-addr", "", "P4Info source addr; empty = fetch via -dpcs-addr")
-	flag.StringVar(&dpcsAddress, "dpcs-addr", "", "DPCS P4Runtime addr for Write")
+	var readTable, syncEmpty bool
+	flag.StringVar(&dpcsAddress, "dpcs-addr", "", "DPCS P4Runtime addr")
 	flag.StringVar(&tableName, "table", "MyIngress.log_table", "table FQN")
 	flag.StringVar(&actionName, "action", "MyIngress.log", "action FQN")
 	flag.StringVar(&fieldName, "field", "hdr.inner_ipv4.src_addr", "match field name")
 	flag.StringVar(&insertList, "insert", "", "comma separated IPv4 addresses to INSERT")
 	flag.StringVar(&deleteList, "delete", "", "comma separated IPv4 addresses to DELETE")
+	flag.StringVar(&syncList, "sync", "", "comma separated IPv4 addresses; the table is synced to exactly this set")
+	flag.BoolVar(&syncEmpty, "sync-empty", false, "sync the table to the empty set (delete every entry)")
 	flag.Uint64Var(&deviceID, "device-id", 1, "device_id sent to DPCS")
-	flag.BoolVar(&arbitrate, "arbitrate", false, "do a StreamChannel mastership handshake first")
 	flag.BoolVar(&readTable, "read", false, "read back the table entries via DPCS")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	infoAddress, infoDeviceID := p4infoAddress, uint64(0)
-	if infoAddress == "" {
-		infoAddress, infoDeviceID = dpcsAddress, deviceID
-	}
-	infoConnection := dial(infoAddress)
-	p4Info, err := fetchP4Info(ctx, p4v1.NewP4RuntimeClient(infoConnection), infoDeviceID)
+	client, err := dpcsclient.Connect(ctx, dpcsclient.Config{
+		Address:  dpcsAddress,
+		DeviceID: deviceID,
+	})
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("connect error:", err)
 		os.Exit(1)
 	}
+	defer client.Close()
+	fmt.Printf("connected to DPCS, P4Info loaded (device_id=%d)\n", deviceID)
 
-	identifiers, err := resolveP4Identifiers(p4Info, tableName, fieldName, actionName)
-	if err != nil {
-		fmt.Println(err)
+	deleteEntries := buildEntries(tableName, fieldName, actionName, deleteList)
+	insertEntries := buildEntries(tableName, fieldName, actionName, insertList)
+	runSync := syncList != "" || syncEmpty
+	if runSync && (len(deleteEntries) > 0 || len(insertEntries) > 0) {
+		fmt.Println("-sync and -sync-empty cannot be combined with -insert or -delete")
 		os.Exit(1)
 	}
-	fmt.Printf("P4Info resolved: table=%d field=%d action=%d\n",
-		identifiers.tableID, identifiers.fieldID, identifiers.actionID)
-
-	dpcsConnection := dial(dpcsAddress)
-	dpcsClient := p4v1.NewP4RuntimeClient(dpcsConnection)
-
-	if arbitrate {
-		if err := performArbitration(ctx, dpcsClient, deviceID); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-	}
-
-	updates := buildUpdates(identifiers, p4v1.Update_DELETE, deleteList)
-	updates = append(updates, buildUpdates(identifiers, p4v1.Update_INSERT, insertList)...)
-	if len(updates) == 0 && !readTable {
+	if len(deleteEntries) == 0 && len(insertEntries) == 0 && !runSync && !readTable {
 		fmt.Println("nothing to write, done")
 		return
 	}
 
-	if len(updates) > 0 {
-		_, err = dpcsClient.Write(ctx, &p4v1.WriteRequest{
-			DeviceId:   deviceID,
-			ElectionId: &p4v1.Uint128{Low: 1},
-			Updates:    updates,
-		})
+	if runSync {
+		result, err := client.SyncTable(ctx, tableName, buildEntries(tableName, fieldName, actionName, syncList))
 		if err != nil {
-			fmt.Println("Write error:", err)
-			printP4Errors(err)
+			fmt.Println("Sync error:", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Write OK: %d updates forwarded via DPCS (device_id=%d)\n", len(updates), deviceID)
+		fmt.Printf("Sync OK: inserted=%d modified=%d deleted=%d (device_id=%d)\n",
+			result.Inserted, result.Modified, result.Deleted, deviceID)
+	}
+
+	if len(deleteEntries) > 0 {
+		if err := client.Delete(ctx, deleteEntries...); err != nil {
+			fmt.Println("Write error:", err)
+			os.Exit(1)
+		}
+	}
+	if len(insertEntries) > 0 {
+		if err := client.Insert(ctx, insertEntries...); err != nil {
+			fmt.Println("Write error:", err)
+			os.Exit(1)
+		}
+	}
+	if written := len(deleteEntries) + len(insertEntries); written > 0 {
+		fmt.Printf("Write OK: %d updates forwarded via DPCS (device_id=%d)\n", written, deviceID)
 	}
 
 	if readTable {
-		if err := readTableEntries(ctx, dpcsClient, deviceID, identifiers.tableID); err != nil {
+		entries, err := client.ReadTable(ctx, tableName)
+		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		for _, entry := range entries {
+			if len(entry.Match) == 0 {
+				fmt.Printf("  entry: (empty match) action=%s\n", entry.Action)
+			}
+			fieldNames := make([]string, 0, len(entry.Match))
+			for name := range entry.Match {
+				fieldNames = append(fieldNames, name)
+			}
+			sort.Strings(fieldNames)
+			for _, name := range fieldNames {
+				switch match := entry.Match[name].(type) {
+				case dpcsclient.ExactMatch:
+					fmt.Printf("  entry: %s exact=%x action=%s\n", name, match.Value, entry.Action)
+				case dpcsclient.LPMMatch:
+					fmt.Printf("  entry: %s lpm=%x/%d action=%s\n",
+						name, match.Value, match.PrefixLength, entry.Action)
+				default:
+					fmt.Printf("  entry: %s unsupported match type %T\n", name, match)
+				}
+			}
+		}
+		fmt.Printf("Read OK: %d entries in table %s (device_id=%d)\n", len(entries), tableName, deviceID)
 	}
 }
