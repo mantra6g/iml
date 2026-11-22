@@ -249,11 +249,21 @@ func configureDynamicProxy(targetName string, links *p4TargetLinks, mappedInterf
 	}
 
 	defer objs.Close()
-	if err = ebpf.AttachTC(objs.TcDecap, links.Dispatcher, ebpf.Ingress); err != nil {
+	if err = ebpf.AttachXDP(objs.Decap, links.Dispatcher); err != nil {
 		return fmt.Errorf("failed to attach dynamic decap to %s TC: %w", links.Dispatcher, err)
 	}
-	if err = ebpf.AttachTC(objs.TcEncap, links.Ports[1], ebpf.Ingress); err != nil {
+	if err = ebpf.AttachXDP(objs.Encap, links.Ports[1]); err != nil {
 		return fmt.Errorf("failed to attach dynamic encap to %s TC: %w", links.Ports[1], err)
+	}
+	// enable gro on veth peer to make xdp_redirect work
+	if err = EnableGRO(links.BridgeVeth); err != nil {
+		return fmt.Errorf("failed to enable GRO on veth %s: %w", links.BridgeVeth, err)
+	}
+	if err = SetQueues(links.Dispatcher, uint32(16), uint32(16)); err != nil {
+		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.BridgeVeth, err)
+	}
+	if err = SetQueues(links.BridgeVeth, uint32(16), uint32(16)); err != nil {
+		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.BridgeVeth, err)
 	}
 	return nil
 }
@@ -339,6 +349,12 @@ func configureLaneBasedProxy(targetName string, links *p4TargetLinks, mappedInte
 	// enable gro on veth peer to make xdp_redirect work
 	if err = EnableGRO(links.BridgeVeth); err != nil {
 		return fmt.Errorf("failed to enable GRO on veth %s: %w", links.BridgeVeth, err)
+	}
+	if err = SetQueues(links.Dispatcher, uint32(16), uint32(16)); err != nil {
+		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.Dispatcher, err)
+	}
+	if err = SetQueues(links.BridgeVeth, uint32(16), uint32(16)); err != nil {
+		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.BridgeVeth, err)
 	}
 
 	return nil
@@ -446,6 +462,12 @@ func configureFieldBasedProxy(targetName string, links *p4TargetLinks, dispatche
 	// enable gro on veth peer to make xdp_redirect work
 	if err = EnableGRO(links.BridgeVeth); err != nil {
 		return fmt.Errorf("failed to enable GRO on veth %s: %w", links.BridgeVeth, err)
+	}
+	if err = SetQueues(links.Dispatcher, uint32(16), uint32(16)); err != nil {
+		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.Dispatcher, err)
+	}
+	if err = SetQueues(links.BridgeVeth, uint32(16), uint32(16)); err != nil {
+		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.BridgeVeth, err)
 	}
 	return nil
 }
@@ -649,5 +671,33 @@ func EnableGRO(iface string) error {
 		return fmt.Errorf("set rx-gro on %s: %w", iface, err)
 	}
 
+	return nil
+}
+
+// SetQueues sets the RX/TX queue counts on an interface.
+// Equivalent to: ethtool -L <iface> rx <rx> tx <tx>
+func SetQueues(iface string, rx, tx uint32) error {
+	e, err := ethtool.NewEthtool()
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+
+	ch, err := e.GetChannels(iface)
+	if err != nil {
+		return fmt.Errorf("get channels on %s: %w", iface, err)
+	}
+
+	if rx > ch.MaxRx || tx > ch.MaxTx {
+		return fmt.Errorf("%s: requested rx=%d tx=%d exceeds max rx=%d tx=%d",
+			iface, rx, tx, ch.MaxRx, ch.MaxTx)
+	}
+
+	ch.RxCount = rx
+	ch.TxCount = tx
+
+	if _, err := e.SetChannels(iface, ch); err != nil {
+		return fmt.Errorf("set channels on %s: %w", iface, err)
+	}
 	return nil
 }
