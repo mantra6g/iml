@@ -20,7 +20,7 @@ metadata:
   labels:
     nf: logger
 spec:
-  p4File: "https://raw.githubusercontent.com/mantra6g/iml/refs/heads/main/examples/simple/logger.p4"
+  p4File: "oci://ghcr.io/mantra6g/iml/nfs/logger:0.0.1"
   targetSelector:
     p4target.loom.io/arch: v1model
 ---
