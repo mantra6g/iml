@@ -249,21 +249,11 @@ func configureDynamicProxy(targetName string, links *p4TargetLinks, mappedInterf
 	}
 
 	defer objs.Close()
-	if err = ebpf.AttachXDP(objs.Decap, links.Dispatcher); err != nil {
+	if err = ebpf.AttachTC(objs.TcDecap, links.Dispatcher, ebpf.Ingress); err != nil {
 		return fmt.Errorf("failed to attach dynamic decap to %s TC: %w", links.Dispatcher, err)
 	}
-	if err = ebpf.AttachXDP(objs.Encap, links.Ports[1]); err != nil {
+	if err = ebpf.AttachTC(objs.TcEncap, links.Ports[1], ebpf.Ingress); err != nil {
 		return fmt.Errorf("failed to attach dynamic encap to %s TC: %w", links.Ports[1], err)
-	}
-	// enable gro on veth peer to make xdp_redirect work
-	if err = EnableGRO(links.BridgeVeth); err != nil {
-		return fmt.Errorf("failed to enable GRO on veth %s: %w", links.BridgeVeth, err)
-	}
-	if err = SetQueues(links.Dispatcher, uint32(16), uint32(16)); err != nil {
-		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.BridgeVeth, err)
-	}
-	if err = SetQueues(links.BridgeVeth, uint32(16), uint32(16)); err != nil {
-		return fmt.Errorf("failed to set RX/TX queues to %d on veth %s: %w", 16, links.BridgeVeth, err)
 	}
 	return nil
 }
