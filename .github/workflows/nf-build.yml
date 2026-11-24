@@ -1,0 +1,54 @@
+name: 'Build NFs'
+
+# NOTE:
+# - consider separate repo for nfs
+# - store the compiled json and such instead of source
+on:
+  push:
+    # branches: [ main ]
+    tags:
+      #- "nfs/bmv2-*-v*"
+      - "nfs/*-v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          REF_NAME="${REF_NAME#nfs/}"
+          NF="${REF_NAME%-v*}"
+          VERSION="${REF_NAME##*-v}"
+
+          NFPATH="nfs/${NF}.p4"
+          test -f "${NFPATH}"
+          cat > Dockerfile.generated <<EOF
+          FROM scratch
+          COPY ${NFPATH} /input.p4
+          EOF
+
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}/nfs/${NF,,}:${VERSION}"
+
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${TAG}" \
+            -f Dockerfile.generated \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
