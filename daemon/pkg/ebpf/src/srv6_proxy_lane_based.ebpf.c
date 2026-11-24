@@ -280,8 +280,8 @@ int update_eth_hdr(void *start, void *end, __u32 lane)
         return -1;
 
     // lookup mac addresses
-    __u32 src_key = lane;
-    __u32 dst_key = n + lane;
+    __u32 src_key = 2*lane;
+    __u32 dst_key = 2*lane + 1;
     struct mac_entry *src_mac = bpf_map_lookup_elem(&mac_addr_table, &src_key);
     struct mac_entry *dst_mac = bpf_map_lookup_elem(&mac_addr_table, &dst_key);
 
@@ -540,7 +540,8 @@ int decap(struct xdp_md *ctx)
     if(bpf_xdp_adjust_head(ctx, p->outer_len) < 0)
         return XDP_DROP;
 
-    __u32 *link_index = bpf_map_lookup_elem(&link_index_table, &lane);
+    __u32 redirect_key = lane*2;
+    __u32 *link_index = bpf_map_lookup_elem(&link_index_table, &redirect_key);
     
     if(!link_index || !*link_index)
         return XDP_DROP;
